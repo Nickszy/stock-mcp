@@ -331,7 +331,7 @@ async def get_asset_info(
         asset = await market_use_cases.get_asset_info(symbol)
         
         if asset:
-            return asset.model_dump(mode="json")
+            return asset  # already a dict from use_case
         return {"error": f"Asset not found: {symbol}"}
         
     except Exception as e:

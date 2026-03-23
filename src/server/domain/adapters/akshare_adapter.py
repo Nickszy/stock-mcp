@@ -1292,3 +1292,254 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.error(f"Failed to fetch news for {ticker}: {e}")
             return []
+
+
+    async def get_mainbz_info(self, ticker: str) -> Dict[str, Any]:
+        """获取主营业务构成（来自东方财富）.
+
+        Args:
+            ticker: 股票代码 (如 SSE:600519 或 600519)
+
+        Returns:
+            主营业务构成数据，格式与 Tushare 兼容
+        """
+        cache_key = f"akshare:mainbz:{ticker}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        symbol = self._to_ak_code(ticker)
+
+        # 判断市场类型
+        exchange = ""
+        if ":" in ticker:
+            exchange, code = ticker.split(":", 1)
+
+        # stock_zygc_em 需要市场前缀
+        # 只支持 A 股 (SSE/SZSE/BSE)
+        if exchange == "HKEX":
+            return {
+                "component_type": "mainbz_info",
+                "source": "akshare",
+                "ts_code": self._to_ts_code(ticker),
+                "rows": [],
+                "error": "港股主营业务构成需要使用其他接口",
+            }
+
+        # 构建前缀
+        if exchange == "SSE":
+            prefix = "SH"
+        elif exchange == "SZSE":
+            prefix = "SZ"
+        elif exchange == "BSE":
+            prefix = "BJ"
+        else:
+            # 根据代码判断
+            if symbol.startswith("6"):
+                prefix = "SH"
+            elif symbol.startswith(("0", "3")):
+                prefix = "SZ"
+            elif symbol.startswith("8"):
+                prefix = "BJ"
+            else:
+                prefix = "SH"  # 默认
+
+        ak_symbol = f"{prefix}{symbol}"
+
+        try:
+            # 使用东方财富主营构成接口
+            df = await self._run(ak.stock_zygc_em, symbol=ak_symbol)
+
+            if df is None or df.empty:
+                return {
+                    "component_type": "mainbz_info",
+                    "source": "akshare",
+                    "ts_code": self._to_ts_code(ticker),
+                    "rows": [],
+                }
+
+            # 转换为与 Tushare 兼容的格式
+            rows = []
+            for _, row in df.iterrows():
+                row_dict = row.where(pd.notnull(row), None).to_dict()
+
+                # 标准化字段名 (akshare 实际返回的列名)
+                end_date = str(row_dict.get("报告日期") or row_dict.get("报告期", ""))
+                biz_type = row_dict.get("分类类型", "")  # 按产品分类/按地区分类
+                item_name = row_dict.get("主营构成", "")  # 具体产品/地区名称
+
+                # 映射分类类型到中文
+                type_map = {
+                    "分产品类型": "分产品",
+                    "分产品": "分产品",
+                    "按产品分类": "分产品",
+                    "分地区类型": "分地区",
+                    "分地区": "分地区",
+                    "按地区分类": "分地区",
+                    "分行业类型": "分行业",
+                    "分行业": "分行业",
+                    "按行业分类": "分行业",
+                }
+                biz_type_cn = type_map.get(biz_type, "分行业")
+
+                # 获取数据并解析单位
+                revenue_raw = row_dict.get("主营收入")
+                cost_raw = row_dict.get("主营成本")
+                gross_profit_raw = row_dict.get("主营利润")
+
+                # 使用 _parse_number 解析数值
+                revenue = self._parse_number(revenue_raw)
+                cost = self._parse_number(cost_raw)
+                gross_profit = self._parse_number(gross_profit_raw)
+
+                rows.append({
+                    "报告期": end_date,
+                    "分类类型": biz_type_cn,
+                    "业务名称": item_name,
+                    "主营收入(元)": revenue,
+                    "主营成本(元)": cost,
+                    "主营利润(元)": gross_profit,
+                })
+
+            result = {
+                "component_type": "mainbz_info",
+                "source": "akshare",
+                "ts_code": self._to_ts_code(ticker),
+                "rows": rows,
+            }
+
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get main business info from akshare: {e}")
+            raise ValueError(f"Failed to get main business info: {e}")
+
+    async def get_profit_forecast(self, ticker: str) -> Dict[str, Any]:
+        """获取盈利预测（来自东方财富）.
+
+        Args:
+            ticker: 股票代码 (如 SSE:600519)
+
+        Returns:
+            盈利预测数据
+        """
+        cache_key = f"akshare:profit_forecast:{ticker}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        # 提取纯股票代码
+        symbol = self._to_ak_code(ticker)
+
+        try:
+            # stock_profit_forecast_em 接口参数是行业名称，不是股票代码
+            # 使用空字符串获取全部数据，然后过滤
+            df = await self._run(ak.stock_profit_forecast_em, symbol="")
+
+            if df is None or df.empty:
+                return {
+                    "component_type": "profit_forecast",
+                    "source": "akshare",
+                    "ticker": ticker,
+                    "rows": [],
+                }
+
+            # 过滤出目标股票的数据
+            # akshare 返回的列名包含 "代码" 列
+            filtered_df = df[df["代码"] == symbol] if "代码" in df.columns else df
+
+            if filtered_df.empty:
+                return {
+                    "component_type": "profit_forecast",
+                    "source": "akshare",
+                    "ticker": ticker,
+                    "rows": [],
+                }
+
+            # 转换为标准格式
+            rows = []
+            for _, row in filtered_df.iterrows():
+                row_dict = row.where(pd.notnull(row), None).to_dict()
+
+                rows.append({
+                    "预测年份": str(row_dict.get("预测年份", "")),
+                    "预测机构": row_dict.get("预测机构", ""),
+                    "预测研报": row_dict.get("预测研报", ""),
+                    "预测股东净利润(元)": self._parse_number(row_dict.get("预测股本净利润")),
+                    "预测每股收益(元)": self._parse_number(row_dict.get("预测每股收益")),
+                })
+
+            result = {
+                "component_type": "profit_forecast",
+                "source": "akshare",
+                "ticker": ticker,
+                "rows": rows,
+            }
+
+            await self.cache.set(cache_key, result, ttl=3600 * 6)  # 盈利预测更新较慢
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get profit forecast from akshare: {e}")
+            # 不抛出异常，返回空数据或降级
+            return {
+                "component_type": "profit_forecast",
+                "source": "akshare",
+                "ticker": ticker,
+                "rows": [],
+                "error": str(e)
+            }
+
+    def _to_ts_code(self, ticker: str) -> str:
+        """转换内部格式到 ts_code 格式."""
+        if "." in ticker:
+            return ticker
+        if ":" in ticker:
+            exchange, code = ticker.split(":", 1)
+            suffix_map = {
+                "SSE": "SH",
+                "SZSE": "SZ",
+                "BSE": "BJ",
+            }
+            suffix = suffix_map.get(exchange, "SH")
+            return f"{code}.{suffix}"
+        # 默认处理
+        if ticker.startswith("6"):
+            return f"{ticker}.SH"
+        elif ticker.startswith(("0", "3")):
+            return f"{ticker}.SZ"
+        elif ticker.startswith("8"):
+            return f"{ticker}.BJ"
+        return f"{ticker}.SH"
+
+    def _parse_date(self, date_val: Any) -> str:
+        """解析日期格式."""
+        if date_val is None:
+            return ""
+        date_str = str(date_val)
+        # 尝试解析各种日期格式
+        for fmt in ["%Y-%m-%d", "%Y%m%d", "%Y/%m/%d"]:
+            try:
+                dt = datetime.strptime(date_str, fmt)
+                return dt.strftime("%Y%m%d")
+            except ValueError:
+                continue
+        return date_str.replace("-", "").replace("/", "")[:8]
+
+    def _parse_number(self, val: Any) -> float | None:
+        """解析数字."""
+        if val is None or val == "" or val == "-":
+            return None
+        try:
+            if isinstance(val, (int, float)):
+                return float(val)
+            # 处理字符串格式（可能包含亿、万等单位）
+            clean = str(val).replace(",", "").strip()
+            if clean.endswith("亿"):
+                return float(clean[:-1]) * 100000000
+            elif clean.endswith("万"):
+                return float(clean[:-1]) * 10000
+            return float(clean)
+        except (ValueError, TypeError):
+            return None

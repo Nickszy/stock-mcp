@@ -438,6 +438,15 @@ class YahooAdapter(BaseDataAdapter):
             if hist.empty:
                 return []
 
+            # Get currency from fast_info or info
+            currency = "USD"
+            try:
+                fast_info = await self._run(lambda: ticker_obj.fast_info)
+                if fast_info:
+                    currency = getattr(fast_info, 'currency', 'USD') or 'USD'
+            except Exception:
+                pass
+
             prices = []
             for idx, row in hist.iterrows():
                 # idx is Timestamp
@@ -446,7 +455,7 @@ class YahooAdapter(BaseDataAdapter):
                 price = AssetPrice(
                     ticker=ticker,
                     price=Decimal(str(row["Close"])),
-                    currency="USD",  # Default, might need to fetch from info
+                    currency=currency,
                     timestamp=timestamp,
                     volume=Decimal(str(row["Volume"])),
                     open_price=Decimal(str(row["Open"])),

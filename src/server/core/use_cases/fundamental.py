@@ -67,6 +67,12 @@ get_us_institutional_holdings = _gw_usecase("get_us_institutional_holdings")
 # ---------------------------------------------------------------------------
 
 
+async def get_profit_forecast(ticker: str) -> Dict[str, Any]:
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_profit_forecast", symbol=ticker)
+    return await manager.get_profit_forecast(ticker)
+
+
 async def get_fundamental_analysis(ticker: str) -> Dict[str, Any]:
     """Full fundamental analysis: resolves symbol first, then calls service."""
     service = Container.fundamental_service()

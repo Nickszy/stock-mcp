@@ -116,7 +116,7 @@
 export MCP_TRANSPORT=streamable-http
 
 # 标准启动（监听 9898 端口）
-python -m uvicorn src.server.app:app --host 0.0.0.0 --port 9898
+uv run python -m uvicorn src.server.app:app --host 0.0.0.0 --port 9898
 
 # 开发模式（支持热重载）
 MCP_TRANSPORT=streamable-http python -m uvicorn src.server.app:app --reload --port 9898

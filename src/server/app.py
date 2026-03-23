@@ -31,6 +31,7 @@ from src.server.api.routes import (
     money_flow_router,
 )
 from src.server.utils.logger import logger
+from src.server.middleware import JsonArgumentsFixMiddleware
 
 
 def create_app():
@@ -158,6 +159,10 @@ def create_app():
     )
 
     logger.info("✅ CORS middleware configured")
+
+    # Add JSON arguments fix middleware for MCP clients like OpenClaw
+    app.add_middleware(JsonArgumentsFixMiddleware)
+    logger.info("✅ JSON arguments fix middleware configured")
 
     # Global exception handler for symbol resolution
     @app.exception_handler(SymbolResolutionError)

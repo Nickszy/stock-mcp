@@ -355,6 +355,42 @@ class AdapterManager:
             filing_types=filing_types,
         )
 
+    async def get_profit_forecast(self, ticker: str) -> Dict[str, Any]:
+        """获取盈利预测 (带自动降级)."""
+        adapter = self.get_adapter_for_ticker(ticker)
+        if not adapter:
+            raise ValueError(f"No adapter found for ticker {ticker}")
+
+        try:
+            return await adapter.get_profit_forecast(ticker)
+        except Exception as e:
+            if isinstance(e, NotImplementedError):
+                logger.warning(f"Adapter {adapter.source.value} does not support profit forecast")
+            else:
+                logger.warning(f"Adapter {adapter.source.value} failed: {e}")
+
+            if ":" in ticker:
+                exchange, _ = ticker.split(":", 1)
+                adapters = self.get_adapters_for_exchange(exchange)
+
+                for alt in adapters:
+                    if alt is adapter:
+                        continue
+                    try:
+                        logger.info(
+                            f"Trying failover adapter {alt.source.value} for profit forecast of {ticker}"
+                        )
+                        return await alt.get_profit_forecast(ticker)
+                    except Exception as failover_error:
+                        logger.warning(
+                            f"Failover adapter {alt.source.value} also failed: {failover_error}"
+                        )
+                        continue
+
+            raise ValueError(
+                f"All adapters failed to fetch profit forecast for {ticker}: {e}"
+            )
+
     async def get_technical_indicators(
         self,
         ticker: str,

@@ -261,6 +261,80 @@ class MarketGateway:
             results.setdefault(raw, None)
         return results
 
+    async def get_financials(self, raw_symbol: str) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_financials(ticker)
+
+    async def get_mainbz_info(self, raw_symbol: str) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_mainbz_info(ticker)
+
+    async def get_shareholder_info(self, raw_symbol: str) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_shareholder_info(ticker)
+
+    async def get_dividend_info(self, raw_symbol: str) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_dividend_info(ticker)
+
+    async def get_profit_forecast(self, raw_symbol: str) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_profit_forecast(ticker)
+
+    async def get_money_flow(self, raw_symbol: str, days: int = 20) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_money_flow(ticker, days)
+
+    async def get_north_bound_flow(self, days: int = 30) -> Dict[str, Any]:
+        return await self._adapter_manager.get_north_bound_flow(days)
+
+    async def get_chip_distribution(self, raw_symbol: str, days: int = 30) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_chip_distribution(ticker, days)
+
+    async def get_money_supply(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_money_supply()
+
+    async def get_inflation_data(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_inflation_data()
+
+    async def get_pmi_data(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_pmi_data()
+
+    async def get_gdp_data(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_gdp_data()
+
+    async def get_social_financing(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_social_financing()
+
+    async def get_interest_rates(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_interest_rates()
+
+    async def get_market_liquidity(self, days: int = 60) -> Dict[str, Any]:
+        return await self._adapter_manager.get_market_liquidity(days)
+
+    async def get_market_money_flow(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_market_money_flow()
+
+    async def get_sector_trend(self, sector_name: str, days: int = 10) -> Dict[str, Any]:
+        return await self._adapter_manager.get_sector_trend(sector_name, days)
+
+    async def get_ggt_daily(self, days: int = 60) -> Dict[str, Any]:
+        return await self._adapter_manager.get_ggt_daily(days)
+
+    async def get_filings(
+        self,
+        raw_symbol: str,
+        start_date=None,
+        end_date=None,
+        limit: int = 10,
+        filing_types: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_filings(
+            ticker, start_date, end_date, limit, filing_types
+        )
+
     async def get_technical_indicators(
         self,
         raw_symbol: str | None = None,

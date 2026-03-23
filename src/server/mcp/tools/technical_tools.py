@@ -230,19 +230,20 @@ def register_technical_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"technical"})
     async def get_technical_indicators(
-        ts_code: str, limit: int = 60, ctx: Context = None
+        ts_code: str | int, limit: int = 60, ctx: Context = None
     ) -> Dict[str, Any]:
         """Get technical indicators in competitor-compatible format.
 
         Args:
-            ts_code: Tushare ts_code (e.g. 600519.SH)
+            ts_code: Tushare ts_code (e.g. 600519.SH or 600519)
             limit: 返回最近N个交易日
             ctx: FastMCP Context for logging
 
         Returns:
             ArtifactEnvelope containing indicator rows
         """
-        symbol = ts_code
+        # 兼容整数输入
+        symbol = str(ts_code)
         if ctx:
             await ctx.info(
                 f"🔧 获取技术指标: {ts_code}",

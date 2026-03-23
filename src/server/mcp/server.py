@@ -255,10 +255,12 @@ def get_tools_by_tag(tag: str) -> list[str]:
         "research": [],
         "fundamental": [
             "get_financial_reports",
+            "get_financial_statements",
             "get_dividend_info",
             "get_forecast_info",
             "get_mainbz_info",
             "get_shareholder_info",
+            "get_profit_forecast",
         ],
         "money-flow": [
             "get_money_flow",

@@ -252,9 +252,12 @@ class FundamentalService:
                         val = (
                             val.replace(",", "")
                             .replace("元", "")
-                            .replace("万", "")
                             .strip()
                         )
+                        if val.endswith("亿"):
+                            return float(val[:-1]) * 100000000
+                        if val.endswith("万"):
+                            return float(val[:-1]) * 10000
                     return float(val)
                 except:
                     return 0.0

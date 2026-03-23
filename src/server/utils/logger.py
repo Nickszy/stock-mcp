@@ -35,11 +35,16 @@ def configure_logging(level: str = "INFO"):
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         handlers=handlers,
     )
+
+    # 使用 ConsoleRenderer 输出更易读的格式
     structlog.configure(
         processors=[
             structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
-            # 禁用 ASCII 转义以支持 emoji 表情符号的正常显示
-            structlog.processors.JSONRenderer(ensure_ascii=False),
+            structlog.processors.add_log_level,
+            # 移除多余的字段
+            structlog.processors.StackInfoRenderer(),
+            # 使用 ConsoleRenderer 输出彩色、易读的格式
+            structlog.dev.ConsoleRenderer(colors=True, exception_formatter=structlog.dev.plain_traceback),
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,

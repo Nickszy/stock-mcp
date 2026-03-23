@@ -479,6 +479,12 @@ class BaseDataAdapter(abc.ABC):
             f"{self.source.value} does not support get_us_interest_rates"
         )
 
+    async def get_profit_forecast(self, ticker: str) -> Dict[str, Any]:
+        """获取盈利预测 (Optional)."""
+        raise NotImplementedError(
+            f"{self.source.value} does not support get_profit_forecast"
+        )
+
     async def get_technical_indicators(
         self,
         ticker: str,

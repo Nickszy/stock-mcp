@@ -1732,6 +1732,51 @@ class TushareAdapter(BaseDataAdapter):
             self.logger.error(f"Failed to get main business info: {e}")
             raise ValueError(f"Failed to get main business info: {e}")
 
+    async def get_profit_forecast(self, ticker: str) -> Dict[str, Any]:
+        """获取业绩预告 (Tushare 作为盈利预测的补充)."""
+        cache_key = f"tushare:profit_forecast:{ticker}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        client = self.tushare_conn.get_client()
+        if client is None:
+            raise ValueError("Tushare client not available")
+
+        ts_code = self._to_ts_code(ticker)
+        try:
+            # 使用业绩预告接口
+            df = await self._run(client.forecast, ts_code=ts_code)
+            rows = []
+            if df is not None and not df.empty:
+                df = df.sort_values("end_date", ascending=False).head(10)
+                for _, row in df.iterrows():
+                    row_dict = row.where(pd.notnull(row), None).to_dict()
+                    rows.append({
+                        "报告期": str(row_dict.get("end_date", "")),
+                        "预告类型": row_dict.get("type", ""),
+                        "业绩摘要": row_dict.get("p_change_summary", ""),
+                        "净利润变动幅度(%)": row_dict.get("p_change_min"),
+                        "上年同期净利润": row_dict.get("last_poll_profit"),
+                    })
+            result = {
+                "component_type": "profit_forecast",
+                "source": "tushare",
+                "ticker": ticker,
+                "rows": rows,
+            }
+            await self.cache.set(cache_key, result, ttl=3600 * 6)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get profit forecast from tushare: {e}")
+            return {
+                "component_type": "profit_forecast",
+                "source": "tushare",
+                "ticker": ticker,
+                "rows": [],
+                "error": str(e)
+            }
+
     async def get_shareholder_info(self, ticker: str) -> Dict[str, Any]:
         """获取股东信息."""
         cache_key = f"tushare:shareholder:{ticker}"
