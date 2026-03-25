@@ -557,6 +557,199 @@ class YahooAdapter(BaseDataAdapter):
             self.logger.error(f"Failed to fetch financials for {ticker}: {e}")
             raise ValueError(f"Failed to fetch financials for {ticker}: {e}")
 
+    async def get_financial_statements(
+        self,
+        ticker: str,
+        report_type: str = "all",
+        periods: int | None = None,
+    ) -> Dict[str, Any]:
+        """Fetch complete financial statements with YoY/QoQ calculations.
+
+        Unified interface matching TushareAdapter for overseas stocks.
+
+        Args:
+            ticker: Asset ticker in internal format (e.g., NASDAQ:AAPL)
+            report_type: "quarterly" | "annual" | "all" (default: "all")
+            periods: Number of periods to return. None = all available history.
+
+        Returns:
+            Dictionary containing:
+            - income_statement: {quarterly: [...], annual: [...]}
+            - balance_sheet: {quarterly: [...], annual: [...]}
+            - cash_flow: {quarterly: [...], annual: [...]}
+            - Each record includes YoY (同比) and QoQ (环比) for key metrics
+        """
+        cache_key = f"yahoo:financial_statements:{ticker}:{report_type}:{periods}:v1"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        ticker_norm = self._to_yf_ticker(ticker)
+
+        # Core fields for YoY/QoQ calculation
+        income_yoy_fields = [
+            "Total Revenue", "Operating Income", "Net Income",
+            "Basic EPS", "Diluted EPS"
+        ]
+        balance_yoy_fields = [
+            "Total Assets", "Total Liabilities Net Minority Interest",
+            "Stockholders Equity"
+        ]
+        cashflow_yoy_fields = [
+            "Operating Cash Flow", "Investing Cash Flow",
+            "Financing Cash Flow", "Free Cash Flow"
+        ]
+
+        try:
+            def fetch_all_financials():
+                # Create ticker and fetch all data in one executor call
+                ticker_obj = yf.Ticker(ticker_norm)
+
+                # Annual data
+                income_annual = ticker_obj.income_stmt
+                balance_annual = ticker_obj.balance_sheet
+                cashflow_annual = ticker_obj.cash_flow
+
+                # Quarterly data
+                income_quarterly = ticker_obj.quarterly_income_stmt
+                balance_quarterly = ticker_obj.quarterly_balance_sheet
+                cashflow_quarterly = ticker_obj.quarterly_cash_flow
+
+                return (
+                    income_annual, balance_annual, cashflow_annual,
+                    income_quarterly, balance_quarterly, cashflow_quarterly
+                )
+
+            results = await self._run(fetch_all_financials)
+            (
+                income_annual, balance_annual, cashflow_annual,
+                income_quarterly, balance_quarterly, cashflow_quarterly
+            ) = results
+
+            def process_statement(df, yoy_fields, is_quarterly=False):
+                """Process DataFrame: add YoY/QoQ calculations."""
+                if df is None or df.empty:
+                    return []
+
+                # Transpose: dates as rows, metrics as columns
+                # yfinance format: rows=metrics, columns=dates
+                df_t = df.T.reset_index()
+                # Rename first column to end_date
+                df_t = df_t.rename(columns={'index': 'end_date'})
+
+                # Sort by date ascending for YoY calculation
+                df_t = df_t.sort_values("end_date", ascending=True)
+
+                # Calculate YoY and QoQ
+                df_t = self._add_yoy_qoq_yahoo(df_t, yoy_fields, is_quarterly)
+
+                # Sort descending (newest first)
+                df_t = df_t.sort_values("end_date", ascending=False)
+
+                if periods is not None:
+                    df_t = df_t.head(periods)
+
+                return clean_for_json(df_t.to_dict("records"))
+
+            def clean_for_json(obj):
+                """Recursively clean object for JSON serialization."""
+                import math
+                from datetime import datetime
+
+                if isinstance(obj, dict):
+                    return {str(k): clean_for_json(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [clean_for_json(item) for item in obj]
+                elif isinstance(obj, (pd.Timestamp, datetime)):
+                    return obj.strftime("%Y-%m-%d") if hasattr(obj, "strftime") else str(obj)
+                elif isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+                    return None
+                elif isinstance(obj, (int, float, str, bool, type(None))):
+                    return obj
+                else:
+                    return str(obj)
+
+            result = {
+                "ticker": ticker_norm,
+                "source": "yahoo",
+                "income_statement": {
+                    "quarterly": process_statement(income_quarterly, income_yoy_fields, is_quarterly=True) if report_type in ("all", "quarterly") else [],
+                    "annual": process_statement(income_annual, income_yoy_fields, is_quarterly=False) if report_type in ("all", "annual") else [],
+                },
+                "balance_sheet": {
+                    "quarterly": process_statement(balance_quarterly, balance_yoy_fields, is_quarterly=True) if report_type in ("all", "quarterly") else [],
+                    "annual": process_statement(balance_annual, balance_yoy_fields, is_quarterly=False) if report_type in ("all", "annual") else [],
+                },
+                "cash_flow": {
+                    "quarterly": process_statement(cashflow_quarterly, cashflow_yoy_fields, is_quarterly=True) if report_type in ("all", "quarterly") else [],
+                    "annual": process_statement(cashflow_annual, cashflow_yoy_fields, is_quarterly=False) if report_type in ("all", "annual") else [],
+                },
+            }
+
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to fetch financial statements for {ticker}: {e}")
+            raise ValueError(f"Failed to fetch financial statements for {ticker}: {e}")
+
+    def _add_yoy_qoq_yahoo(self, df: pd.DataFrame, yoy_fields: list, is_quarterly: bool) -> pd.DataFrame:
+        """Add YoY and QoQ calculations for Yahoo Finance data."""
+        df = df.copy()
+
+        # Extract year and quarter for alignment
+        if "end_date" in df.columns:
+            df["_year"] = pd.to_datetime(df["end_date"]).dt.year
+            df["_quarter"] = pd.to_datetime(df["end_date"]).dt.quarter
+
+        for field in yoy_fields:
+            if field not in df.columns:
+                continue
+
+            yoy_col = f"{field}_yoy"
+            qoq_col = f"{field}_qoq"
+
+            # Calculate YoY
+            df[yoy_col] = None
+            if "_year" in df.columns:
+                for i in range(len(df)):
+                    curr_year = df.iloc[i]["_year"]
+                    curr_quarter = df.iloc[i]["_quarter"]
+                    curr_val = df.iloc[i][field]
+
+                    if curr_val is None or pd.isna(curr_val):
+                        continue
+
+                    # Find same quarter last year
+                    last_year_mask = (df["_year"] == curr_year - 1) & (df["_quarter"] == curr_quarter)
+                    last_year_rows = df[last_year_mask]
+
+                    if len(last_year_rows) > 0:
+                        last_year_val = last_year_rows.iloc[0][field]
+                        if last_year_val is not None and not pd.isna(last_year_val) and last_year_val != 0:
+                            df.iloc[i, df.columns.get_loc(yoy_col)] = round(
+                                (curr_val - last_year_val) / abs(last_year_val) * 100, 2
+                            )
+
+            # Calculate QoQ (only for quarterly data)
+            if is_quarterly:
+                df[qoq_col] = None
+                for i in range(1, len(df)):
+                    curr_val = df.iloc[i][field]
+                    prev_val = df.iloc[i - 1][field]
+
+                    if curr_val is None or pd.isna(curr_val) or prev_val is None or pd.isna(prev_val):
+                        continue
+
+                    if prev_val != 0:
+                        df.iloc[i, df.columns.get_loc(qoq_col)] = round(
+                            (curr_val - prev_val) / abs(prev_val) * 100, 2
+                        )
+
+        # Clean up temp columns
+        df = df.drop(columns=["_year", "_quarter"], errors="ignore")
+        return df
+
     # =========================================================================
     # US-market specific implementations
     # =========================================================================

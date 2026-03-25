@@ -50,6 +50,7 @@ def _gw_usecase(method: str) -> Callable:
 # ---------------------------------------------------------------------------
 
 get_financials = _gw_usecase("get_financials")
+get_financial_statements = _gw_usecase("get_financial_statements")
 get_mainbz_info = _gw_usecase("get_mainbz_info")
 get_shareholder_info = _gw_usecase("get_shareholder_info")
 get_dividend_info = _gw_usecase("get_dividend_info")

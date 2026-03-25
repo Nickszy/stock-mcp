@@ -391,6 +391,217 @@ class TushareAdapter(BaseDataAdapter):
             self.logger.error(f"Failed to fetch financials for {ticker}: {e}")
             raise ValueError(f"Failed to fetch financials for {ticker}: {e}")
 
+    async def get_financial_statements(
+        self,
+        ticker: str,
+        report_type: str = "all",
+        periods: int | None = None,
+    ) -> Dict[str, Any]:
+        """Fetch complete financial statements with all fields and YoY/QoQ calculations.
+
+        Args:
+            ticker: Asset ticker in internal format (e.g., SSE:600519)
+            report_type: "quarterly" | "annual" | "all" (default: "all")
+            periods: Number of periods to return. None = all available history.
+
+        Returns:
+            Dictionary containing:
+            - income_statement: {quarterly: [...], annual: [...]}
+            - balance_sheet: {quarterly: [...], annual: [...]}
+            - cash_flow: {quarterly: [...], annual: [...]}
+            - Each record includes YoY (同比) and QoQ (环比) for key metrics
+        """
+        cache_key = f"tushare:financial_statements:{ticker}:{report_type}:{periods}:v1"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        client = self.tushare_conn.get_client()
+        if client is None:
+            raise ValueError("Tushare client not available")
+
+        ts_code = self._to_ts_code(ticker)
+
+        # 定义核心字段（用于计算 YoY/QoQ）
+        income_yoy_fields = [
+            "revenue", "oper_cost", "operate_profit", "total_profit",
+            "n_income", "n_income_attr_p", "total_cogs"
+        ]
+        balance_yoy_fields = [
+            "total_assets", "total_liab", "total_hldr_eqy_exc_min_int",
+            "monetary_cap", "account_receiv", "inventories"
+        ]
+        cashflow_yoy_fields = [
+            "n_cashflow_act", "n_cashflow_inv_act", "n_cashflow_fnc_act",
+            "free_cashflow"
+        ]
+
+        try:
+            # 获取全字段数据
+            # report_type: 1=合并报表, 2=单季合并, 3=调整单季合并表, 5=调整合并报表
+            # 我们同时获取 1 和 2 以支持年度和季度数据
+
+            tasks = []
+
+            # 利润表 - 合并报表（用于年度）
+            tasks.append(self._run(
+                client.income,
+                ts_code=ts_code,
+                report_type="1",
+            ))
+            # 利润表 - 单季合并（用于季度）
+            tasks.append(self._run(
+                client.income,
+                ts_code=ts_code,
+                report_type="2",
+            ))
+            # 资产负债表 - 合并报表
+            tasks.append(self._run(
+                client.balancesheet,
+                ts_code=ts_code,
+                report_type="1",
+            ))
+            # 资产负债表 - 单季合并
+            tasks.append(self._run(
+                client.balancesheet,
+                ts_code=ts_code,
+                report_type="2",
+            ))
+            # 现金流量表 - 合并报表
+            tasks.append(self._run(
+                client.cashflow,
+                ts_code=ts_code,
+                report_type="1",
+            ))
+            # 现金流量表 - 单季合并
+            tasks.append(self._run(
+                client.cashflow,
+                ts_code=ts_code,
+                report_type="2",
+            ))
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            income_consolidated, income_quarterly, \
+            balance_consolidated, balance_quarterly, \
+            cashflow_consolidated, cashflow_quarterly = results
+
+            def process_df(df, yoy_fields, is_quarterly=False):
+                """Process DataFrame: add YoY/QoQ calculations."""
+                if isinstance(df, Exception):
+                    self.logger.warning(f"Failed to fetch data: {df}")
+                    return []
+                if df is None or df.empty:
+                    return []
+
+                # 按报告期排序（从旧到新，便于计算同比）
+                if "end_date" in df.columns:
+                    df = df.sort_values("end_date", ascending=True)
+
+                # 计算 YoY 和 QoQ
+                df = self._add_yoy_qoq(df, yoy_fields, is_quarterly)
+
+                # 按时间倒序返回（最新的在前）
+                df = df.sort_values("end_date", ascending=False)
+
+                # 限制行数
+                if periods is not None:
+                    df = df.head(periods)
+
+                # 处理 NaN
+                df = df.where(df.notnull(), None)
+                return df.to_dict("records")
+
+            result = {
+                "ts_code": ts_code,
+                "source": "tushare",
+                "income_statement": {
+                    "quarterly": process_df(income_quarterly, income_yoy_fields, is_quarterly=True) if report_type in ("all", "quarterly") else [],
+                    "annual": process_df(income_consolidated, income_yoy_fields, is_quarterly=False) if report_type in ("all", "annual") else [],
+                },
+                "balance_sheet": {
+                    "quarterly": process_df(balance_quarterly, balance_yoy_fields, is_quarterly=True) if report_type in ("all", "quarterly") else [],
+                    "annual": process_df(balance_consolidated, balance_yoy_fields, is_quarterly=False) if report_type in ("all", "annual") else [],
+                },
+                "cash_flow": {
+                    "quarterly": process_df(cashflow_quarterly, cashflow_yoy_fields, is_quarterly=True) if report_type in ("all", "quarterly") else [],
+                    "annual": process_df(cashflow_consolidated, cashflow_yoy_fields, is_quarterly=False) if report_type in ("all", "annual") else [],
+                },
+            }
+
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to fetch full financials for {ticker}: {e}")
+            raise ValueError(f"Failed to fetch full financials for {ticker}: {e}")
+
+    def _add_yoy_qoq(self, df: pd.DataFrame, yoy_fields: List[str], is_quarterly: bool) -> pd.DataFrame:
+        """Add Year-over-Year and Quarter-over-Quarter calculations.
+
+        Args:
+            df: DataFrame with financial data sorted by end_date (ascending)
+            yoy_fields: List of field names to calculate YoY/QoQ for
+            is_quarterly: If True, also calculate QoQ
+
+        Returns:
+            DataFrame with added _yoy and _qoq columns for each field
+        """
+        df = df.copy()
+
+        # 创建年份和季度列用于对齐
+        if "end_date" in df.columns:
+            df["_year"] = df["end_date"].astype(str).str[:4].astype(int)
+            df["_month"] = df["end_date"].astype(str).str[4:6].astype(int)
+
+        for field in yoy_fields:
+            if field not in df.columns:
+                continue
+
+            yoy_col = f"{field}_yoy"
+            qoq_col = f"{field}_qoq"
+
+            # 计算 YoY（同比）：当前值 vs 去年同期
+            df[yoy_col] = None
+            if "_year" in df.columns:
+                for i in range(len(df)):
+                    curr_year = df.iloc[i]["_year"]
+                    curr_month = df.iloc[i]["_month"]
+                    curr_val = df.iloc[i][field]
+
+                    if curr_val is None or pd.isna(curr_val):
+                        continue
+
+                    # 查找去年同期
+                    last_year_mask = (df["_year"] == curr_year - 1) & (df["_month"] == curr_month)
+                    last_year_rows = df[last_year_mask]
+
+                    if len(last_year_rows) > 0:
+                        last_year_val = last_year_rows.iloc[0][field]
+                        if last_year_val is not None and not pd.isna(last_year_val) and last_year_val != 0:
+                            df.iloc[i, df.columns.get_loc(yoy_col)] = round(
+                                (curr_val - last_year_val) / abs(last_year_val) * 100, 2
+                            )
+
+            # 计算 QoQ（环比）：仅对季度数据有意义
+            if is_quarterly:
+                df[qoq_col] = None
+                for i in range(1, len(df)):
+                    curr_val = df.iloc[i][field]
+                    prev_val = df.iloc[i - 1][field]
+
+                    if curr_val is None or pd.isna(curr_val) or prev_val is None or pd.isna(prev_val):
+                        continue
+
+                    if prev_val != 0:
+                        df.iloc[i, df.columns.get_loc(qoq_col)] = round(
+                            (curr_val - prev_val) / abs(prev_val) * 100, 2
+                        )
+
+        # 清理临时列
+        df = df.drop(columns=["_year", "_month"], errors="ignore")
+        return df
+
     async def get_dividend_info(self, ticker: str) -> Dict[str, Any]:
         """Fetch dividend history from Tushare.
 

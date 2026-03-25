@@ -1114,6 +1114,260 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"Failed to fetch financials for {ticker}: {e}")
             raise ValueError(f"Failed to fetch financials for {ticker}: {e}")
 
+    async def get_financial_statements(
+        self,
+        ticker: str,
+        report_type: str = "all",
+        periods: int | None = None,
+    ) -> Dict[str, Any]:
+        """Fetch complete financial statements with YoY/QoQ calculations.
+
+        Unified interface matching TushareAdapter for A-share stocks using Akshare.
+
+        Args:
+            ticker: Asset ticker in internal format (e.g., SSE:600519)
+            report_type: "quarterly" | "annual" | "all" (default: "all")
+            periods: Number of periods to return. None = all available history.
+
+        Returns:
+            Dictionary containing:
+            - income_statement: {quarterly: [...], annual: [...]}
+            - balance_sheet: {quarterly: [...], annual: [...]}
+            - cash_flow: {quarterly: [...], annual: [...]}
+            - Each record includes YoY (同比) and QoQ (环比) for key metrics
+        """
+        cache_key = f"akshare:financial_statements:{ticker}:{report_type}:{periods}:v1"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        symbol = self._to_ak_code(ticker)
+
+        try:
+            # Fetch all financial statements in parallel
+            balance_task = self._run(
+                ak.stock_financial_report_sina, stock=symbol, symbol="资产负债表"
+            )
+            income_task = self._run(
+                ak.stock_financial_report_sina, stock=symbol, symbol="利润表"
+            )
+            cashflow_task = self._run(
+                ak.stock_financial_report_sina, stock=symbol, symbol="现金流量表"
+            )
+
+            balance_df, income_df, cashflow_df = await asyncio.gather(
+                balance_task, income_task, cashflow_task, return_exceptions=True
+            )
+
+            # Define core fields for YoY/QoQ (mapped to common field names in Sina data)
+            # Note: Sina field names may vary; these are typical column names
+            income_yoy_fields = [
+                "营业收入", "营业成本", "营业利润", "利润总额",
+                "净利润", "归属于母公司所有者的净利润"
+            ]
+            balance_yoy_fields = [
+                "资产总计", "负债合计", "所有者权益合计",
+                "货币资金", "应收账款", "存货"
+            ]
+            cashflow_yoy_fields = [
+                "经营活动产生的现金流量净额", "投资活动产生的现金流量净额",
+                "筹资活动产生的现金流量净额"
+            ]
+
+            def process_df(df, yoy_fields, is_quarterly=False):
+                """Process DataFrame: add YoY/QoQ calculations."""
+                if isinstance(df, Exception):
+                    self.logger.warning(f"Failed to fetch data: {df}")
+                    return []
+                if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+                    return []
+
+                # Try to identify date column (handle encoding issues)
+                date_col = None
+                for col in df.columns:
+                    col_str = str(col).strip()
+                    if col_str in ["报告期", "日期", "date", "end_date"]:
+                        date_col = col
+                        break
+                    # Try first column if no match
+                    if date_col is None and col == df.columns[0]:
+                        date_col = col
+
+                if date_col is None:
+                    self.logger.warning("No date column found in DataFrame")
+                    return df.to_dict("records")
+
+                # Rename to standard end_date
+                if date_col != "end_date":
+                    df = df.rename(columns={date_col: "end_date"})
+
+                # Convert end_date to string format YYYYMMDD for consistency
+                try:
+                    df["end_date"] = df["end_date"].astype(str).str[:8]
+                except Exception:
+                    pass
+
+                # Sort by end_date (ascending for YoY/QoQ calculation)
+                df = df.sort_values("end_date", ascending=True)
+
+                # Calculate YoY and QoQ
+                df = self._add_yoy_qoq_akshare(df, yoy_fields, is_quarterly)
+
+                # Sort by time descending (newest first)
+                df = df.sort_values("end_date", ascending=False)
+
+                # Limit rows
+                if periods is not None:
+                    df = df.head(periods)
+
+                # Handle NaN
+                df = df.where(df.notnull(), None)
+                return df.to_dict("records")
+
+            # Note: Akshare's stock_financial_report_sina returns combined quarterly+annual data
+            # We need to separate them based on date patterns (0331, 0630, 0930, 1231)
+            def separate_quarterly_annual(df):
+                """Separate DataFrame into quarterly and annual reports."""
+                if isinstance(df, Exception) or df is None:
+                    return None, None
+                if not isinstance(df, pd.DataFrame) or df.empty:
+                    return None, None
+
+                # Identify date column (handle encoding issues)
+                date_col = None
+                for col in df.columns:
+                    col_str = str(col).strip()
+                    if col_str in ["报告期", "日期", "date", "end_date"]:
+                        date_col = col
+                        break
+                    # Try first column if no match
+                    if date_col is None and col == df.columns[0]:
+                        date_col = col
+
+                if date_col is None:
+                    return None, None
+
+                # Work with a copy
+                df_work = df.copy()
+
+                # Rename to end_date
+                if date_col != "end_date":
+                    df_work = df_work.rename(columns={date_col: "end_date"})
+
+                # Normalize date format to YYYYMMDD
+                try:
+                    df_work["end_date"] = df_work["end_date"].astype(str).str[:8]
+                except Exception:
+                    pass
+
+                # Separate based on month
+                df_work["_month"] = df_work["end_date"].astype(str).str[4:6]
+
+                # Annual reports end in 12 (December)
+                annual_df = df_work[df_work["_month"] == "12"].drop(columns=["_month"])
+
+                # Quarterly reports end in 03, 06, 09 (but not annual)
+                quarterly_df = df_work[df_work["_month"].isin(["03", "06", "09"])].drop(columns=["_month"])
+
+                return quarterly_df, annual_df
+
+            # Separate quarterly and annual data
+            income_q, income_a = separate_quarterly_annual(income_df)
+            balance_q, balance_a = separate_quarterly_annual(balance_df)
+            cashflow_q, cashflow_a = separate_quarterly_annual(cashflow_df)
+
+            result = {
+                "ts_code": symbol,
+                "source": "akshare",
+                "income_statement": {
+                    "quarterly": process_df(income_q, income_yoy_fields, is_quarterly=True) if report_type in ("all", "quarterly") else [],
+                    "annual": process_df(income_a, income_yoy_fields, is_quarterly=False) if report_type in ("all", "annual") else [],
+                },
+                "balance_sheet": {
+                    "quarterly": process_df(balance_q, balance_yoy_fields, is_quarterly=True) if report_type in ("all", "quarterly") else [],
+                    "annual": process_df(balance_a, balance_yoy_fields, is_quarterly=False) if report_type in ("all", "annual") else [],
+                },
+                "cash_flow": {
+                    "quarterly": process_df(cashflow_q, cashflow_yoy_fields, is_quarterly=True) if report_type in ("all", "quarterly") else [],
+                    "annual": process_df(cashflow_a, cashflow_yoy_fields, is_quarterly=False) if report_type in ("all", "annual") else [],
+                },
+            }
+
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to fetch financial statements for {ticker}: {e}")
+            raise ValueError(f"Failed to fetch financial statements for {ticker}: {e}")
+
+    def _add_yoy_qoq_akshare(
+        self, df: pd.DataFrame, yoy_fields: List[str], is_quarterly: bool
+    ) -> pd.DataFrame:
+        """Add Year-over-Year and Quarter-over-Quarter calculations for Akshare data.
+
+        Args:
+            df: DataFrame with financial data sorted by end_date (ascending)
+            yoy_fields: List of field names to calculate YoY/QoQ for
+            is_quarterly: If True, also calculate QoQ
+
+        Returns:
+            DataFrame with added _yoy and _qoq columns for each field
+        """
+        df = df.copy()
+
+        # Create year and month columns for alignment
+        if "end_date" in df.columns:
+            df["_year"] = df["end_date"].astype(str).str[:4].astype(int)
+            df["_month"] = df["end_date"].astype(str).str[4:6].astype(int)
+
+        for field in yoy_fields:
+            if field not in df.columns:
+                continue
+
+            yoy_col = f"{field}_yoy"
+            qoq_col = f"{field}_qoq"
+
+            # Calculate YoY: current vs same period last year
+            df[yoy_col] = None
+            if "_year" in df.columns:
+                for i in range(len(df)):
+                    curr_year = df.iloc[i]["_year"]
+                    curr_month = df.iloc[i]["_month"]
+                    curr_val = df.iloc[i][field]
+
+                    if curr_val is None or pd.isna(curr_val):
+                        continue
+
+                    # Find same period last year
+                    last_year_mask = (df["_year"] == curr_year - 1) & (df["_month"] == curr_month)
+                    last_year_rows = df[last_year_mask]
+
+                    if len(last_year_rows) > 0:
+                        last_year_val = last_year_rows.iloc[0][field]
+                        if last_year_val is not None and not pd.isna(last_year_val) and last_year_val != 0:
+                            df.iloc[i, df.columns.get_loc(yoy_col)] = round(
+                                (curr_val - last_year_val) / abs(last_year_val) * 100, 2
+                            )
+
+            # Calculate QoQ: only for quarterly data
+            if is_quarterly:
+                df[qoq_col] = None
+                for i in range(1, len(df)):
+                    curr_val = df.iloc[i][field]
+                    prev_val = df.iloc[i - 1][field]
+
+                    if curr_val is None or pd.isna(curr_val) or prev_val is None or pd.isna(prev_val):
+                        continue
+
+                    if prev_val != 0:
+                        df.iloc[i, df.columns.get_loc(qoq_col)] = round(
+                            (curr_val - prev_val) / abs(prev_val) * 100, 2
+                        )
+
+        # Clean up temporary columns
+        df = df.drop(columns=["_year", "_month"], errors="ignore")
+        return df
+
     async def get_filings(
         self,
         ticker: str,

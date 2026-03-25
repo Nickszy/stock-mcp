@@ -311,6 +311,17 @@ class AdapterManager:
     async def get_financials(self, ticker: str) -> Dict[str, Any]:
         return await self._dispatch_ticker("get_financials", ticker)
 
+    async def get_financial_statements(
+        self,
+        ticker: str,
+        report_type: str = "all",
+        periods: int | None = None,
+    ) -> Dict[str, Any]:
+        """Fetch complete financial statements with YoY/QoQ calculations."""
+        return await self._dispatch_ticker(
+            "get_financial_statements", ticker, report_type=report_type, periods=periods
+        )
+
     async def get_dividend_info(self, ticker: str) -> Dict[str, Any]:
         return await self._dispatch_ticker("get_dividend_info", ticker)
 

@@ -93,8 +93,9 @@ class TimeoutConfig(BaseAppSettings):
     # Top-level MCP tool execution timeout (hard limit)
     mcp_tool_seconds: float = Field(35.0, validation_alias="MCP_TOOL_TIMEOUT_SECONDS")
     # Per-provider call timeout used in adapter routing/failover
+    # Increased to 20s to accommodate yfinance which takes ~12s for first request
     provider_call_seconds: float = Field(
-        12.0, validation_alias="PROVIDER_CALL_TIMEOUT_SECONDS"
+        20.0, validation_alias="PROVIDER_CALL_TIMEOUT_SECONDS"
     )
     # Default HTTP timeout for internal async clients if needed
     http_request_seconds: float = Field(

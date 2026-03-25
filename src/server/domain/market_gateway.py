@@ -29,6 +29,7 @@ _TICKER_METHODS: Set[str] = {
     # core
     "get_asset_info",
     "get_financials",
+    "get_financial_statements",  # 完整财报三表 + YoY/QoQ
     "get_mainbz_info",
     "get_shareholder_info",
     "get_dividend_info",

@@ -27,12 +27,41 @@
 
 #### 1. 多源市场数据融合
 
-无需纠结使用哪个 API。本服务器内置智能 **Adapter Manager（适配器管理器）**，可自动路由请求并在多个数据源之间进行故障转移：
+无需纠结使用哪个 API。本服务器内置智能 **Adapter Manager（适配器管理器）**，可自动路由请求并在多个数据源之间进行故障转移。
 
-- **美股**: Yahoo Finance, Finnhub
-- **A股**: Akshare, Tushare, Baostock
-- **加密货币**: CCXT (Binance, OKX 等)
-- **外汇与指数**: Yahoo Finance
+**数据源列表**
+
+| 类别 | 数据源 | 市场 | 费用 | API Key |
+|------|--------|------|------|---------|
+| **A股** | Tushare | 沪深北 | 积分制 | ✅ |
+| | Akshare | A股+港股 | 免费 | ❌ |
+| | Baostock | A股 | 免费 | ❌ |
+| **美股** | Yahoo Finance | 美股+港股+国际 | 免费 | ❌ |
+| | Finnhub | 美股 | Freemium | ✅ |
+| **加密货币** | CCXT | 全球交易所 | 免费 | ✅ |
+| **外汇/大宗** | Alpha Vantage | 全球 | Freemium | ✅ |
+| | Twelve Data | 全球 | Freemium | ✅ |
+| **宏观** | FRED | 美国宏观 | 免费 | ✅ |
+| **SEC文件** | Edgar | 美股财报 | 免费 | ❌ |
+
+**数据维度**
+
+- 📊 **行情数据**: OHLCV/历史K线/盘口/复权
+- 💰 **基本面数据**: 三大财报/财务指标/主营构成/股东/分红
+- 💸 **资金流向**: 个股资金流/北向资金/板块资金/筹码分布
+- 📰 **资讯研报**: 新闻/业绩预告/机构评级/研报
+- 🌐 **宏观数据**: 中美CPI/GDP/M2/利率/失业率
+- 🔢 **技术指标**: 20+指标 (SMA/EMA/RSI/MACD/KDJ/ATR/布林带等)
+- 📈 **形态识别**: K线形态自动检测
+
+**智能路由**
+
+1. **市场优先级**: A股: Tushare → Akshare → Baostock
+2. **时效优先级**: 实时数据→付费源，历史数据→免费源
+3. **健康检查**: 自动故障转移 + 冷却恢复
+4. **配额管理**: 智能轮换避免限流
+
+> 📖 **详细文档**: [数据源与数据维度详解](docs/DATA_SOURCES.md) - 包含完整的数据源矩阵、实现状态和开发计划
 
 #### 2. 专业技术分析
 
@@ -285,14 +314,42 @@ python scripts/mcp2openapi.py
 
 ### 🗺️ 路线图与未来计划
 
-虽然当前的数据检索和分析能力已相当健壮，但以下功能计划在未来版本中支持：
+#### ✅ 已完成功能 (v1.0)
 
-- [ ] **实盘交易执行**: 目前 `execute_order` 工具处于 **模拟模式 (Simulation Mode)**。我们计划通过 CCXT（加密货币）和券商 API（股票）集成真实的交易下单能力
-- [ ] **高级缓存策略**: 实现更细粒度的 TTL (Time-To-Live) 设置，区分实时价格数据（短 TTL）和财务报表（长 TTL），以平衡性能与 API 配额消耗
-- [ ] **用户账户管理**: 安全地管理用户特定的交易所 API 密钥，实现个性化交易
-- [ ] **更多数据适配器**: 扩展支持更多专业数据源（如情绪分析提供商、另类数据等）
-- [ ] **WebSocket 实时推送**: 支持实时行情推送，减少轮询开销
-- [ ] **回测引擎**: 内置策略回测功能，验证交易策略的有效性
+- [x] **多源数据融合**: Adapter Manager 智能路由 + 自动故障转移
+- [x] **实时行情**: OHLCV + 成交量数据
+- [x] **技术分析引擎**: 20+ 技术指标 + K线形态识别
+- [x] **基本面数据**: 财务报表/主营构成/股东信息/分红历史
+- [x] **资金流向**: 个股资金流/北向资金/板块资金流
+- [x] **宏观数据**: 中美宏观指标 (CPI/GDP/M2/利率等)
+- [x] **新闻资讯**: 公司新闻/行业动态
+- [x] **完整财报三表**: 利润表/资产负债表/现金流量表 + YoY/QoQ (v1.1, 2026-03-24)
+
+#### 🚧 开发中 (v1.2)
+
+- [ ] **机构与资金行为**: 机构持仓变化/大单追踪/龙虎榜/融资融券数据
+- [ ] **一致预期**: 分析师一致预期/业绩预测/目标价分布
+- [ ] **Markdown-first 输出层**: 优化 LLM 上下文，自动生成结构化报告
+
+#### 📋 计划中 (v1.3+)
+
+- [ ] **实盘交易执行**: 通过 CCXT (加密货币) 和券商 API (股票) 集成真实下单能力
+- [ ] **高级缓存策略**: 区分实时数据 (短TTL) 和财报数据 (长TTL)
+- [ ] **用户账户管理**: 安全存储用户特定的交易所 API 密钥
+- [ ] **WebSocket 实时推送**: 减少轮询开销，支持实时行情订阅
+- [ ] **回测引擎**: 内置策略回测功能，支持历史数据验证
+- [ ] **更多数据源**:
+  - 情绪分析: Twitter/Reddit 舆情
+  - 另类数据: 卫星图像/信用卡数据
+  - 期权数据: Greeks/隐含波动率
+  - 债券数据: 国债/企业债收益率
+
+#### 🎯 长期愿景
+
+- **多语言 SDK**: Python/JavaScript/Go 客户端库
+- **云端部署**: Docker + Kubernetes 一键部署
+- **企业版**: 多租户/权限管理/审计日志
+- **AI 策略助手**: 自然语言生成交易策略
 
 ### 🏗️ 项目架构
 
@@ -617,14 +674,42 @@ The generated OpenAPI documentation can be imported into tools like Apifox or Po
 
 ### 🗺️ Roadmap & Future Plans
 
-While the data retrieval and analysis capabilities are robust, the following features are planned for future releases:
+#### ✅ Completed Features (v1.0)
 
-- [ ] **Real Trading Execution**: Currently, the `execute_order` tool runs in **simulation mode**. We plan to integrate real trading capabilities via CCXT (for crypto) and broker APIs (for stocks)
-- [ ] **Advanced Caching Strategy**: Implement fine-grained TTL (Time-To-Live) settings to distinguish between real-time price data (short TTL) and financial reports (long TTL) for better performance and API quota management
-- [ ] **User Account Management**: Secure handling of user-specific exchange API keys for personalized trading
-- [ ] **More Data Adapters**: Expansion to include more specialized data sources (e.g., sentiment analysis providers, alternative data)
-- [ ] **WebSocket Real-time Push**: Support real-time market data push to reduce polling overhead
-- [ ] **Backtesting Engine**: Built-in strategy backtesting functionality to validate trading strategies
+- [x] **Multi-Source Data Fusion**: Adapter Manager with smart routing + automatic failover
+- [x] **Real-time Quotes**: OHLCV + volume data
+- [x] **Technical Analysis Engine**: 20+ indicators + candlestick pattern recognition
+- [x] **Fundamental Data**: Financial statements / business composition / shareholder info / dividend history
+- [x] **Money Flow**: Individual stock flow / northbound capital / sector flows
+- [x] **Macro Indicators**: China & US macro data (CPI/GDP/M2/rates etc.)
+- [x] **News & Updates**: Company news / industry trends
+- [x] **Complete Financial Statements**: Income/Balance Sheet/Cash Flow + YoY/QoQ (v1.1, 2026-03-24)
+
+#### 🚧 In Development (v1.2)
+
+- [ ] **Institutional & Capital Behavior**: Institutional holdings / large order tracking / dragon-tiger list / margin trading data
+- [ ] **Consensus Estimates**: Analyst consensus / earnings forecasts / target price distribution
+- [ ] **Markdown-first Output Layer**: Optimized for LLM context, auto-generate structured reports
+
+#### 📋 Planned (v1.3+)
+
+- [ ] **Real Trading Execution**: Integrate real order placement via CCXT (crypto) and broker APIs (stocks)
+- [ ] **Advanced Caching Strategy**: Distinguish real-time data (short TTL) from financial reports (long TTL)
+- [ ] **User Account Management**: Secure storage of user-specific exchange API keys
+- [ ] **WebSocket Real-time Push**: Reduce polling overhead, support real-time quote subscriptions
+- [ ] **Backtesting Engine**: Built-in strategy backtesting with historical data validation
+- [ ] **More Data Sources**:
+  - Sentiment Analysis: Twitter/Reddit sentiment
+  - Alternative Data: Satellite imagery / credit card data
+  - Options Data: Greeks / implied volatility
+  - Bond Data: Treasury / corporate bond yields
+
+#### 🎯 Long-term Vision
+
+- **Multi-language SDK**: Python/JavaScript/Go client libraries
+- **Cloud Deployment**: Docker + Kubernetes one-click deployment
+- **Enterprise Edition**: Multi-tenancy / permission management / audit logs
+- **AI Strategy Assistant**: Natural language to trading strategies
 
 ### 🏗️ Project Architecture
 

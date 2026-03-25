@@ -1182,3 +1182,167 @@ def register_fundamental_tools(mcp: FastMCP):
                     extra={"error": str(e)},
                 )
             return {"error": str(e)}
+
+    @mcp.tool(tags={"fundamental"})
+    async def get_financial_statements(
+        symbol: str,
+        report_type: str = "all",
+        periods: int | None = None,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get complete financial statements (Income, Balance Sheet, Cash Flow) with YoY/QoQ.
+
+        获取完整财报三大表（利润表、资产负债表、现金流量表），包含同比/环比计算。
+
+        Args:
+            symbol: Asset ticker. Format: EXCHANGE:SYMBOL
+                - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
+                - 美股: NASDAQ:AAPL, NYSE:TSLA
+                - 港股: HKEX:00700
+            report_type: "quarterly" | "annual" | "all" (default: "all")
+            periods: Number of periods to return. None = all available history.
+
+        Returns:
+            Artifact response containing:
+            - income_statement: {quarterly: [...], annual: [...]}
+            - balance_sheet: {quarterly: [...], annual: [...]}
+            - cash_flow: {quarterly: [...], annual: [...]}
+            - Each record includes _yoy (同比) and _qoq (环比) for key metrics
+        """
+        if ctx:
+            await ctx.info(
+                f"🔧 获取完整财报三表: {symbol}",
+                extra={"symbol": symbol, "report_type": report_type, "periods": periods}
+            )
+
+        try:
+            logger.info(
+                "MCP tool called: get_financial_statements",
+                symbol=symbol,
+                report_type=report_type,
+                periods=periods,
+            )
+
+            data = await fundamental_use_cases.get_financial_statements(
+                symbol, report_type=report_type, periods=periods
+            )
+
+            ts_code = data.get("ts_code") or data.get("ticker") or symbol
+            source = data.get("source", "unknown")
+
+            # Build summary
+            income_q = data.get("income_statement", {}).get("quarterly", [])
+            income_a = data.get("income_statement", {}).get("annual", [])
+            balance_q = data.get("balance_sheet", {}).get("quarterly", [])
+            balance_a = data.get("balance_sheet", {}).get("annual", [])
+            cashflow_q = data.get("cash_flow", {}).get("quarterly", [])
+            cashflow_a = data.get("cash_flow", {}).get("annual", [])
+
+            summary_parts = [f"{ts_code} 完整财报三表（数据源: {source}）"]
+
+            if income_q:
+                summary_parts.append(f"利润表(季度): {len(income_q)}期")
+            if income_a:
+                summary_parts.append(f"利润表(年度): {len(income_a)}期")
+            if balance_q:
+                summary_parts.append(f"资产负债表(季度): {len(balance_q)}期")
+            if balance_a:
+                summary_parts.append(f"资产负债表(年度): {len(balance_a)}期")
+            if cashflow_q:
+                summary_parts.append(f"现金流量表(季度): {len(cashflow_q)}期")
+            if cashflow_a:
+                summary_parts.append(f"现金流量表(年度): {len(cashflow_a)}期")
+
+            summary_text = "; ".join(summary_parts)
+
+            # Create artifacts for each statement type
+            artifacts = []
+
+            # Income Statement
+            if income_q or income_a:
+                artifacts.append(
+                    create_artifact_envelope(
+                        component_type="financial_statement",
+                        name=f"利润表 - {ts_code}",
+                        content={
+                            "statement_type": "income_statement",
+                            "quarterly": income_q,
+                            "annual": income_a,
+                        },
+                        description=f"利润表（收入、成本、利润）含同比/环比 - {ts_code}",
+                        metadata={"type": "income_statement", "ts_code": ts_code},
+                        visible_to_llm=True,
+                        display_in_report=True,
+                    )
+                )
+
+            # Balance Sheet
+            if balance_q or balance_a:
+                artifacts.append(
+                    create_artifact_envelope(
+                        component_type="financial_statement",
+                        name=f"资产负债表 - {ts_code}",
+                        content={
+                            "statement_type": "balance_sheet",
+                            "quarterly": balance_q,
+                            "annual": balance_a,
+                        },
+                        description=f"资产负债表（资产、负债、股东权益）含同比/环比 - {ts_code}",
+                        metadata={"type": "balance_sheet", "ts_code": ts_code},
+                        visible_to_llm=True,
+                        display_in_report=True,
+                    )
+                )
+
+            # Cash Flow Statement
+            if cashflow_q or cashflow_a:
+                artifacts.append(
+                    create_artifact_envelope(
+                        component_type="financial_statement",
+                        name=f"现金流量表 - {ts_code}",
+                        content={
+                            "statement_type": "cash_flow",
+                            "quarterly": cashflow_q,
+                            "annual": cashflow_a,
+                        },
+                        description=f"现金流量表（经营/投资/筹资现金流）含同比/环比 - {ts_code}",
+                        metadata={"type": "cash_flow", "ts_code": ts_code},
+                        visible_to_llm=True,
+                        display_in_report=True,
+                    )
+                )
+
+            if ctx:
+                await ctx.info(
+                    f"✅ 完整财报三表获取完成: {ts_code}",
+                    extra={
+                        "income_q": len(income_q),
+                        "income_a": len(income_a),
+                        "balance_q": len(balance_q),
+                        "balance_a": len(balance_a),
+                        "cashflow_q": len(cashflow_q),
+                        "cashflow_a": len(cashflow_a),
+                    }
+                )
+
+            return create_artifact_list_response(
+                summary=summary_text,
+                artifacts=artifacts,
+            )
+
+        except SymbolResolutionError as e:
+            if ctx:
+                await ctx.warning(f"⚠️ 符号解析失败: {symbol}", extra=e.to_dict())
+            return create_symbol_error_response(
+                e,
+                component_type="financial_statements",
+                name=f"{symbol} 财报三表",
+            )
+        except Exception as e:
+            logger.error(f"Get financial statements failed: {e}")
+            if ctx:
+                await ctx.error(
+                    f"❌ 获取财报三表失败: {symbol}",
+                    extra={"error": str(e)},
+                )
+            return {"error": str(e), "component_type": "financial_statements"}
