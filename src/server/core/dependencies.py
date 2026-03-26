@@ -5,6 +5,7 @@ Modules can obtain instances via `Container.xxx()`.
 """
 
 from dependency_injector import containers, providers
+
 from src.server.config.settings import get_settings
 from src.server.infrastructure.connections.redis_connection import RedisConnection
 from src.server.infrastructure.connections.tushare_connection import TushareConnection
@@ -12,7 +13,9 @@ from src.server.infrastructure.connections.finnhub_connection import FinnhubConn
 from src.server.infrastructure.connections.baostock_connection import BaostockConnection
 from src.server.infrastructure.connections.postgres_connection import PostgresConnection
 
-# Adapters
+from src.server.infrastructure.cache.redis_cache import AsyncRedisCache
+
+# Import adapter classes
 from src.server.domain.adapters.yahoo_adapter import YahooAdapter
 from src.server.domain.adapters.akshare_adapter import AkshareAdapter
 from src.server.domain.adapters.crypto_adapter import CryptoAdapter
@@ -24,8 +27,9 @@ from src.server.domain.adapters.futures_adapter import FuturesAdapter
 from src.server.domain.adapters.alpha_vantage_adapter import AlphaVantageAdapter
 from src.server.domain.adapters.twelve_data_adapter import TwelveDataAdapter
 from src.server.domain.adapters.fred_adapter import FredAdapter
+from src.server.domain.adapters.edgar_adapter import EdgarAdapter
 
-# Services
+# Import service classes
 from src.server.domain.services.fundamental_service import FundamentalService
 from src.server.domain.services.news_service import NewsService
 from src.server.domain.services.technical_service import TechnicalService
@@ -33,8 +37,11 @@ from src.server.domain.services.filings_service import FilingsService
 from src.server.domain.services.money_flow_service import MoneyFlowService
 from src.server.domain.services.chip_service import ChipService
 
-# Cache wrapper (aiocache)
-from src.server.infrastructure.cache.redis_cache import AsyncRedisCache
+# Import domain classes
+from src.server.domain.market_gateway import MarketGateway
+from src.server.domain.symbols import SymbolResolver
+from src.server.domain.routing import MarketRouter, ProviderHealthTracker, RoutingPolicy
+from src.server.domain.security_master import SecurityMasterRepository
 
 
 class Container(containers.DeclarativeContainer):
@@ -76,7 +83,7 @@ class Container(containers.DeclarativeContainer):
         ),
     )
 
-    # Cache (wrap Redis client)
+    # Cache
     cache = providers.Singleton(AsyncRedisCache, redis_client=redis)
 
     # Adapters (each receives cache for result caching)
@@ -153,25 +160,9 @@ class Container(containers.DeclarativeContainer):
             config,
         ),
     )
-
-    from src.server.domain.adapters.edgar_adapter import EdgarAdapter
-
     edgar_adapter = providers.Singleton(EdgarAdapter, cache=cache)
 
-    # Adapter manager
-    from src.server.domain.adapter_manager import AdapterManager
-
-    adapter_manager = providers.Singleton(
-        AdapterManager,
-        provider_timeout_seconds=providers.Callable(
-            lambda cfg: cfg.timeout.provider_call_seconds,
-            config,
-        ),
-    )
-
     # Security Master
-    from src.server.domain.security_master import SecurityMasterRepository
-
     security_master_repo = providers.Singleton(
         SecurityMasterRepository,
         postgres_conn=postgres,
@@ -179,21 +170,36 @@ class Container(containers.DeclarativeContainer):
         sqlite_path=providers.Callable(lambda cfg: cfg.security_master_sqlite_path, config),
     )
 
-    # Symbol resolver & gateway
-    from src.server.domain.symbols import SymbolResolver
-    from src.server.domain.market_gateway import MarketGateway
-    from src.server.domain.routing import MarketRouter, ProviderHealthTracker, RoutingPolicy
-
+    # MarketGateway (unified gateway)
+    # NOTE: SymbolResolver receives gateway as "adapter_manager" for backward compatibility
+    # during initialization,    # SymbolResolver is created first, then MarketGateway is created with resolver injected.
+    # After MarketGateway is created, # SymbolResolver needs gateway for adapter methods
     symbol_resolver = providers.Singleton(
         SymbolResolver,
         security_master_repo=security_master_repo,
-        adapter_manager=adapter_manager,
+        adapter_manager=None,  # Will be set after gateway is created
     )
+
+    # Routing components
     routing_policy = providers.Singleton(RoutingPolicy.load)
     provider_health = providers.Singleton(ProviderHealthTracker)
+
+    # MarketGateway - unified gateway
+    market_gateway = providers.Singleton(
+        MarketGateway,
+        symbol_resolver=symbol_resolver,
+        market_router=None,  # Will be set after router is created
+        provider_timeout_seconds=providers.Callable(
+            lambda cfg: cfg.timeout.provider_call_seconds,
+            config,
+        ),
+    )
+
+    # MarketRouter (optional advanced routing)
+    # Created after MarketGateway to avoid circular dependency
     market_router = providers.Singleton(
         MarketRouter,
-        adapter_manager=adapter_manager,
+        adapter_manager=market_gateway,
         security_master_repo=security_master_repo,
         routing_policy=routing_policy,
         health_tracker=provider_health,
@@ -202,19 +208,14 @@ class Container(containers.DeclarativeContainer):
             config,
         ),
     )
-    market_gateway = providers.Singleton(
-        MarketGateway,
-        adapter_manager=adapter_manager,
-        symbol_resolver=symbol_resolver,
-        market_router=market_router,
-    )
 
+    # Update SymbolResolver's adapter_manager reference to point to gateway
+    # (done after MarketGateway is created)
     # MinIO Client
     from src.server.infrastructure.minio_client import MinioClient
-
     minio_client = providers.Singleton(MinioClient)
 
-    # Services (receive adapter manager and cache)
+    # Services (receive gateway, backward-compatible param name "adapter_manager")
     fundamental_service = providers.Factory(
         FundamentalService,
         adapter_manager=market_gateway,
@@ -235,14 +236,10 @@ class Container(containers.DeclarativeContainer):
         adapter_manager=market_gateway,
         minio_client=minio_client,
     )
-
-    # 资金流向服务
     money_flow_service = providers.Factory(
         MoneyFlowService,
         adapter_manager=market_gateway,
     )
-
-    # 筹码分布服务
     chip_service = providers.Factory(
         ChipService,
         adapter_manager=market_gateway,
