@@ -118,12 +118,22 @@ async def fetch_data(
 
     # auto 模式不指定 source
     actual_source = None if source == "auto" else source
+    request_type = config.get("request_type", "query_params")
 
     try:
         if config["method"] == "POST":
-            if data_type == "price":
-                # 价格数据使用 JSON body
-                payload = {"tickers": [ticker]}
+            if request_type == "json_body":
+                # JSON body 请求
+                if data_type == "price":
+                    # 批量价格使用 tickers 数组
+                    payload = {"tickers": [ticker]}
+                else:
+                    # 其他类型使用 symbol
+                    payload = {"symbol": ticker}
+                    # price_history 需要额外参数
+                    if data_type == "price_history":
+                        payload["period"] = "30d"
+                        payload["interval"] = "1d"
                 if actual_source:
                     payload["source"] = actual_source
                 response = await client.post(
@@ -132,7 +142,7 @@ async def fetch_data(
                     timeout=30.0
                 )
             else:
-                # 其他数据类型（财务数据）使用 query params
+                # query params 请求
                 params = {"symbol": ticker}
                 if actual_source:
                     params["source"] = actual_source
