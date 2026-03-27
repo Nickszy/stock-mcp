@@ -90,13 +90,13 @@ async def get_multiple_prices(
 ) -> Dict[str, Any]:
     """
     批量获取实时价格
-    
+
     Args:
-        request: 包含 tickers 列表的请求体
-        
+        request: 包含 tickers 列表和可选 source 的请求体
+
     Returns:
         Dict[ticker, price_data]: ticker 到价格数据的映射
-        
+
     Raises:
         HTTPException: 当数据获取失败时
     """
@@ -104,11 +104,14 @@ async def get_multiple_prices(
         logger.info(
             "API: get_multiple_prices called",
             tickers=request.tickers,
+            source=request.source,
             count=len(request.tickers)
         )
-        
-        # 调用核心实现
-        result = await market_use_cases.get_multiple_prices(request.tickers)
+
+        # 调用核心实现（支持可选的 source 参数）
+        result = await market_use_cases.get_multiple_prices(
+            request.tickers, source=request.source
+        )
         
         # 统计成功/失败数量
         success_count = len([v for v in result.values() if v and "error" not in v])

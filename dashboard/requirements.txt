@@ -1,0 +1,31 @@
+# Dashboard-only dependencies (minimal)
+# Web framework
+streamlit>=1.30.0
+
+# Visualization
+plotly>=5.18.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# HTTP client
+httpx>=0.24.0
+requests>=2.31.0
+
+# Data validation
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Configuration
+pyyaml>=6.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# Async support
+anyio>=4.0.0
+
+# Redis for monitoring
+redis>=5.0.0
+
+# Clipboard support
+pyperclip>=1.8.0

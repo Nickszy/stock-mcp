@@ -133,3 +133,7 @@ xlrd==2.0.2
 yarl==1.22.0
 yfinance==1.0
 zipp==3.23.0
+
+# Dashboard dependencies
+streamlit>=1.30.0
+plotly>=5.18.0

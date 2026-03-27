@@ -31,7 +31,7 @@ from src.server.api.routes import (
     money_flow_router,
 )
 from src.server.utils.logger import logger
-from src.server.middleware import JsonArgumentsFixMiddleware
+from src.server.middleware import JsonArgumentsFixMiddleware, DataSourceMiddleware
 
 
 def create_app():
@@ -159,6 +159,10 @@ def create_app():
     )
 
     logger.info("✅ CORS middleware configured")
+
+    # Add data source middleware
+    app.add_middleware(DataSourceMiddleware)
+    logger.info("✅ Data source middleware configured")
 
     # Add JSON arguments fix middleware for MCP clients like OpenClaw
     app.add_middleware(JsonArgumentsFixMiddleware)

@@ -3,7 +3,7 @@
 
 import json
 import logging
-from typing import Callable
+from typing import Callable, Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -76,3 +76,30 @@ class JsonArgumentsFixMiddleware(BaseHTTPMiddleware):
             logger.warning(f"Error in JsonArgumentsFixMiddleware: {e}")
 
         return await call_next(request)
+
+
+class DataSourceMiddleware(BaseHTTPMiddleware):
+    """Middleware to inject data source into request state.
+
+    This allows all API endpoints to access the preferred data source
+    via request headers or query parameters.
+
+    Usage:
+        - Query parameter: ?source=akshare
+        - Header: X-Data-Source: akshare
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        # Try query parameter first
+        source: Optional[str] = request.query_params.get("source")
+
+        # Fall back to header
+        if not source:
+            source = request.headers.get("X-Data-Source")
+
+        # Store in request state
+        request.state.source = source
+
+        response = await call_next(request)
+
+        return response

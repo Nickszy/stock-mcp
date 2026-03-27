@@ -1,0 +1,302 @@
+# Data Dimensions Configuration
+# 数据维度配置文件 - 可以自由添加/修改数据维度和接口
+
+version: "1.0"
+metadata:
+  description: "Stock MCP 数据质量 Dashboard - 数据维度配置"
+  last_updated: "2026-03-27"
+
+# API 基础地址
+api_base: "http://stock-mcp-api:9898"
+
+# 市场配置
+markets:
+  A股:
+    tickers:
+      - "SSE:600519"   # 贵州茅台
+      - "SZSE:000858"  # 五粮液
+      - "SSE:600036"   # 招商银行
+      - "SZSE:000001"  # 平安银行
+      - "SSE:601318"   # 中国平安
+      - "SZSE:000002"  # 万科A
+    sources: ["auto", "tushare", "baostock"]
+
+  美股:
+    tickers:
+      - "NASDAQ:AAPL"
+      - "NASDAQ:MSFT"
+      - "NYSE:JPM"
+      - "NYSE:BAC"
+      - "NASDAQ:GOOGL"
+      - "NYSE:BRK.B"
+    sources: ["auto", "yahoo", "finnhub"]
+
+  港股:
+    tickers:
+      - "HKEX:00700"   # 腾讯
+      - "HKEX:00941"   # 中国移动
+      - "HKEX:09988"   # 阿里巴巴
+      - "HKEX:01810"   # 小米
+      - "HKEX:02318"   # 平安好医生
+      - "HKEX:09868"   # 小鹏汽车
+    sources: ["auto", "yahoo"]
+
+# 数据维度定义
+# request_type 说明:
+#   - json_body: POST 请求，参数放在 JSON body 中
+#   - query_params: POST/GET 请求，参数放在 URL query 中
+#   - path_params: URL 路径中包含参数，如 /api/stock/{symbol}
+
+data_dimensions:
+  # ============================================================
+  # 市场数据 (Market Data)
+  # ============================================================
+  price:
+    display_name: "价格数据"
+    description: "实时行情价格数据"
+    category: "market"
+    api_endpoint: "/api/v1/market/prices/batch"
+    http_method: "POST"
+    request_type: "json_body"
+    request_template:
+      tickers: ["{ticker}"]
+      source: "{source}"
+    response_path: "{ticker}"
+    key_fields:
+      - "price"
+      - "open_price"
+      - "high_price"
+      - "low_price"
+      - "close_price"
+      - "volume"
+      - "change"
+      - "change_percent"
+    supported_markets: ["A股", "美股", "港股"]
+    timeout: 30
+
+  price_history:
+    display_name: "历史K线"
+    description: "历史价格/K线数据"
+    category: "market"
+    api_endpoint: "/api/v1/market/prices/history"
+    http_method: "POST"
+    request_type: "json_body"
+    request_template:
+      symbol: "{ticker}"
+      period: "{period:30d}"
+      interval: "{interval:1d}"
+    key_fields:
+      - "symbol"
+      - "period"
+      - "interval"
+      - "count"
+      - "data"
+    supported_markets: ["A股", "美股", "港股"]
+    timeout: 30
+
+  technical_indicators:
+    display_name: "技术指标"
+    description: "计算技术指标 (MA, RSI, MACD等)"
+    category: "market"
+    api_endpoint: "/api/v1/market/indicators/calculate"
+    http_method: "POST"
+    request_type: "json_body"
+    request_template:
+      symbol: "{ticker}"
+      period: "{period:30d}"
+      interval: "{interval:1d}"
+    key_fields:
+      - "symbol"
+      - "indicators"
+      - "price"
+    supported_markets: ["A股", "美股", "港股"]
+    timeout: 30
+
+  market_report:
+    display_name: "综合报告"
+    description: "市场综合报告（价格+基本信息）"
+    category: "market"
+    api_endpoint: "/api/v1/market/report"
+    http_method: "POST"
+    request_type: "query_params"
+    request_template:
+      symbol: "{ticker}"
+    key_fields:
+      - "symbol"
+      - "info"
+      - "price"
+      - "timestamp"
+    supported_markets: ["A股", "美股", "港股"]
+    timeout: 30
+
+  # ============================================================
+  # 财务数据 (Fundamental Data)
+  # ============================================================
+  financials:
+    display_name: "财务报表"
+    description: "财务报表数据 (利润表/资产负债表/现金流量表)"
+    category: "fundamental"
+    api_endpoint: "/api/v1/fundamental/financials"
+    http_method: "POST"
+    request_type: "query_params"
+    request_template:
+      symbol: "{ticker}"
+    key_fields:
+      - "income_statement"
+      - "balance_sheet"
+      - "cash_flow"
+      - "financial_indicators"
+      - "market_metrics"
+    supported_markets: ["A股", "美股"]
+    timeout: 30
+
+  ratios:
+    display_name: "财务比率"
+    description: "关键财务比率 (PE, PB, ROE等)"
+    category: "fundamental"
+    api_endpoint: "/api/v1/fundamental/ratios"
+    http_method: "POST"
+    request_type: "query_params"
+    request_template:
+      symbol: "{ticker}"
+    key_fields:
+      - "pe_ratio"
+      - "pb_ratio"
+      - "roe"
+      - "roa"
+      - "debt_ratio"
+      - "current_ratio"
+    supported_markets: ["A股", "美股"]
+    timeout: 30
+
+  forecast:
+    display_name: "盈利预测"
+    description: "机构盈利预测数据"
+    category: "fundamental"
+    api_endpoint: "/api/v1/fundamental/forecast"
+    http_method: "POST"
+    request_type: "query_params"
+    request_template:
+      symbol: "{ticker}"
+    key_fields:
+      - "eps_forecast"
+      - "revenue_forecast"
+      - "growth_rate"
+      - "target_price"
+    supported_markets: ["A股", "美股"]
+    timeout: 30
+
+  financial_report:
+    display_name: "财务报告"
+    description: "综合财务报告分析"
+    category: "fundamental"
+    api_endpoint: "/api/v1/fundamental/report"
+    http_method: "POST"
+    request_type: "query_params"
+    request_template:
+      symbol: "{ticker}"
+    key_fields:
+      - "ticker"
+      - "financials"
+      - "ratios"
+      - "health_score"
+    supported_markets: ["A股", "美股"]
+    timeout: 30
+
+  # ============================================================
+  # 资金流向 (Money Flow)
+  # ============================================================
+  money_flow:
+    display_name: "资金流向"
+    description: "个股主力资金流向"
+    category: "money_flow"
+    api_endpoint: "/api/v1/money-flow/stock/{symbol}"
+    http_method: "GET"
+    request_type: "path_and_query"
+    request_template:
+      path_params:
+        symbol: "{ticker_raw}"
+      query_params:
+        days: "{days:20}"
+    key_fields:
+      - "main_inflow"
+      - "main_outflow"
+      - "retail_inflow"
+      - "retail_outflow"
+      - "net_inflow"
+    supported_markets: ["A股"]
+    timeout: 30
+
+  north_bound:
+    display_name: "北向资金"
+    description: "北向资金流向数据"
+    category: "money_flow"
+    api_endpoint: "/api/v1/money-flow/north-bound"
+    http_method: "GET"
+    request_type: "query_params"
+    request_template:
+      days: "{days:30}"
+    key_fields:
+      - "sh_flow"
+      - "sz_flow"
+      - "total_flow"
+    supported_markets: ["A股"]
+    timeout: 30
+
+  chip_distribution:
+    display_name: "筹码分布"
+    description: "筹码分布和成本分析"
+    category: "money_flow"
+    api_endpoint: "/api/v1/money-flow/chip-distribution/{symbol}"
+    http_method: "GET"
+    request_type: "path_and_query"
+    request_template:
+      path_params:
+        symbol: "{ticker_raw}"
+      query_params:
+        days: "{days:30}"
+    key_fields:
+      - "distribution"
+      - "profit_ratio"
+      - "concentration"
+    supported_markets: ["A股"]
+    timeout: 30
+
+  # ============================================================
+  # 新闻数据 (News)
+  # ============================================================
+  stock_news:
+    display_name: "个股新闻"
+    description: "个股相关新闻"
+    category: "news"
+    api_endpoint: "/api/v1/news/stock"
+    http_method: "GET"
+    request_type: "query_params"
+    request_template:
+      symbol: "{ticker}"
+      days_back: "{days:7}"
+    key_fields:
+      - "title"
+      - "summary"
+      - "url"
+      - "published_time"
+    supported_markets: ["A股", "美股", "港股"]
+    timeout: 30
+
+  market_news:
+    display_name: "市场新闻"
+    description: "市场整体新闻动态"
+    category: "news"
+    api_endpoint: "/api/v1/news/market"
+    http_method: "GET"
+    request_type: "query_params"
+    request_template:
+      category: "{category:general}"
+      limit: "{limit:20}"
+    key_fields:
+      - "title"
+      - "summary"
+      - "url"
+      - "published_time"
+    supported_markets: ["A股", "美股", "港股"]
+    timeout: 30

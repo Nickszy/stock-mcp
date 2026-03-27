@@ -205,13 +205,13 @@ class BaostockAdapter(BaseDataAdapter):
 
     async def get_real_time_price(self, ticker: str) -> Optional[AssetPrice]:
         """Fetch current price.
-        
+
         Note: Baostock doesn't provide real-time data. This method returns
         the latest available daily data, which may be delayed.
-        
+
         Args:
             ticker: Asset ticker in internal format
-            
+
         Returns:
             Latest price data or None if not available
         """
@@ -221,65 +221,91 @@ class BaostockAdapter(BaseDataAdapter):
             return AssetPrice.from_dict(cached)
 
         bs_code = self._to_bs_code(ticker)
-        
-        try:
-            # Get latest daily data (last 5 days to ensure we get data)
-            end_date = datetime.now().strftime("%Y-%m-%d")
-            start_date = (datetime.now().replace(day=1)).strftime("%Y-%m-%d")
-            
-            rs = await self._run(
-                bs.query_history_k_data_plus,
-                code=bs_code,
-                fields="date,code,open,high,low,close,volume,amount,turn",
-                start_date=start_date,
-                end_date=end_date,
-                frequency="d",
-                adjustflag="3",  # 3: 后复权
-            )
-            
-            if rs.error_code != '0':
-                self.logger.warning(
-                    f"Baostock query failed for {ticker}: {rs.error_msg}"
-                )
-                return None
-            
-            # Convert to DataFrame
-            data_list = []
-            while (rs.error_code == '0') and rs.next():
-                data_list.append(rs.get_row_data())
-            
-            if not data_list:
-                return None
-            
-            df = pd.DataFrame(data_list, columns=rs.fields)
-            
-            if df.empty:
-                return None
-            
-            # Get the latest row
-            row = df.iloc[-1]
-            
-            # Parse date
-            date_str = row["date"]
-            timestamp = datetime.strptime(date_str, "%Y-%m-%d")
-            
-            # Create AssetPrice
-            asset_price = AssetPrice(
-                ticker=ticker,
-                price=Decimal(str(row["close"])),
-                currency="CNY",
-                timestamp=timestamp,
-                volume=Decimal(str(row["volume"])) if row["volume"] else None,
-                open_price=Decimal(str(row["open"])) if row["open"] else None,
-                high_price=Decimal(str(row["high"])) if row["high"] else None,
-                low_price=Decimal(str(row["low"])) if row["low"] else None,
-                close_price=Decimal(str(row["close"])) if row["close"] else None,
-                source=DataSource.BAOSTOCK,
-            )
 
-            await self.cache.set(cache_key, asset_price.to_dict(), ttl=300)
-            return asset_price
-            
+        try:
+            # Login to Baostock (required before any query)
+            lg = await self._run(bs.login)
+            if lg.error_code != '0':
+                self.logger.warning(f"Baostock login failed: {lg.error_msg}")
+                return None
+
+            try:
+                # Get latest daily data (last 5 days to ensure we get data)
+                end_date = datetime.now().strftime("%Y-%m-%d")
+                start_date = (datetime.now().replace(day=1)).strftime("%Y-%m-%d")
+
+                rs = await self._run(
+                    bs.query_history_k_data_plus,
+                    code=bs_code,
+                    fields="date,code,open,high,low,close,volume,amount,turn",
+                    start_date=start_date,
+                    end_date=end_date,
+                    frequency="d",
+                    adjustflag="3",  # 3: 后复权
+                )
+
+                if rs.error_code != '0':
+                    self.logger.warning(
+                        f"Baostock query failed for {ticker}: {rs.error_msg}"
+                    )
+                    return None
+
+                # Convert to DataFrame
+                data_list = []
+                while (rs.error_code == '0') and rs.next():
+                    data_list.append(rs.get_row_data())
+
+                if not data_list:
+                    return None
+
+                df = pd.DataFrame(data_list, columns=rs.fields)
+
+                if df.empty:
+                    return None
+
+                # Sort by date to get the latest two days
+                df = df.sort_values("date")
+
+                # Get the latest row
+                row = df.iloc[-1]
+
+                # Parse date
+                date_str = row["date"]
+                timestamp = datetime.strptime(date_str, "%Y-%m-%d")
+
+                # Calculate change from previous day's close (if available)
+                change = None
+                change_percent = None
+                if len(df) >= 2:
+                    prev_close = Decimal(str(df.iloc[-2]["close"]))
+                    today_close = Decimal(str(row["close"]))
+                    change = today_close - prev_close
+                    if prev_close > 0:
+                        change_percent = (change / prev_close) * 100
+
+                # Create AssetPrice
+                asset_price = AssetPrice(
+                    ticker=ticker,
+                    price=Decimal(str(row["close"])),
+                    currency="CNY",
+                    timestamp=timestamp,
+                    volume=Decimal(str(row["volume"])) if row["volume"] else None,
+                    open_price=Decimal(str(row["open"])) if row["open"] else None,
+                    high_price=Decimal(str(row["high"])) if row["high"] else None,
+                    low_price=Decimal(str(row["low"])) if row["low"] else None,
+                    close_price=Decimal(str(row["close"])) if row["close"] else None,
+                    change=change,
+                    change_percent=change_percent,
+                    source=DataSource.BAOSTOCK,
+                )
+
+                await self.cache.set(cache_key, asset_price.to_dict(), ttl=300)
+                return asset_price
+
+            finally:
+                # Logout from Baostock (required after query)
+                await self._run(bs.logout)
+
         except Exception as e:
             self.logger.warning(f"Failed to fetch price for {ticker}: {e}")
             return None

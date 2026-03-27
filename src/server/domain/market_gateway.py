@@ -1,49 +1,35 @@
 # src/server/domain/market_gateway.py
-"""MarketGateway: unified gateway for symbol resolution + adapter routing.
+"""MarketGateway: symbol resolution + adapter routing wrapper.
 
-Merged from MarketGateway + AdapterManager to eliminate redundant delegation.
-
-Architecture (v3):
-- Single entry point for all market data operations
-- Symbol resolution → Adapter routing → Failover in one place
-- Declarative method registries + __getattr__ for zero-boilerplate extensibility
-
-Adding a new operation:
-1. Add method to BaseDataAdapter (raise NotImplementedError)
-2. Implement in the relevant Adapter(s)
-3. Add method name to _TICKER_METHODS or _MARKET_METHODS — that's it
+Design (v2):
+- Explicit methods only for operations that need custom routing logic
+  (router delegation, multi-symbol batching, dual-kwarg signatures).
+- All other ticker-scoped / market-wide operations are handled via
+  __getattr__ + two declarative registries:
+    _TICKER_METHODS  – set of method names that take (raw_symbol, **kwargs)
+    _MARKET_METHODS  – set of method names that take (**kwargs), no symbol
+  Adding a new operation: add one line to the appropriate registry set.
 """
 
 from __future__ import annotations
 
 import asyncio
-import logging
-import threading
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
-from src.server.domain.adapters.base import BaseDataAdapter
 from src.server.domain.symbols.errors import SymbolResolutionError
 from src.server.domain.symbols.types import InstrumentRef, ResolutionStatus
-from src.server.domain.types import (
-    Asset,
-    AssetPrice,
-    AssetType,
-    DataSource,
-    Exchange,
-)
-
-logger = logging.getLogger(__name__)
-
+from src.server.utils.logger import logger  # noqa: F401 – kept for subclass use
 
 # ---------------------------------------------------------------------------
 # Declarative routing registries
 # ---------------------------------------------------------------------------
-# ticker-scoped: resolve raw_symbol → ticker, then dispatch to adapter
+# ticker-scoped: gateway will resolve raw_symbol → ticker, then forward.
+# To add a new ticker-scoped operation, append its name here — that's it.
 _TICKER_METHODS: Set[str] = {
     # core
+    "get_asset_info",
     "get_financials",
-    "get_financial_statements",
+    "get_financial_statements",  # 完整财报三表 + YoY/QoQ
     "get_mainbz_info",
     "get_shareholder_info",
     "get_dividend_info",
@@ -62,7 +48,7 @@ _TICKER_METHODS: Set[str] = {
     "get_us_volume_analysis",
 }
 
-# market-wide: no symbol resolution, forward kwargs as-is
+# market-wide: no symbol resolution needed, forward kwargs as-is.
 _MARKET_METHODS: Set[str] = {
     "get_north_bound_flow",
     "get_money_supply",
@@ -78,7 +64,9 @@ _MARKET_METHODS: Set[str] = {
     "get_sector_money_flow_history",
     "get_sector_valuation_metrics",
     "get_ggt_daily",
+    # US sector (market-wide, no symbol)
     "get_us_sector_etf_analysis",
+    # US macro
     "get_us_economic_growth",
     "get_us_inflation_employment",
     "get_us_interest_rates",
@@ -86,163 +74,32 @@ _MARKET_METHODS: Set[str] = {
 
 
 class MarketGateway:
-    """Unified gateway: symbol resolution + adapter management + routing.
+    """Unified gateway: symbol resolution + adapter routing.
 
-    Combines responsibilities that were previously split between
-    MarketGateway and AdapterManager, eliminating redundant delegation.
+    Explicit async methods are kept **only** when they need special logic
+    (router delegation, batching, dual-signature handling).
 
-    Features:
-    - Adapter registration and routing table management
-    - Symbol resolution (raw → normalized ticker)
-    - Automatic failover to backup adapters
-    - Declarative method registration via _TICKER_METHODS / _MARKET_METHODS
+    Everything in _TICKER_METHODS / _MARKET_METHODS is handled by __getattr__
+    which synthesises a coroutine-returning callable on first attribute access
+    and caches it so subsequent calls pay zero overhead.
     """
 
-    def __init__(
-        self,
-        symbol_resolver,
-        market_router=None,
-        provider_timeout_seconds: float = 12.0,
-    ):
-        """Initialize the unified gateway.
-
-        Args:
-            symbol_resolver: SymbolResolver for raw_symbol → ticker conversion
-            market_router: Optional MarketRouter for advanced routing (e.g., health-based)
-            provider_timeout_seconds: Timeout for individual adapter calls
-        """
-        # Symbol resolution
+    def __init__(self, adapter_manager, symbol_resolver, market_router=None):
+        self._adapter_manager = adapter_manager
         self._resolver = symbol_resolver
         self._router = market_router
-
-        # Adapter management (migrated from AdapterManager)
-        self.adapters: Dict[DataSource, BaseDataAdapter] = {}
-        self._adapter_order: List[BaseDataAdapter] = []
-        self.exchange_routing: Dict[str, List[BaseDataAdapter]] = {}
-        self._ticker_cache: Dict[str, BaseDataAdapter] = {}
-        self._cache_lock = threading.Lock()
-        self.lock = threading.RLock()
-        self._provider_timeout_seconds = max(float(provider_timeout_seconds), 1.0)
-
-        # Method cache for __getattr__ synthesized methods
+        # Cache synthesised bound methods to avoid rebuilding closures
         self._method_cache: Dict[str, Any] = {}
 
-        logger.info("MarketGateway initialized (unified)")
+    @property
+    def adapters(self):
+        return getattr(self._adapter_manager, "adapters", {})
 
-    # =========================================================================
-    # Adapter Management (migrated from AdapterManager)
-    # =========================================================================
-
-    def register_adapter(self, adapter: BaseDataAdapter) -> None:
-        """Register a data adapter and rebuild routing table."""
-        with self.lock:
-            if adapter.source in self.adapters:
-                logger.info(
-                    f"Adapter already registered: {adapter.source.value}, skipping"
-                )
-                return
-            self.adapters[adapter.source] = adapter
-            self._adapter_order.append(adapter)
-            self._rebuild_routing_table()
-            logger.info(f"Registered adapter: {adapter.source.value}")
-
-    def _rebuild_routing_table(self) -> None:
-        """Rebuild routing table based on registered adapters' capabilities."""
-        with self.lock:
-            self.exchange_routing.clear()
-            for adapter in self._adapter_order:
-                capabilities = adapter.get_capabilities()
-                supported_exchanges = set()
-                for cap in capabilities:
-                    for exchange in cap.exchanges:
-                        exchange_key = (
-                            exchange.value
-                            if isinstance(exchange, Exchange)
-                            else exchange
-                        )
-                        supported_exchanges.add(exchange_key)
-                for exchange_key in supported_exchanges:
-                    if exchange_key not in self.exchange_routing:
-                        self.exchange_routing[exchange_key] = []
-                    self.exchange_routing[exchange_key].append(adapter)
-            with self._cache_lock:
-                self._ticker_cache.clear()
-            logger.debug(
-                f"Routing table rebuilt with {len(self.exchange_routing)} exchanges"
-            )
-
-    def get_available_adapters(self) -> List[DataSource]:
-        return list(self.adapters.keys())
-
-    def get_adapter_by_provider(self, provider: str) -> Optional[BaseDataAdapter]:
-        if not provider:
-            return None
-        try:
-            ds = DataSource(provider)
-        except Exception:
-            ds = None
-        with self.lock:
-            if ds and ds in self.adapters:
-                return self.adapters.get(ds)
-            for key, adapter in self.adapters.items():
-                if key.value == provider:
-                    return adapter
-        return None
-
-    def get_adapters_for_exchange(self, exchange: str) -> List[BaseDataAdapter]:
-        with self.lock:
-            return self.exchange_routing.get(exchange, [])
-
-    def get_adapters_for_asset_type(
-        self, asset_type: AssetType
-    ) -> List[BaseDataAdapter]:
-        with self.lock:
-            supporting = set()
-            for adapter in self.adapters.values():
-                if asset_type in adapter.get_supported_asset_types():
-                    supporting.add(adapter)
-            return list(supporting)
-
-    def get_adapter_for_ticker(self, ticker: str) -> Optional[BaseDataAdapter]:
-        """Get the best adapter for a specific ticker (with caching)."""
-        with self._cache_lock:
-            if ticker in self._ticker_cache:
-                return self._ticker_cache[ticker]
-        if ":" not in ticker:
-            logger.warning(f"Invalid ticker format (missing ':'): {ticker}")
-            return None
-        exchange, _ = ticker.split(":", 1)
-        adapters = self.get_adapters_for_exchange(exchange)
-        if not adapters:
-            logger.debug(f"No adapters registered for exchange: {exchange}")
-            return None
-        for adapter in adapters:
-            if adapter.validate_ticker(ticker):
-                with self._cache_lock:
-                    self._ticker_cache[ticker] = adapter
-                return adapter
-        logger.warning(f"No suitable adapter found for ticker: {ticker}")
-        return None
-
-    def _get_fallbacks(
-        self, ticker: str, primary: BaseDataAdapter
-    ) -> List[BaseDataAdapter]:
-        """Return fallback adapters for a ticker, excluding the primary."""
-        if ":" not in ticker:
-            return []
-        exchange, _ = ticker.split(":", 1)
-        return [
-            a
-            for a in self.get_adapters_for_exchange(exchange)
-            if a is not primary and a.validate_ticker(ticker)
-        ]
-
-    # =========================================================================
-    # Symbol Resolution (from original MarketGateway)
-    # =========================================================================
+    # ------------------------------------------------------------------
+    # Symbol resolution helpers
+    # ------------------------------------------------------------------
 
     async def resolve_ticker(self, raw_symbol: str) -> str:
-        """Resolve raw symbol to normalized ticker (e.g., 'AAPL' → 'NASDAQ:AAPL')."""
         resolution = await self._resolver.resolve(raw_symbol)
         if resolution.status == ResolutionStatus.RESOLVED and resolution.normalized:
             return resolution.normalized
@@ -265,8 +122,7 @@ class MarketGateway:
             raw=raw_symbol,
         )
 
-    async def resolve_instrument(self, raw_symbol: str) -> InstrumentRef:
-        """Resolve raw symbol to full instrument reference."""
+    async def resolve_instrument(self, raw_symbol: str):
         resolution = await self._resolver.resolve(raw_symbol)
         if resolution.status == ResolutionStatus.RESOLVED and resolution.instrument:
             return resolution.instrument
@@ -298,148 +154,43 @@ class MarketGateway:
             raw=raw_symbol,
         )
 
-    # =========================================================================
-    # Core Dispatch Methods (unified routing + failover)
-    # =========================================================================
+    # ------------------------------------------------------------------
+    # Explicit methods — kept because they have non-trivial routing logic
+    # ------------------------------------------------------------------
 
-    async def _dispatch_ticker(self, method: str, ticker: str, **kwargs) -> Any:
-        """Generic dispatcher for ticker-scoped operations with auto-failover.
-
-        Args:
-            method: Name of the BaseDataAdapter method to call
-            ticker: Normalized ticker (e.g., "NASDAQ:AAPL")
-            **kwargs: Extra arguments forwarded to adapter method
-
-        Raises:
-            ValueError: If no adapter found or all adapters failed
-        """
-        primary = self.get_adapter_for_ticker(ticker)
-        if not primary:
-            raise ValueError(f"No adapter found for ticker: {ticker}")
-
-        last_error: Exception = ValueError(f"No result for {ticker}.{method}")
-        for adapter in [primary] + self._get_fallbacks(ticker, primary):
-            try:
-                result = await asyncio.wait_for(
-                    getattr(adapter, method)(ticker, **kwargs),
-                    timeout=self._provider_timeout_seconds,
-                )
-                if result is not None:
-                    logger.debug(
-                        f"{method}({ticker}) succeeded via {adapter.source.value}"
-                    )
-                    if adapter is not primary:
-                        with self._cache_lock:
-                            self._ticker_cache[ticker] = adapter
-                    return result
-                logger.warning(
-                    f"{adapter.source.value}.{method}({ticker}) returned None, trying next"
-                )
-            except NotImplementedError:
-                logger.debug(
-                    f"{adapter.source.value} does not support {method}, skipping"
-                )
-            except asyncio.TimeoutError:
-                last_error = TimeoutError(
-                    f"timeout after {self._provider_timeout_seconds}s"
-                )
-                logger.warning(
-                    f"{adapter.source.value}.{method}({ticker}) timeout"
-                )
-            except Exception as e:
-                last_error = e
-                logger.warning(f"{adapter.source.value}.{method}({ticker}) failed: {e}")
-
-        raise ValueError(f"All adapters failed for {ticker}.{method}: {last_error}")
-
-    async def _dispatch_market(self, method: str, **kwargs) -> Any:
-        """Generic dispatcher for market-wide (non-ticker) operations.
-
-        Tries adapters in registration order, skips NotImplementedError.
-
-        Raises:
-            ValueError: If no adapter supports the method
-        """
-        last_error: Exception = ValueError(f"No adapter supports {method}")
-        for adapter in self._adapter_order:
-            try:
-                result = await asyncio.wait_for(
-                    getattr(adapter, method)(**kwargs),
-                    timeout=self._provider_timeout_seconds,
-                )
-                if result is not None:
-                    return result
-            except NotImplementedError:
-                continue
-            except asyncio.TimeoutError:
-                last_error = TimeoutError(
-                    f"timeout after {self._provider_timeout_seconds}s"
-                )
-                logger.warning(f"{adapter.source.value}.{method}() timeout")
-            except Exception as e:
-                last_error = e
-                logger.warning(f"{adapter.source.value}.{method}() failed: {e}")
-
-        raise ValueError(f"No adapter supports {method}: {last_error}")
-
-    async def _dispatch_with_resolve(
-        self, method: str, raw_symbol: str, **kwargs
-    ) -> Any:
-        """Resolve raw_symbol → ticker, then dispatch to adapter.
-
-        This is the unified entry point for most ticker-scoped operations.
-        """
-        ticker = await self.resolve_ticker(raw_symbol)
-        return await self._dispatch_ticker(method, ticker, **kwargs)
-
-    # =========================================================================
-    # Explicit Methods — kept for special routing logic
-    # =========================================================================
-
-    async def get_asset_info(self, raw_symbol: str) -> Optional[Asset]:
-        """Get asset information with symbol resolution."""
-        try:
-            return await self._dispatch_with_resolve("get_asset_info", raw_symbol)
-        except ValueError:
-            return None
-
-    async def get_real_time_price(self, raw_symbol: str) -> Optional[AssetPrice]:
-        """Get real-time price with router support."""
+    async def get_real_time_price(self, raw_symbol: str):
         instrument = await self.resolve_instrument(raw_symbol)
         if self._router and hasattr(instrument, "normalized"):
             return await self._router.get_real_time_price(instrument)
-        return await self._dispatch_ticker("get_real_time_price", instrument.normalized)
+        ticker = (
+            instrument.normalized
+            if hasattr(instrument, "normalized")
+            else await self.resolve_ticker(raw_symbol)
+        )
+        return await self._adapter_manager.get_real_time_price(ticker)
 
     async def get_historical_prices(
-        self,
-        raw_symbol: str,
-        start_date: datetime,
-        end_date: datetime,
-        interval: str = "1d",
-    ) -> List[AssetPrice]:
-        """Get historical prices with router support."""
+        self, raw_symbol: str, start_date, end_date, interval: str = "1d"
+    ):
         instrument = await self.resolve_instrument(raw_symbol)
         if self._router and hasattr(instrument, "normalized"):
             return await self._router.get_historical_prices(
                 instrument, start_date, end_date, interval
             )
-        try:
-            result = await self._dispatch_ticker(
-                "get_historical_prices",
-                instrument.normalized,
-                start_date=start_date,
-                end_date=end_date,
-                interval=interval,
-            )
-            return result or []
-        except ValueError:
-            return []
+        ticker = (
+            instrument.normalized
+            if hasattr(instrument, "normalized")
+            else await self.resolve_ticker(raw_symbol)
+        )
+        return await self._adapter_manager.get_historical_prices(
+            ticker, start_date, end_date, interval
+        )
 
-    async def get_multiple_prices(
-        self, raw_symbols: List[str]
-    ) -> Dict[str, Optional[AssetPrice]]:
-        """Batch price lookup with parallel resolution."""
-        if self._router:
+    async def get_multiple_prices(self, raw_symbols: List[str], source: Optional[str] = None) -> Dict[str, Any]:
+        logger.info(f"🚪 MarketGateway.get_multiple_prices called with source='{source}'")
+
+        if self._router and not source:
+            # Use router for auto-selection only when source is NOT specified
             results: Dict[str, Any] = {}
             for raw in raw_symbols:
                 try:
@@ -454,7 +205,7 @@ class MarketGateway:
                     results[raw] = {"error": e.to_dict()}
             return results
 
-        # Parallel resolution + batch fetch
+        # When source IS specified, bypass router and use adapter_manager directly
         resolutions = await asyncio.gather(
             *[self._resolver.resolve(sym) for sym in raw_symbols],
             return_exceptions=True,
@@ -496,21 +247,16 @@ class MarketGateway:
                     }
                 }
 
-        results: Dict[str, Any] = {}
         resolved_tickers = [t for t in resolved_map.values() if t]
+        results: Dict[str, Any] = {}
         if resolved_tickers:
-            tasks = {t: self._dispatch_ticker("get_real_time_price", t) for t in resolved_tickers}
-            price_results = await asyncio.gather(*tasks.values(), return_exceptions=True)
-            price_map = {t: r for t, r in zip(tasks.keys(), price_results)}
-
+            prices = await self._adapter_manager.get_multiple_prices(
+                resolved_tickers, source=source
+            )
             for raw, resolved in resolved_map.items():
-                price = price_map.get(resolved)
-                if isinstance(price, Exception):
-                    results[raw] = None
-                elif price is not None and hasattr(price, "to_dict"):
-                    data = price.to_dict()
-                    data["resolved_ticker"] = resolved
-                    results[raw] = data
+                price = prices.get(resolved)
+                if price is not None and hasattr(price, "to_dict"):
+                    results[raw] = price.to_dict()
                 else:
                     results[raw] = None
 
@@ -520,34 +266,79 @@ class MarketGateway:
             results.setdefault(raw, None)
         return results
 
-    async def get_profit_forecast(self, raw_symbol: str) -> Dict[str, Any]:
-        """Get profit forecast with special fallback logic."""
+    async def get_financials(self, raw_symbol: str) -> Dict[str, Any]:
         ticker = await self.resolve_ticker(raw_symbol)
-        adapter = self.get_adapter_for_ticker(ticker)
-        if not adapter:
-            raise ValueError(f"No adapter found for ticker {ticker}")
+        return await self._adapter_manager.get_financials(ticker)
 
-        try:
-            return await adapter.get_profit_forecast(ticker)
-        except Exception as e:
-            if isinstance(e, NotImplementedError):
-                logger.warning(f"{adapter.source.value} does not support profit forecast")
-            else:
-                logger.warning(f"{adapter.source.value} failed: {e}")
+    async def get_mainbz_info(self, raw_symbol: str) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_mainbz_info(ticker)
 
-            # Try fallback adapters
-            if ":" in ticker:
-                exchange, _ = ticker.split(":", 1)
-                for alt in self.get_adapters_for_exchange(exchange):
-                    if alt is adapter:
-                        continue
-                    try:
-                        logger.info(f"Trying fallback {alt.source.value} for {ticker}")
-                        return await alt.get_profit_forecast(ticker)
-                    except Exception as fe:
-                        logger.warning(f"Fallback {alt.source.value} also failed: {fe}")
+    async def get_shareholder_info(self, raw_symbol: str) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_shareholder_info(ticker)
 
-            raise ValueError(f"All adapters failed for profit forecast {ticker}: {e}")
+    async def get_dividend_info(self, raw_symbol: str) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_dividend_info(ticker)
+
+    async def get_profit_forecast(self, raw_symbol: str) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_profit_forecast(ticker)
+
+    async def get_money_flow(self, raw_symbol: str, days: int = 20) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_money_flow(ticker, days)
+
+    async def get_north_bound_flow(self, days: int = 30) -> Dict[str, Any]:
+        return await self._adapter_manager.get_north_bound_flow(days)
+
+    async def get_chip_distribution(self, raw_symbol: str, days: int = 30) -> Dict[str, Any]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_chip_distribution(ticker, days)
+
+    async def get_money_supply(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_money_supply()
+
+    async def get_inflation_data(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_inflation_data()
+
+    async def get_pmi_data(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_pmi_data()
+
+    async def get_gdp_data(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_gdp_data()
+
+    async def get_social_financing(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_social_financing()
+
+    async def get_interest_rates(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_interest_rates()
+
+    async def get_market_liquidity(self, days: int = 60) -> Dict[str, Any]:
+        return await self._adapter_manager.get_market_liquidity(days)
+
+    async def get_market_money_flow(self) -> Dict[str, Any]:
+        return await self._adapter_manager.get_market_money_flow()
+
+    async def get_sector_trend(self, sector_name: str, days: int = 10) -> Dict[str, Any]:
+        return await self._adapter_manager.get_sector_trend(sector_name, days)
+
+    async def get_ggt_daily(self, days: int = 60) -> Dict[str, Any]:
+        return await self._adapter_manager.get_ggt_daily(days)
+
+    async def get_filings(
+        self,
+        raw_symbol: str,
+        start_date=None,
+        end_date=None,
+        limit: int = 10,
+        filing_types: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        ticker = await self.resolve_ticker(raw_symbol)
+        return await self._adapter_manager.get_filings(
+            ticker, start_date, end_date, limit, filing_types
+        )
 
     async def get_technical_indicators(
         self,
@@ -559,111 +350,59 @@ class MarketGateway:
         *,
         ticker: str | None = None,
     ) -> Dict[str, Any]:
-        """Dual-signature: accepts raw_symbol or pre-resolved ticker."""
+        """Dual-signature: accepts raw_symbol or pre-resolved ticker kwarg."""
         if ticker:
             resolved = ticker if ":" in ticker else await self.resolve_ticker(ticker)
         else:
             if not raw_symbol:
                 raise ValueError("raw_symbol or ticker is required")
             resolved = await self.resolve_ticker(raw_symbol)
-        return await self._dispatch_ticker(
-            "get_technical_indicators",
-            resolved,
+        return await self._adapter_manager.get_technical_indicators(
+            ticker=resolved,
             indicators=indicators or [],
             period=period,
             start_date=start_date,
             end_date=end_date,
         )
 
-    async def get_north_bound_flow(self, days: int = 30) -> Dict[str, Any]:
-        """North-bound flow with Tushare preference."""
-        if DataSource.TUSHARE in self.adapters:
-            try:
-                return await self.adapters[DataSource.TUSHARE].get_north_bound_flow(days)
-            except Exception as e:
-                logger.warning(f"Tushare failed for north_bound_flow: {e}")
-        return await self._dispatch_market("get_north_bound_flow", days=days)
-
-    async def resolve_sector(self, query_text: str, intent: str = "trend") -> Dict[str, Any]:
-        """Resolve sector with cross-adapter fallback."""
-        last_not_found: Optional[Dict[str, Any]] = None
-        last_error: Optional[Exception] = None
-
-        for adapter in self._adapter_order:
-            try:
-                result = await asyncio.wait_for(
-                    adapter.resolve_sector(query_text=query_text, intent=intent),
-                    timeout=self._provider_timeout_seconds,
-                )
-                if not isinstance(result, dict):
-                    continue
-                status = str(result.get("status", "")).lower()
-                if status in {"resolved", "ambiguous"}:
-                    return result
-                if status == "not_found":
-                    last_not_found = result
-                    continue
-                return result
-            except NotImplementedError:
-                continue
-            except asyncio.TimeoutError:
-                last_error = TimeoutError(f"timeout after {self._provider_timeout_seconds}s")
-                logger.warning(f"{adapter.source.value}.resolve_sector() timeout")
-            except Exception as e:
-                last_error = e
-                logger.warning(f"{adapter.source.value}.resolve_sector() failed: {e}")
-
-        if last_not_found is not None:
-            return last_not_found
-        raise ValueError(f"No adapter supports resolve_sector: {last_error}")
-
-    # =========================================================================
-    # __getattr__: synthesize ticker-scoped and market-wide methods
-    # =========================================================================
+    # ------------------------------------------------------------------
+    # __getattr__: synthesise ticker-scoped and market-wide methods
+    # ------------------------------------------------------------------
 
     def __getattr__(self, item: str):
-        """Dynamically synthesize methods based on _TICKER_METHODS / _MARKET_METHODS."""
+        # Avoid infinite recursion on private/dunder attrs during __init__
         if item.startswith("_"):
             raise AttributeError(item)
 
+        # Return cached synthesised method if available
         cache = object.__getattribute__(self, "_method_cache")
         if item in cache:
             return cache[item]
 
+        adapter_manager = object.__getattribute__(self, "_adapter_manager")
+
         if item in _TICKER_METHODS:
+            # Synthesise: resolve raw_symbol → ticker, then forward to adapter_manager
             async def _ticker_method(raw_symbol: str, *args, **kwargs):
-                return await self._dispatch_with_resolve(item, raw_symbol, **kwargs)
+                ticker = await self.resolve_ticker(raw_symbol)
+                # Backward compatibility:
+                # some legacy callers still pass positional args after raw_symbol.
+                return await getattr(adapter_manager, item)(ticker, *args, **kwargs)
+
             _ticker_method.__name__ = item
             _ticker_method.__qualname__ = f"MarketGateway.{item}"
             cache[item] = _ticker_method
             return _ticker_method
 
         if item in _MARKET_METHODS:
+            # Synthesise: forward positional and keyword args to adapter_manager
             async def _market_method(*args, **kwargs):
-                return await self._dispatch_market(item, **kwargs)
+                return await getattr(adapter_manager, item)(*args, **kwargs)
+
             _market_method.__name__ = item
             _market_method.__qualname__ = f"MarketGateway.{item}"
             cache[item] = _market_method
             return _market_method
 
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{item}'")
-
-
-# ---------------------------------------------------------------------------
-# Singleton (for backward compatibility during migration)
-# ---------------------------------------------------------------------------
-
-_gateway_instance: Optional["MarketGateway"] = None
-_gateway_lock = threading.Lock()
-
-
-def get_market_gateway() -> MarketGateway:
-    """Get singleton instance (deprecated: use DI container instead)."""
-    global _gateway_instance
-    if _gateway_instance is None:
-        with _gateway_lock:
-            if _gateway_instance is None:
-                raise RuntimeError(
-                    "MarketGateway not initialized. Use DI container instead."
-                )
-    return _gateway_instance
+        # Final fallback: pass-through to adapter_manager
+        return getattr(adapter_manager, item)

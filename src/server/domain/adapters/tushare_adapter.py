@@ -138,8 +138,15 @@ class TushareAdapter(BaseDataAdapter):
                 ),
                 currency=row.get("curr_type", "CNY"),
                 market_info=MarketInfo(
+                    exchange=(
+                        Exchange.SSE.value
+                        if ts_code.endswith(".SH")
+                        else Exchange.SZSE.value if ts_code.endswith(".SZ") else Exchange.BSE.value
+                    ),
+                    country="CN",
+                    currency=row.get("curr_type", "CNY"),
+                    timezone="Asia/Shanghai",
                     market_status=MarketStatus.OPEN,  # Simplified
-                    exchange_timezone="Asia/Shanghai",
                 ),
             )
 
@@ -171,12 +178,18 @@ class TushareAdapter(BaseDataAdapter):
                 return None
 
             row = df.iloc[0]
+
+            # Tushare vol 单位是"手"，转换为"股"以保持一致性
+            # Baostock volume 单位也是"股"
+            vol_value = Decimal(str(row["vol"]))
+            volume_in_shares = vol_value * 100  # 手 -> 股
+
             price = AssetPrice(
                 ticker=ticker,
                 price=Decimal(str(row["close"])),
                 currency="CNY",
                 timestamp=datetime.strptime(row["trade_date"], "%Y%m%d"),
-                volume=Decimal(str(row["vol"])),
+                volume=volume_in_shares,
                 open_price=Decimal(str(row["open"])),
                 high_price=Decimal(str(row["high"])),
                 low_price=Decimal(str(row["low"])),
@@ -255,13 +268,17 @@ class TushareAdapter(BaseDataAdapter):
             prices = []
             # Tushare returns data in descending order by default
             for _, row in df.iterrows():
+                # Tushare vol 单位是"手"，转换为"股"以保持一致性
+                vol_value = Decimal(str(row["vol"]))
+                volume_in_shares = vol_value * 100  # 手 -> 股
+
                 prices.append(
                     AssetPrice(
                         ticker=ticker,
                         price=Decimal(str(row["close"])),
                         currency="CNY",
                         timestamp=datetime.strptime(row["trade_date"], "%Y%m%d"),
-                        volume=Decimal(str(row["vol"])),
+                        volume=volume_in_shares,
                         open_price=Decimal(str(row["open"])),
                         high_price=Decimal(str(row["high"])),
                         low_price=Decimal(str(row["low"])),
@@ -1968,7 +1985,7 @@ class TushareAdapter(BaseDataAdapter):
                         "预告类型": row_dict.get("type", ""),
                         "业绩摘要": row_dict.get("p_change_summary", ""),
                         "净利润变动幅度(%)": row_dict.get("p_change_min"),
-                        "上年同期净利润": row_dict.get("last_poll_profit"),
+                        "上年同期净利润": row_dict.get("last_parent_net"),  # 修正字段名
                     })
             result = {
                 "component_type": "profit_forecast",

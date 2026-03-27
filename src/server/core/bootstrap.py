@@ -83,44 +83,40 @@ async def init_adapters() -> None:
         await baostock.connect()
         logger.info("✅ Baostock connection established")
 
-        # Register adapters with MarketGateway
+        # Register adapters
         logger.info("📦 Registering data adapters...")
-        gateway = Container.market_gateway()
+        adapter_manager = Container.adapter_manager()
 
-        # A股数据源 - 按优先级注册
+        # A股数据源 - 按优先级注册 (优先级: Tushare > Baostock > Akshare)
         if tushare_available:
-            gateway.register_adapter(Container.tushare_adapter())
-        gateway.register_adapter(Container.akshare_adapter())
-        gateway.register_adapter(Container.baostock_adapter())
+            adapter_manager.register_adapter(Container.tushare_adapter())
+        adapter_manager.register_adapter(Container.baostock_adapter())
+        adapter_manager.register_adapter(Container.akshare_adapter())  # Akshare currently has connection issues
 
         # 加密货币数据源
-        gateway.register_adapter(Container.crypto_adapter())
-        gateway.register_adapter(Container.ccxt_adapter())
+        adapter_manager.register_adapter(Container.crypto_adapter())
+        adapter_manager.register_adapter(Container.ccxt_adapter())
 
         # 期货数据源（优先于 Yahoo）
-        gateway.register_adapter(Container.futures_adapter())
+        adapter_manager.register_adapter(Container.futures_adapter())
 
         # Twelve Data（现货/FX/部分股票）
-        gateway.register_adapter(Container.twelve_data_adapter())
+        adapter_manager.register_adapter(Container.twelve_data_adapter())
 
         # 现货贵金属数据源（Alpha Vantage）
-        gateway.register_adapter(Container.alpha_vantage_adapter())
+        adapter_manager.register_adapter(Container.alpha_vantage_adapter())
 
         # US macro 数据源（FRED）
         if config.api_keys.fred:
-            gateway.register_adapter(Container.fred_adapter())
+            adapter_manager.register_adapter(Container.fred_adapter())
             logger.info("✅ FRED adapter registered")
         else:
             logger.info("ℹ️  FRED disabled (set FRED_API_KEY to enable US macro tools)")
 
         # 美股数据源
-        gateway.register_adapter(Container.yahoo_adapter())
+        adapter_manager.register_adapter(Container.yahoo_adapter())
         if finnhub_available:
-            gateway.register_adapter(Container.finnhub_adapter())
-
-        # Create and inject MarketRouter into gateway
-        router = Container.market_router()
-        gateway._router = router
+            adapter_manager.register_adapter(Container.finnhub_adapter())
 
         logger.info(
             "✅ All adapters registered (A-share: %sAkshare > Baostock)",

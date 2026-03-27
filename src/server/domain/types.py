@@ -179,26 +179,42 @@ class AssetPrice:
     source: Optional[DataSource] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary representation."""
+        """Convert to dictionary representation with intelligent rounding."""
+        def _round_price(val):
+            """Round price fields to 2 decimal places."""
+            if val is None:
+                return None
+            f = float(val)
+            return round(f, 2)
+
+        def _round_large(val):
+            """Round large numbers (volume, market_cap) intelligently."""
+            if val is None:
+                return None
+            f = float(val)
+            if abs(f) >= 1_000_000:
+                return int(round(f))  # Large numbers as integers
+            return round(f, 2)
+
         return {
             "ticker": self.ticker,
-            "price": float(self.price) if self.price else None,
+            "price": _round_price(self.price),
             "currency": self.currency,
             "timestamp": (
                 self.timestamp.isoformat()
                 if isinstance(self.timestamp, datetime)
                 else self.timestamp
             ),
-            "volume": float(self.volume) if self.volume else None,
-            "open_price": float(self.open_price) if self.open_price else None,
-            "high_price": float(self.high_price) if self.high_price else None,
-            "low_price": float(self.low_price) if self.low_price else None,
-            "close_price": float(self.close_price) if self.close_price else None,
-            "change": float(self.change) if self.change else None,
+            "volume": _round_large(self.volume),
+            "open_price": _round_price(self.open_price),
+            "high_price": _round_price(self.high_price),
+            "low_price": _round_price(self.low_price),
+            "close_price": _round_price(self.close_price),
+            "change": _round_price(self.change),
             "change_percent": (
-                float(self.change_percent) if self.change_percent else None
+                round(float(self.change_percent), 2) if self.change_percent else None
             ),
-            "market_cap": float(self.market_cap) if self.market_cap else None,
+            "market_cap": _round_large(self.market_cap),
             "source": self.source.value if self.source else None,
         }
 

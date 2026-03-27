@@ -372,19 +372,28 @@ class AkshareAdapter(BaseDataAdapter):
         symbol = self._to_ak_code(ticker)
         is_hk = ticker.startswith("HKEX:")
 
+        logger.info(
+            f"🔍 AkshareAdapter.get_real_time_price: ticker='{ticker}', symbol='{symbol}', is_hk={is_hk}"
+        )
+
         try:
             if is_hk:
+                logger.info(f"📊 Calling ak.stock_hk_hist_min_em with symbol='{symbol}'")
                 df = await self._run(
                     ak.stock_hk_hist_min_em, symbol=symbol, period="1", adjust=""
                 )
             else:
+                logger.info(f"📊 Calling ak.stock_zh_a_hist_min_em with symbol='{symbol}'")
                 df = await self._run(
                     ak.stock_zh_a_hist_min_em, symbol=symbol, period="1", adjust="qfq"
                 )
 
+            logger.info(f"📈 Minute data result: df.empty={df.empty}, df.shape={df.shape if not df.empty else 'N/A'}")
+
             if df.empty:
                 # Fallback to daily
                 if is_hk:
+                    logger.info(f"📊 Fallback: Calling ak.stock_hk_hist with symbol='{symbol}'")
                     df = await self._run(
                         ak.stock_hk_hist,
                         symbol=symbol,
@@ -393,6 +402,7 @@ class AkshareAdapter(BaseDataAdapter):
                         adjust="qfq",
                     )
                 else:
+                    logger.info(f"📊 Fallback: Calling ak.stock_zh_a_hist with symbol='{symbol}'")
                     df = await self._run(
                         ak.stock_zh_a_hist,
                         symbol=symbol,
@@ -400,8 +410,10 @@ class AkshareAdapter(BaseDataAdapter):
                         start_date="20240101",
                         adjust="qfq",
                     )
+                logger.info(f"📈 Daily data result: df.empty={df.empty}, df.shape={df.shape if not df.empty else 'N/A'}")
 
             if df.empty:
+                logger.warning(f"❌ Akshare returned empty DataFrame for ticker '{ticker}' (symbol='{symbol}')")
                 return None
 
             row = df.iloc[-1]

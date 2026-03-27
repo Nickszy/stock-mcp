@@ -14,20 +14,26 @@ from typing import List, Optional
 
 class GetMultiplePricesRequest(BaseModel):
     """批量获取价格请求模型
-    
+
     用于验证批量价格查询的请求参数,确保 ticker 格式正确。
-    
+
     Symbol 格式: 美股(NASDAQ:AAPL), A股(SSE:600519), 加密货币(CRYPTO:BTC)
     """
-    
+
     tickers: List[str] = Field(
-        ..., 
+        ...,
         description="资产代码列表(支持带前缀或无前缀): 美股NASDAQ:xx/NYSE:xx 或 AAPL, A股SSE:xx/SZSE:xx 或 600519, 加密货币CRYPTO:xx 或 BTC",
         min_length=1,
         max_length=100,
         examples=[["CRYPTO:BTC", "NASDAQ:AAPL", "SSE:600519"]]
     )
-    
+
+    source: Optional[str] = Field(
+        None,
+        description="指定数据源 (可选): akshare, baostock, tushare, yahoo, ccxt, finnhub 等。不指定则自动选择最佳数据源",
+        examples=["akshare", "baostock"]
+    )
+
     @field_validator("tickers")
     @classmethod
     def validate_tickers(cls, v):
@@ -41,11 +47,12 @@ class GetMultiplePricesRequest(BaseModel):
                 if not ticker or not ticker.strip():
                     raise ValueError(f"Invalid ticker format: '{ticker}'")
         return v
-    
+
     class Config:
         json_schema_extra = {
             "example": {
-                "tickers": ["CRYPTO:BTC", "CRYPTO:ETH", "NASDAQ:AAPL"]
+                "tickers": ["CRYPTO:BTC", "CRYPTO:ETH", "NASDAQ:AAPL"],
+                "source": "akshare"
             }
         }
 

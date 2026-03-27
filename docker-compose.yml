@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: stock-mcp-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-myredissecret}
+    volumes:
+      - redis_data:/data
+    networks:
+      - stock-mcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-myredissecret}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Main API server (Development mode with hot reload)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stock-mcp-api
+    ports:
+      - "9898:9898"
+    environment:
+      - TUSHARE_ENABLED=True
+      - TUSHARE_TOKEN=${TUSHARE_TOKEN}
+      - FINNHUB_ENABLED=True
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+      - FRED_API_KEY=${FRED_API_KEY}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-myredissecret}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./src:/app/src  # 挂载源代码（热重载）
+    networks:
+      - stock-mcp-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Monitoring Dashboard (Development mode with hot reload)
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: stock-mcp-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - DATABASE_PATH=/app/data/monitoring.db
+      - STREAMLIT_SERVER_RUN_ON_SAVE=true
+      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
+    volumes:
+      - ./data:/app/data  # Shared data directory for SQLite database
+      - ./src/server/monitoring:/app/src/server/monitoring  # 挂载监控代码（热重载）
+      - ./dashboard:/app/dashboard  # 挂载 Dashboard 代码（热重载）
+    networks:
+      - stock-mcp-network
+    depends_on:
+      - api
+    restart: unless-stopped
+
+networks:
+  stock-mcp-network:
+    driver: bridge
+
+volumes:
+  data:
+  redis_data:

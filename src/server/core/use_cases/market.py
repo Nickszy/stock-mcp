@@ -10,12 +10,23 @@ from src.server.core.dependencies import Container
 from src.server.utils.logger import logger
 
 
-async def get_multiple_prices(tickers: List[str]) -> Dict[str, Any]:
-    """Get real-time prices for multiple assets."""
-    manager = Container.market_gateway()
-    logger.info("UseCase: get_multiple_prices", count=len(tickers))
+async def get_multiple_prices(
+    tickers: List[str], source: Optional[str] = None
+) -> Dict[str, Any]:
+    """Get real-time prices for multiple assets.
 
-    prices = await manager.get_multiple_prices(tickers)
+    Args:
+        tickers: List of asset tickers
+        source: Optional data source name (e.g., "akshare", "tushare")
+    """
+    manager = Container.market_gateway()
+    logger.info(
+        "UseCase: get_multiple_prices",
+        count=len(tickers),
+        source=source or "auto"
+    )
+
+    prices = await manager.get_multiple_prices(tickers, source=source)
     result: Dict[str, Any] = {}
     for ticker, price in prices.items():
         if hasattr(price, "to_dict"):

@@ -139,7 +139,11 @@ class YahooAdapter(BaseDataAdapter):
 
         # Handle HK stocks
         if exchange == "HKEX":
-            return f"{symbol}.HK"
+            # Yahoo format: 0700.HK (remove leading zeros, keep at least 4 digits)
+            hk_symbol = symbol.lstrip('0') or '0'  # Remove leading zeros, but keep at least one digit
+            if len(hk_symbol) < 4:
+                hk_symbol = hk_symbol.zfill(4)  # Pad to at least 4 digits
+            return f"{hk_symbol}.HK"
 
         # Handle A-shares
         if exchange == "SSE":  # Shanghai
