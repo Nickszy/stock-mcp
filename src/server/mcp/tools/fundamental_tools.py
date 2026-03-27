@@ -1,10 +1,10 @@
 # src/server/mcp/tools/fundamental_tools.py
 """MCP tools for fundamental (financial) data.
 Implements `get_financial_reports`.
-Returns structured data (JSON).
+Supports output_format: markdown (default, human-readable) or json (structured).
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Literal
 
 from fastmcp import FastMCP, Context
 
@@ -18,8 +18,47 @@ from src.server.mcp.tools.artifact_utils import (
     create_chart_artifact,
     create_symbol_error_response,
 )
+from src.server.mcp.tools.output_format_utils import (
+    format_output,
+    _format_quarter_bars_markdown,
+    OutputFormat,
+)
 from src.server.domain.symbols.errors import SymbolResolutionError
 from src.server.domain.symbols import to_ts_code
+
+
+def create_artifact_envelope(
+    component_type: str,
+    name: str,
+    content: Any,
+    description: str = "",
+    metadata: Dict[str, Any] | None = None,
+    visible_to_llm: bool = True,
+    display_in_report: bool = True,
+) -> Dict[str, Any]:
+    """Create a standardized artifact envelope."""
+    from uuid import uuid4
+    from datetime import datetime
+
+    return {
+        "id": str(uuid4()),
+        "name": name,
+        "content": content,
+        "component_type": component_type,
+        "description": description,
+        "metadata": metadata or {},
+        "timestamp": datetime.utcnow().isoformat(),
+        "visible_to_llm": visible_to_llm,
+        "display_in_report": display_in_report,
+    }
+
+
+def create_artifact_response(
+    summary: str,
+    artifact: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Create a standard artifact response with summary."""
+    return {"summary": summary, "artifact": artifact}
 
 
 def register_fundamental_tools(mcp: FastMCP):
@@ -315,7 +354,11 @@ def register_fundamental_tools(mcp: FastMCP):
             return {"error": str(e)}
 
     @mcp.tool(tags={"fundamental"})
-    async def get_financial_reports(symbol: str, ctx: Context = None) -> Dict[str, Any]:
+    async def get_financial_reports(
+        symbol: str,
+        output_format: OutputFormat = "markdown",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
         """Get revenue/net-income trend charts for the given ticker.
 
         This tool is intentionally narrow: it focuses on trend charts and does
@@ -325,14 +368,54 @@ def register_fundamental_tools(mcp: FastMCP):
             symbol: Asset ticker. Format: EXCHANGE:SYMBOL
                 - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
                 - 美股: NASDAQ:AAPL, NYSE:TSLA
+            output_format: Output format - "markdown" (default, human-readable)
+                or "json" (structured data for programs)
 
         Returns:
-            Artifact list response with:
-            - summary + artifacts (trend charts)
-            - coverage (provided/missing dimensions)
-            - next_recommended_tools for follow-up
+            If output_format="markdown": Returns markdown tables with Chinese labels
+            If output_format="json": Returns artifact list with trend charts
         """
-        return await _get_financial_reports_impl(symbol, ctx)
+        # First get the data via implementation
+        impl_result = await _get_financial_reports_impl(symbol, ctx)
+
+        # If error, return as-is
+        if "error" in impl_result and "summary" not in impl_result:
+            return impl_result
+
+        # For JSON format, return original artifact structure
+        if output_format == "json":
+            return impl_result
+
+        # For markdown format, render as readable text
+        artifacts = impl_result.get("artifacts", [])
+        summary = impl_result.get("summary", "")
+
+        md_parts = [f"## {symbol} 财务报告\n"]
+        md_parts.append(f"{summary}\n")
+
+        for artifact in artifacts:
+            content = artifact.get("content", {})
+            if isinstance(content, dict):
+                chart_title = content.get("title", "")
+                data = content.get("data", [])
+                if data:
+                    md_parts.append(_format_quarter_bars_markdown(data, chart_title))
+
+        # Build markdown response
+        md_output = "\n".join(md_parts)
+
+        return create_artifact_response(
+            summary=summary,
+            artifact=create_artifact_envelope(
+                component_type="financial_report_markdown",
+                name=f"财务报告: {symbol}",
+                content={"markdown": md_output, "format": "markdown"},
+                description=summary,
+                metadata={"output_format": "markdown"},
+                visible_to_llm=True,
+                display_in_report=True,
+            ),
+        )
 
     @mcp.tool(tags={"fundamental"})
     async def get_mainbz_info(

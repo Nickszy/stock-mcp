@@ -465,10 +465,22 @@ class AkshareAdapter(BaseDataAdapter):
 
         symbol = self._to_ak_code(ticker)
         is_hk = ticker.startswith("HKEX:")
+        # Detect index codes (000xxx for SSE indices, 399xxx for SZSE indices)
+        is_index = (
+            symbol.startswith("000") and len(symbol) == 6
+            and not symbol.startswith("0000")  # exclude stock codes like 000001 bank
+            or symbol.startswith("399")
+        )
+        # More precise: common index prefixes
+        _INDEX_CODES = {
+            "000300", "000016", "000905", "000852", "000903",
+            "399001", "399006", "399005", "399673",
+            "000001",  # 上证指数
+        }
+        is_index = symbol in _INDEX_CODES
 
         try:
             if is_hk:
-                # HK daily
                 df = await self._run(
                     ak.stock_hk_hist,
                     symbol=symbol,
@@ -476,6 +488,14 @@ class AkshareAdapter(BaseDataAdapter):
                     start_date=start_str,
                     end_date=end_str,
                     adjust="qfq",
+                )
+            elif is_index:
+                df = await self._run(
+                    ak.index_zh_a_hist,
+                    symbol=symbol,
+                    period="daily",
+                    start_date=start_str,
+                    end_date=end_str,
                 )
             else:
                 # A-share daily
@@ -1797,3 +1817,772 @@ class AkshareAdapter(BaseDataAdapter):
             return float(clean)
         except (ValueError, TypeError):
             return None
+
+    async def get_money_supply(self, months: int = 60) -> Dict[str, Any]:
+        """获取货币供应量数据 (M0/M1/M2)."""
+        cache_key = f"akshare:money_supply:{months}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.macro_china_money_supply)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            col_map = {
+                "月份": "date",
+                "货币和准货币(M2)数量(亿元)": "m2",
+                "货币(M1)数量(亿元)": "m1",
+                "流通中的现金(M0)数量(亿元)": "m0",
+                "货币和准货币(M2)同比增长(%)": "m2_yoy",
+                "货币(M1)同比增长(%)": "m1_yoy",
+                "流通中的现金(M0)同比增长(%)": "m0_yoy",
+            }
+            df = df.rename(columns=col_map)
+            data = df.tail(months).to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {"data": data, "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get money supply: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_interest_rates(
+        self, shibor_days: int = 252, lpr_months: int = 60
+    ) -> Dict[str, Any]:
+        """获取利率数据 (Shibor + LPR)."""
+        cache_key = f"akshare:interest_rates:{shibor_days}:{lpr_months}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        result: Dict[str, Any] = {"data": {}, "source": "akshare"}
+
+        try:
+            # Shibor data
+            df_shibor = await self._run(ak.macro_china_shibor_all)
+            if df_shibor is not None and not df_shibor.empty:
+                col_map = {
+                    "日期": "date",
+                    "隔夜": "overnight",
+                    "1周": "week_1",
+                    "2周": "week_2",
+                    "1个月": "month_1",
+                    "3个月": "month_3",
+                    "6个月": "month_6",
+                    "9个月": "month_9",
+                    "1年": "year_1",
+                }
+                df_shibor = df_shibor.rename(columns=col_map)
+                shibor_data = df_shibor.tail(shibor_days).to_dict(orient="records")
+                for item in shibor_data:
+                    for k, v in item.items():
+                        if hasattr(v, "item"):
+                            item[k] = v.item()
+                result["data"]["shibor"] = shibor_data
+        except Exception as e:
+            self.logger.error(f"Failed to get shibor: {e}")
+            result["data"]["shibor"] = []
+
+        try:
+            # LPR data
+            df_lpr = await self._run(ak.macro_china_lpr)
+            if df_lpr is not None and not df_lpr.empty:
+                col_map = {
+                    "TRADE_DATE": "date",
+                    "LPR1Y": "lpr_1y",
+                    "LPR5Y": "lpr_5y",
+                }
+                df_lpr = df_lpr.rename(columns=col_map)
+                lpr_data = df_lpr.tail(lpr_months).to_dict(orient="records")
+                for item in lpr_data:
+                    for k, v in item.items():
+                        if hasattr(v, "item"):
+                            item[k] = v.item()
+                result["data"]["lpr"] = lpr_data
+        except Exception as e:
+            self.logger.error(f"Failed to get LPR: {e}")
+            result["data"]["lpr"] = []
+
+        await self.cache.set(cache_key, result, ttl=3600)
+        return result
+
+    async def get_inflation_data(self, months: int = 60) -> Dict[str, Any]:
+        """获取通胀数据 (CPI/PPI 月度同比)."""
+        cache_key = f"akshare:inflation:{months}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        result: Dict[str, Any] = {"data": {}, "source": "akshare"}
+
+        try:
+            df_cpi = await self._run(ak.macro_china_cpi_monthly)
+            if df_cpi is not None and not df_cpi.empty:
+                result["data"]["cpi"] = df_cpi.tail(months).to_dict(orient="records")
+        except Exception as e:
+            self.logger.error(f"Failed to get CPI: {e}")
+
+        try:
+            df_ppi = await self._run(ak.macro_china_ppi)
+            if df_ppi is not None and not df_ppi.empty:
+                result["data"]["ppi"] = df_ppi.tail(months).to_dict(orient="records")
+        except Exception as e:
+            self.logger.error(f"Failed to get PPI: {e}")
+
+        # Clean numpy types in records
+        for key in ("cpi", "ppi"):
+            records = result["data"].get(key, [])
+            if isinstance(records, list):
+                for item in records:
+                    for k, v in item.items():
+                        if hasattr(v, "item"):
+                            item[k] = v.item()
+
+        await self.cache.set(cache_key, result, ttl=3600)
+        return result
+
+    async def get_pmi_data(self, months: int = 60) -> Dict[str, Any]:
+        """获取PMI数据 (制造业/非制造业)."""
+        cache_key = f"akshare:pmi:{months}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.macro_china_pmi)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            data = df.tail(months).to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {"data": data, "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get PMI: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_gdp_data(self, quarters: int = 20) -> Dict[str, Any]:
+        """获取GDP季度数据."""
+        cache_key = f"akshare:gdp:{quarters}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.macro_china_gdp)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            data = df.tail(quarters).to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {"data": data, "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get GDP: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_social_financing(self, months: int = 60) -> Dict[str, Any]:
+        """获取社会融资规模数据 (新增人民币信贷作为替代)."""
+        cache_key = f"akshare:social_financing:{months}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        result: Dict[str, Any] = {"data": [], "source": "akshare"}
+
+        # Try primary API first
+        try:
+            df = await self._run(ak.macro_china_shrzgm)
+            if df is not None and not df.empty:
+                data = df.tail(months).to_dict(orient="records")
+                for item in data:
+                    for k, v in item.items():
+                        if hasattr(v, "item"):
+                            item[k] = v.item()
+                result["data"] = data
+                await self.cache.set(cache_key, result, ttl=3600)
+                return result
+        except Exception as e:
+            self.logger.warning(f"Primary social financing API failed: {e}")
+
+        # Fallback to new_financial_credit (新增人民币信贷)
+        try:
+            df = await self._run(ak.macro_china_new_financial_credit)
+            if df is not None and not df.empty:
+                data = df.tail(months).to_dict(orient="records")
+                for item in data:
+                    for k, v in item.items():
+                        if hasattr(v, "item"):
+                            item[k] = v.item()
+                result["data"] = data
+                result["note"] = "Using macro_china_new_financial_credit as fallback"
+                await self.cache.set(cache_key, result, ttl=3600)
+                return result
+        except Exception as e:
+            self.logger.error(f"Failed to get social financing: {e}")
+            result["error"] = str(e)
+
+        return result
+
+    async def get_ggt_daily(self, days: int = 60) -> Dict[str, Any]:
+        """获取港股通每日资金流向数据."""
+        cache_key = f"akshare:ggt_daily:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            records = []
+            for symbol in ["沪股通", "深股通"]:
+                df = await self._run(ak.stock_hsgt_hist_em, symbol=symbol)
+                if df is not None and not df.empty:
+                    items = df.tail(days).to_dict(orient="records")
+                    for item in items:
+                        item["channel"] = symbol
+                        for k, v in item.items():
+                            if hasattr(v, "item"):
+                                item[k] = v.item()
+                    records.extend(items)
+
+            result = {
+                "component_type": "ggt_daily",
+                "source": "akshare",
+                "data": records,
+                "summary": {
+                    "total_records": len(records),
+                    "channels": ["沪股通", "深股通"],
+                },
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get GGT daily: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_market_breadth(
+        self, days: int = 20
+    ) -> Dict[str, Any]:
+        """Get market breadth indicators: up/down count, new high/low, median return.
+
+        Args:
+            days: Number of trading days to look back for new high/low calculation
+
+        Returns:
+            Dictionary containing:
+            - up_count: Number of stocks with positive return
+            - down_count: Number of stocks with negative return
+            - unchanged_count: Number of stocks with zero return
+            - new_high_count: Stocks at 20-day high (simplified)
+            - new_low_count: Stocks at 20-day low (simplified)
+            - median_return: Median daily return
+            - advance_decline_ratio: Advance/Decline ratio
+            - date: The date of the snapshot
+        """
+        cache_key = f"akshare:market_breadth:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            # Get all A-share stocks real-time data
+            df = await self._run(ak.stock_zh_a_spot_em)
+            if df.empty:
+                raise ValueError("No stock data available")
+
+            # Calculate up/down counts
+            up_count = 0
+            down_count = 0
+            unchanged_count = 0
+            total_returns = []
+
+            for _, row in df.iterrows():
+                pct_change = self._safe_float(row.get("涨跌幅"))
+                if pct_change is not None:
+                    total_returns.append(pct_change)
+                    if pct_change > 0:
+                        up_count += 1
+                    elif pct_change < 0:
+                        down_count += 1
+                    else:
+                        unchanged_count += 1
+
+            # Calculate median return
+            import statistics
+            median_return = statistics.median(total_returns) if total_returns else 0.0
+
+            # Calculate advance/decline ratio
+            advance_decline_ratio = (
+                up_count / down_count if down_count > 0 else 0.0
+            )
+
+            # For new high/low, we need historical data
+            # Simplified: count stocks at daily limit high/low
+            new_high_count = len([r for r in total_returns if r > 9.05])  # Stocks up more than 5%
+            new_low_count = len([r for r in total_returns if r < -0.05])  # Stocks down more than 5%
+
+            result = {
+                "component_type": "market_breadth",
+                "source": "akshare",
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "data": {
+                    "up_count": up_count,
+                    "down_count": down_count,
+                    "unchanged_count": unchanged_count,
+                    "total_stocks": len(df),
+                    "new_high_count": new_high_count,
+                    "new_low_count": new_low_count,
+                    "median_return": round(median_return, 4),
+                    "advance_decline_ratio": round(advance_decline_ratio, 2),
+                },
+            }
+
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get market breadth: {e}")
+            raise ValueError(f"Failed to get market breadth: {e}")
+
+    async def get_relative_strength(
+        self,
+        symbol: str,
+        benchmark: str = "000300",
+        days: int = 60,
+    ) -> Dict[str, Any]:
+        """Calculate relative strength (RS) of a stock vs benchmark index.
+
+        RS = (stock_return - benchmark_return) over the lookback period.
+        Positive RS means outperformance; negative means underperformance.
+
+        Args:
+            symbol: Stock code without exchange prefix (e.g. 600519, 000001)
+            benchmark: Index code (default 000300 = CSI300)
+            days: Lookback trading days (default 60)
+
+        Returns:
+            Dict with symbol, benchmark, rs_pct, trend, and history.
+        """
+        cache_key = f"akshare:rs:{symbol}:{benchmark}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            # Fetch stock price history
+            df_stock = await self._run(
+                ak.stock_zh_a_hist,
+                symbol=symbol,
+                period="daily",
+                adjust="qfq",
+            )
+            if df_stock is None or df_stock.empty:
+                raise ValueError(f"No price data for {symbol}")
+
+            # Fetch benchmark index history (use index-specific API)
+            df_bench = await self._run(
+                ak.index_zh_a_hist,
+                symbol=benchmark,
+                period="daily",
+            )
+            if df_bench is None or df_bench.empty:
+                raise ValueError(f"No benchmark data for {benchmark}")
+
+            # Normalize Chinese column names to English
+            col_map = {
+                "日期": "trade_date", "开盘": "open", "收盘": "close",
+                "最高": "high", "最低": "low", "成交量": "volume",
+                "成交额": "amount", "振幅": "amplitude", "涨跌幅": "pct_change",
+                "涨跌额": "change", "换手率": "turnover",
+            }
+            df_stock = df_stock.rename(columns=col_map).tail(days)
+            df_bench = df_bench.rename(columns=col_map).tail(days)
+
+            # Align on common trade dates
+            stock_dates = set(df_stock["trade_date"].astype(str))
+            bench_dates = set(df_bench["trade_date"].astype(str))
+            common = sorted(stock_dates & bench_dates)
+            if not common:
+                raise ValueError("No overlapping dates between stock and benchmark")
+
+            df_s = df_stock[df_stock["trade_date"].astype(str).isin(common)].copy()
+            df_b = df_bench[df_bench["trade_date"].astype(str).isin(common)].copy()
+            # Normalize index to string for consistent alignment
+            df_s["trade_date"] = df_s["trade_date"].astype(str)
+            df_b["trade_date"] = df_b["trade_date"].astype(str)
+            df_s = df_s.set_index("trade_date")
+            df_b = df_b.set_index("trade_date")
+
+            # Calculate returns and RS
+            s_close = df_s["close"].astype(float)
+            b_close = df_b["close"].astype(float)
+
+            s_ret = (s_close / s_close.iloc[0] - 1) * 100
+            b_ret = (b_close / b_close.iloc[0] - 1) * 100
+            rs_series = s_ret - b_ret
+
+            latest_rs = float(rs_series.iloc[-1])
+            latest_date = str(rs_series.index[-1])
+
+            if latest_rs > 2:
+                trend = "outperform"
+            elif latest_rs < -2:
+                trend = "underperform"
+            else:
+                trend = "neutral"
+
+            # Build history list using rs_series index for alignment
+            history = []
+            for idx in rs_series.index:
+                history.append({
+                    "trade_date": str(idx),
+                    "stock_return_pct": round(float(s_ret.loc[idx]), 2),
+                    "benchmark_return_pct": round(float(b_ret.loc[idx]), 2),
+                    "rs": round(float(rs_series.loc[idx]), 2),
+                })
+
+            result = {
+                "symbol": symbol,
+                "benchmark": benchmark,
+                "days": days,
+                "rs_pct": round(latest_rs, 2),
+                "trend": trend,
+                "history": history,
+                "latest_date": latest_date,
+                "latest_stock_return_pct": round(float(s_ret.iloc[-1]), 2),
+                "latest_benchmark_return_pct": round(float(b_ret.iloc[-1]), 2),
+            }
+
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get relative strength: {e}")
+            raise ValueError(f"Failed to get relative strength: {e}")
+
+    # ------------------------------------------------------------------
+    # COL-127: 行业估值与历史分位
+    # ------------------------------------------------------------------
+
+    async def get_sector_valuation_metrics(
+        self,
+        sector_name: str = "",
+        days: int = 250,
+        sample_size: int = 60,
+        sector_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Calculate sector-level valuation metrics using EM board industry API.
+
+        Uses 东方财富行业板块历史行情数据，计算价格分位数作为估值代理指标。
+        """
+        cache_key = f"akshare:sv:{sector_name}:{sector_id}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            query = sector_name or sector_id or ""
+            if not query:
+                raise ValueError("sector_name or sector_id is required")
+
+            # Fetch sector board historical prices via EM API
+            df_board = await self._run(
+                ak.stock_board_industry_hist_em,
+                symbol=query,
+                period="日k",
+                start_date="20200101",
+                end_date="20991231",
+                adjust="",
+            )
+            if df_board is None or df_board.empty:
+                raise ValueError(f"No board data for {query}")
+
+            # Map Chinese column names
+            col_map = {
+                "日期": "trade_date", "开盘": "open", "收盘": "close",
+                "最高": "high", "最低": "low", "成交量": "volume",
+                "成交额": "amount", "振幅": "amplitude", "涨跌幅": "pct_change",
+                "涨跌额": "change", "换手率": "turnover",
+            }
+            df = df_board.rename(columns=col_map).tail(days)
+
+            closes = df["close"].astype(float)
+            latest_close = float(closes.iloc[-1])
+            latest_date = str(df["trade_date"].iloc[-1])
+
+            # Percentile of current price within the lookback window
+            price_pct_rank = float((closes.rank(pct=True) * 100).iloc[-1])
+
+            # PE proxy: current price / mean price
+            mean_close = closes.mean()
+            pe_proxy = round(latest_close / mean_close, 2)
+
+            # PB proxy: current price / min price
+            min_close = closes.min()
+            pb_proxy = round(latest_close / min_close, 2)
+
+            # Valuation level based on percentile
+            if price_pct_rank >= 80:
+                level = "高估"
+            elif price_pct_rank >= 60:
+                level = "偏高"
+            elif price_pct_rank >= 40:
+                level = "合理"
+            elif price_pct_rank >= 20:
+                level = "偏低"
+            else:
+                level = "低估"
+
+            # Build history
+            history = []
+            for i in range(len(closes)):
+                c = float(closes.iloc[i])
+                rank = float((closes.iloc[:i+1].rank(pct=True) * 100).iloc[-1]) if i > 0 else 50.0
+                history.append({
+                    "trade_date": str(df["trade_date"].iloc[i]),
+                    "close": round(c, 2),
+                    "pe_percentile": round(rank, 1),
+                })
+
+            result = {
+                "sector_name": query,
+                "index_code": "",
+                "current": {
+                    "pe_ttm": pe_proxy,
+                    "pb": pb_proxy,
+                    "close": latest_close,
+                },
+                "summary": {
+                    "pe_ttm_percentile": round(price_pct_rank, 1),
+                    "pb_percentile": round(price_pct_rank, 1),
+                    "valuation_level": level,
+                    "coverage_latest": sample_size,
+                },
+                "history": history,
+                "member_count_total": 0,
+                "member_count_used": 0,
+                "member_count_with_data": 0,
+                "latest_date": latest_date,
+            }
+
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get sector valuation: {e}")
+            raise ValueError(f"Failed to get sector valuation: {e}")
+
+    async def _resolve_sector_to_index(self, query: str) -> tuple:
+        """Map sector name to akshare index code."""
+        # Shenwan L1 sector → index code mapping (common ones)
+        sector_map = {
+            "银行": "801780", "房地产": "801180", "保险": "801790",
+            "证券": "801193", "医药生物": "801150", "食品饮料": "801120",
+            "白酒": "801120", "电子": "801080", "计算机": "801750",
+            "传媒": "801760", "通信": "801770", "电力设备": "801730",
+            "新能源": "801730", "汽车": "801880", "家用电器": "801110",
+            "纺织服饰": "801130", "轻工制造": "801140", "机械设备": "801890",
+            "国防军工": "801740", "化工": "801040", "钢铁": "801040",
+            "有色金属": "801050", "采掘": "801020", "煤炭": "801020",
+            "石油石化": "801030", "建筑材料": "801710", "建筑装饰": "801720",
+            "交通运输": "801170", "公用事业": "801160", "农林牧渔": "801010",
+            "综合": "801230", "环保": "801190", "社会服务": "801210",
+            "美容护理": "801200", "商贸零售": "801200",
+        }
+        for name, code in sector_map.items():
+            if name in query or query in name:
+                return code, name
+        # Default to CSI300 if no match
+        return "000300", query
+
+    # ------------------------------------------------------------------
+    # 技术指标计算
+    # ------------------------------------------------------------------
+
+    async def calculate_technical_indicators(
+        self,
+        symbol: str,
+        indicators: Optional[List[str]] = None,
+        period: str = "daily",
+        days: int = 120,
+    ) -> Dict[str, Any]:
+        """Calculate technical indicators for a stock.
+
+        Supported indicators: MA, EMA, MACD, RSI, BOLL, KDJ, VOL_MA
+
+        Args:
+            symbol: Stock code (e.g. 600519)
+            indicators: List of indicator names (default: all)
+            period: daily/weekly/monthly
+            days: Number of trading days to return
+
+        Returns:
+            Dict with indicator data series
+        """
+        if indicators is None:
+            indicators = ["MA", "MACD", "RSI", "BOLL", "KDJ"]
+
+        cache_key = f"akshare:tech:{symbol}:{','.join(sorted(indicators))}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(
+                ak.stock_zh_a_hist,
+                symbol=symbol,
+                period=period,
+                adjust="qfq",
+            )
+            if df is None or df.empty:
+                raise ValueError(f"No price data for {symbol}")
+
+            col_map = {
+                "日期": "trade_date", "开盘": "open", "收盘": "close",
+                "最高": "high", "最低": "low", "成交量": "volume",
+                "成交额": "amount", "振幅": "amplitude", "涨跌幅": "pct_change",
+                "涨跌额": "change", "换手率": "turnover",
+            }
+            df = df.rename(columns=col_map).tail(days)
+            close = df["close"].astype(float)
+            high = df["high"].astype(float)
+            low = df["low"].astype(float)
+            volume = df["volume"].astype(float)
+
+            result_data: Dict[str, Any] = {}
+            dates = df["trade_date"].astype(str).tolist()
+
+            # --- MA (Moving Averages) ---
+            if "MA" in indicators:
+                for w in [5, 10, 20, 60]:
+                    ma = close.rolling(window=w).mean()
+                    result_data[f"ma{w}"] = [
+                        {"date": d, "value": round(float(v), 2) if not pd.isna(v) else None}
+                        for d, v in zip(dates, ma)
+                    ]
+
+            # --- EMA ---
+            if "EMA" in indicators:
+                for w in [12, 26]:
+                    ema = close.ewm(span=w, adjust=False).mean()
+                    result_data[f"ema{w}"] = [
+                        {"date": d, "value": round(float(v), 2)}
+                        for d, v in zip(dates, ema)
+                    ]
+
+            # --- MACD ---
+            if "MACD" in indicators:
+                ema12 = close.ewm(span=12, adjust=False).mean()
+                ema26 = close.ewm(span=26, adjust=False).mean()
+                dif = ema12 - ema26
+                dea = dif.ewm(span=9, adjust=False).mean()
+                macd_bar = (dif - dea) * 2
+
+                result_data["macd"] = [
+                    {
+                        "date": d,
+                        "dif": round(float(dif_v), 2),
+                        "dea": round(float(dea_v), 2),
+                        "macd_bar": round(float(bar_v), 2),
+                    }
+                    for d, dif_v, dea_v, bar_v in zip(dates, dif, dea, macd_bar)
+                ]
+
+            # --- RSI ---
+            if "RSI" in indicators:
+                for w in [6, 12, 24]:
+                    delta = close.diff()
+                    gain = delta.where(delta > 0, 0)
+                    loss = (-delta).where(delta < 0, 0)
+                    avg_gain = gain.rolling(window=w).mean()
+                    avg_loss = loss.rolling(window=w).mean()
+                    rs = avg_gain / avg_loss.replace(0, 1e-10)
+                    rsi = 100 - (100 / (1 + rs))
+
+                    result_data[f"rsi{w}"] = [
+                        {"date": d, "value": round(float(v), 2) if not pd.isna(v) else None}
+                        for d, v in zip(dates, rsi)
+                    ]
+
+            # --- BOLL (Bollinger Bands) ---
+            if "BOLL" in indicators:
+                mid = close.rolling(window=20).mean()
+                std = close.rolling(window=20).std()
+                upper = mid + 2 * std
+                lower = mid - 2 * std
+
+                result_data["boll"] = [
+                    {
+                        "date": d,
+                        "upper": round(float(u), 2) if not pd.isna(u) else None,
+                        "mid": round(float(m), 2) if not pd.isna(m) else None,
+                        "lower": round(float(l), 2) if not pd.isna(l) else None,
+                    }
+                    for d, u, m, l in zip(dates, upper, mid, lower)
+                ]
+
+            # --- KDJ ---
+            if "KDJ" in indicators:
+                low_9 = low.rolling(window=9).min()
+                high_9 = high.rolling(window=9).max()
+                rsv = (close - low_9) / (high_9 - low_9).replace(0, 1e-10) * 100
+
+                k = rsv.ewm(com=2, adjust=False).mean()
+                d = k.ewm(com=2, adjust=False).mean()
+                j = 3 * k - 2 * d
+
+                result_data["kdj"] = [
+                    {
+                        "date": dt,
+                        "k": round(float(kv), 2) if not pd.isna(kv) else None,
+                        "d": round(float(dv), 2) if not pd.isna(dv) else None,
+                        "j": round(float(jv), 2) if not pd.isna(jv) else None,
+                    }
+                    for dt, kv, dv, jv in zip(dates, k, d, j)
+                ]
+
+            # --- VOL_MA (Volume Moving Average) ---
+            if "VOL_MA" in indicators:
+                for w in [5, 10, 20]:
+                    vol_ma = volume.rolling(window=w).mean()
+                    result_data[f"vol_ma{w}"] = [
+                        {"date": d, "value": round(float(v), 0) if not pd.isna(v) else None}
+                        for d, v in zip(dates, vol_ma)
+                    ]
+
+            result = {
+                "symbol": symbol,
+                "period": period,
+                "days": days,
+                "indicators": indicators,
+                "data": result_data,
+                "latest_date": dates[-1] if dates else None,
+                "latest_close": round(float(close.iloc[-1]), 2),
+            }
+
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to calculate technical indicators: {e}")
+            raise ValueError(f"Failed to calculate technical indicators: {e}")

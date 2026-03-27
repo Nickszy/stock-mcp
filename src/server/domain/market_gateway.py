@@ -70,6 +70,7 @@ _MARKET_METHODS: Set[str] = {
     "get_pmi_data",
     "get_gdp_data",
     "get_social_financing",
+    "get_social_financing",
     "get_interest_rates",
     "get_market_liquidity",
     "get_market_money_flow",
@@ -82,6 +83,10 @@ _MARKET_METHODS: Set[str] = {
     "get_us_economic_growth",
     "get_us_inflation_employment",
     "get_us_interest_rates",
+    "get_market_breadth",
+    "get_relative_strength",
+    "get_sector_valuation_metrics",
+    "calculate_technical_indicators",
 }
 
 

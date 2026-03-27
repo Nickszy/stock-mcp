@@ -1,5 +1,6 @@
 # src/server/mcp/tools/us_sector_tools.py
 """MCP tools for US sector ETF analysis.
+Supports output_format: markdown (default, human-readable) or json (structured).
 
 Active Tools (1):
   - get_us_sector_etf_analysis: 美股行业ETF走势分析 (对齐竞品 get_us_sector_etf_analysis)
@@ -23,6 +24,10 @@ from src.server.mcp.tools.artifact_utils import (
     create_artifact_envelope,
     create_artifact_response,
 )
+from src.server.mcp.tools.output_format_utils import (
+    _format_table_markdown,
+    OutputFormat,
+)
 
 
 def register_us_sector_tools(mcp: FastMCP):
@@ -32,6 +37,7 @@ def register_us_sector_tools(mcp: FastMCP):
     async def get_us_sector_etf_analysis(
         sector_name: str,
         days: int = 30,
+        output_format: OutputFormat = "markdown",
         ctx: Context = None,
     ) -> Dict[str, Any]:
         """Analyze a US sector via its representative ETF.
@@ -57,10 +63,13 @@ def register_us_sector_tools(mcp: FastMCP):
             sector_name: Sector name in English or Chinese (case-insensitive)
                 Examples: "technology", "半导体", "healthcare", "AI"
             days: Look-back window in calendar days (default 30)
+            output_format: Output format - "markdown" (default, human-readable)
+                or "json" (structured data for programs)
             ctx: FastMCP Context
 
         Returns:
-            ArtifactResponse with ETF bars, period return, and LLM summary
+            If output_format="markdown": Returns markdown tables with Chinese labels
+            If output_format="json": Returns artifact with ETF data
         """
         if ctx:
             await ctx.info(f"🏭 美股板块ETF分析: {sector_name} ({days}d)")
@@ -91,18 +100,50 @@ def register_us_sector_tools(mcp: FastMCP):
                 f"{trend_summary}"
             )
 
+            # For JSON format, return original artifact structure
+            if output_format == "json":
+                artifact = create_artifact_envelope(
+                    component_type=ComponentType.US_SECTOR_ETF,
+                    name=f"{sector_name} 板块ETF ({etf})",
+                    content=data,
+                    description=summary,
+                    metadata={
+                        "sector": sector_name,
+                        "etf_ticker": etf,
+                        "days": days,
+                        "total_change_pct": total_chg,
+                    },
+                    visible_to_llm=False,
+                    display_in_report=True,
+                )
+                return create_artifact_response(summary=summary, artifact=artifact)
+
+            # For markdown format, render as readable text
+            md_output = f"## {sector_name} 板块ETF分析 ({etf})\n\n"
+            md_output += f"**摘要**: {summary}\n\n"
+
+            # Add OHLCV table if available
+            bars = data.get("bars", [])
+            if bars:
+                display_rows = []
+                for bar in bars[-10:]:  # Show last 10 days
+                    display_rows.append({
+                        "trade_date": bar.get("trade_date"),
+                        "open": bar.get("open"),
+                        "high": bar.get("high"),
+                        "low": bar.get("low"),
+                        "close": bar.get("close"),
+                        "volume": bar.get("volume"),
+                    })
+                md_output += _format_table_markdown(display_rows, f"近{len(display_rows)}日行情")
+
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_SECTOR_ETF,
-                name=f"{sector_name} 板块ETF ({etf})",
-                content=data,
+                component_type="us_sector_etf_markdown",
+                name=f"板块ETF分析: {sector_name}",
+                content={"markdown": md_output, "format": "markdown"},
                 description=summary,
-                metadata={
-                    "sector": sector_name,
-                    "etf_ticker": etf,
-                    "days": days,
-                    "total_change_pct": total_chg,
-                },
-                visible_to_llm=False,
+                metadata={"output_format": "markdown", "sector": sector_name},
+                visible_to_llm=True,
                 display_in_report=True,
             )
             return create_artifact_response(summary=summary, artifact=artifact)

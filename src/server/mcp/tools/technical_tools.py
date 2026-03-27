@@ -1,7 +1,7 @@
 # src/server/mcp/tools/technical_tools.py
 """MCP tools for technical analysis.
 Provides technical indicators calculation and analysis.
-Returns structured data (JSON).
+Supports output_format: markdown (default, human-readable) or json (structured).
 
 Active Tools (1):
   - get_technical_indicators: 获取技术指标 (RSI, MACD, SMA, EMA, BB, KDJ, ATR)
@@ -24,6 +24,10 @@ from src.server.mcp.tools.artifact_utils import (
     create_artifact_envelope,
     create_artifact_response,
     create_symbol_error_response,
+)
+from src.server.mcp.tools.output_format_utils import (
+    _format_table_markdown,
+    OutputFormat,
 )
 from src.server.domain.symbols.errors import SymbolResolutionError
 from src.server.domain.symbols import to_ts_code
@@ -230,17 +234,23 @@ def register_technical_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"technical"})
     async def get_technical_indicators(
-        ts_code: str | int, limit: int = 60, ctx: Context = None
+        ts_code: str | int,
+        limit: int = 60,
+        output_format: OutputFormat = "markdown",
+        ctx: Context = None,
     ) -> Dict[str, Any]:
         """Get technical indicators in competitor-compatible format.
 
         Args:
             ts_code: Tushare ts_code (e.g. 600519.SH or 600519)
             limit: 返回最近N个交易日
+            output_format: Output format - "markdown" (default, human-readable)
+                or "json" (structured data for programs)
             ctx: FastMCP Context for logging
 
         Returns:
-            ArtifactEnvelope containing indicator rows
+            If output_format="markdown": Returns markdown tables with Chinese labels
+            If output_format="json": Returns artifact with indicator rows
         """
         # 兼容整数输入
         symbol = str(ts_code)
@@ -298,21 +308,57 @@ def register_technical_tools(mcp: FastMCP):
             else:
                 rsi_text = f"{latest_rsi:.1f}(中性)"
             price_text = f"{latest_close:.2f}" if latest_close is not None else "N/A"
-            description = (
+            summary = (
                 f"{result['ts_code']} 技术面: 区间{range_text}, 收盘{price_text}, "
                 f"RSI={rsi_text}, MACD={macd_signal}, 样本{len(content) if isinstance(content, list) else 0}日"
             )
 
+            # For JSON format, return original artifact structure
+            if output_format == "json":
+                artifact = create_artifact_envelope(
+                    component_type="technical_indicators",
+                    name=f"Technical Indicators: {result['ts_code']}",
+                    content=content,
+                    description=summary,
+                    metadata={"type": "technical_indicators", "ts_code": result["ts_code"]},
+                    visible_to_llm=False,
+                    display_in_report=True,
+                )
+                return create_artifact_response(summary=summary, artifact=artifact)
+
+            # For markdown format, render as readable text
+            md_parts = [f"## {result['ts_code']} 技术指标\n"]
+            md_parts.append(f"**摘要**: {summary}\n")
+
+            # Format technical indicators as markdown table
+            if isinstance(content, list) and content:
+                # Select key columns for display
+                display_rows = []
+                for row in content:
+                    display_row = {
+                        "trade_date": row.get("trade_date"),
+                        "close": row.get("close"),
+                        "RSI": row.get("RSI"),
+                        "MACD": row.get("MACD"),
+                        "MACD_signal": row.get("MACD_signal"),
+                        "SMA_20": row.get("SMA_20"),
+                        "SMA_50": row.get("SMA_50"),
+                    }
+                    display_rows.append(display_row)
+                md_parts.append(_format_table_markdown(display_rows, "技术指标明细"))
+
+            md_output = "\n".join(md_parts)
+
             artifact = create_artifact_envelope(
-                component_type="technical_indicators",
-                name=f"Technical Indicators: {result['ts_code']}",
-                content=content,
-                description=description,
-                metadata={"type": "technical_indicators", "ts_code": result["ts_code"]},
-                visible_to_llm=False,
+                component_type="technical_indicators_markdown",
+                name=f"技术指标: {result['ts_code']}",
+                content={"markdown": md_output, "format": "markdown"},
+                description=summary,
+                metadata={"output_format": "markdown", "ts_code": result["ts_code"]},
+                visible_to_llm=True,
                 display_in_report=True,
             )
-            return create_artifact_response(summary=description, artifact=artifact)
+            return create_artifact_response(summary=summary, artifact=artifact)
         except SymbolResolutionError as e:
             if ctx:
                 await ctx.warning(f"⚠️ 符号解析失败: {ts_code}", extra=e.to_dict())

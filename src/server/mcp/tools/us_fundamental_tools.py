@@ -1,5 +1,6 @@
 # src/server/mcp/tools/us_fundamental_tools.py
 """MCP tools for US stock fundamental data.
+Supports output_format: markdown (default, human-readable) or json (structured).
 
 Active Tools (4):
   - get_earnings_history:        EPS历史 (实际 vs 预期 + surprise%)
@@ -22,6 +23,10 @@ from src.server.mcp.tools.artifact_utils import (
     create_table_artifact,
     create_symbol_error_response,
 )
+from src.server.mcp.tools.output_format_utils import (
+    _format_table_markdown,
+    OutputFormat,
+)
 from src.server.domain.symbols.errors import SymbolResolutionError
 
 
@@ -42,6 +47,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
     async def get_earnings_history(
         symbol: str,
         quarters: int = 8,
+        output_format: OutputFormat = "markdown",
         ctx: Context = None,
     ) -> Dict[str, Any]:
         """Get EPS earnings history for a US stock.
@@ -53,10 +59,13 @@ def register_us_fundamental_tools(mcp: FastMCP):
             symbol: US stock ticker. Format: EXCHANGE:SYMBOL
                 Examples: NASDAQ:AAPL, NYSE:TSLA, NASDAQ:NVDA
             quarters: Number of past quarters to return (default 8)
+            output_format: Output format - "markdown" (default, human-readable)
+                or "json" (structured data for programs)
             ctx: FastMCP Context
 
         Returns:
-            ArtifactResponse with earnings table and LLM summary
+            If output_format="markdown": Returns markdown tables with Chinese labels
+            If output_format="json": Returns artifact with earnings table
         """
         if ctx:
             await ctx.info(f"📊 获取EPS历史: {symbol} ({quarters}季度)")
@@ -98,19 +107,41 @@ def register_us_fundamental_tools(mcp: FastMCP):
                 f"平均surprise {avg_surprise:+.1f}%"
             )
 
-            artifact = create_table_artifact(
-                title=f"{symbol} EPS历史 (近{quarters}季度)",
-                columns=[
-                    {"key": "date", "label": "财报日期"},
-                    {"key": "actual_eps", "label": "实际EPS"},
-                    {"key": "estimated_eps", "label": "预期EPS"},
-                    {"key": "surprise_pct", "label": "Surprise%"},
-                ],
-                rows=rows,
-                tag="earnings_history",
-                description=summary,
+            # For JSON format, return original artifact structure
+            if output_format == "json":
+                artifact = create_table_artifact(
+                    title=f"{symbol} EPS历史 (近{quarters}季度)",
+                    columns=[
+                        {"key": "date", "label": "财报日期"},
+                        {"key": "actual_eps", "label": "实际EPS"},
+                        {"key": "estimated_eps", "label": "预期EPS"},
+                        {"key": "surprise_pct", "label": "Surprise%"},
+                    ],
+                    rows=rows,
+                    tag="earnings_history",
+                    description=summary,
+                )
+                artifact["component_type"] = ComponentType.EARNINGS_TABLE.value
+                return create_artifact_response(summary=summary, artifact=artifact)
+
+            # For markdown format, render as readable text
+            md_output = f"## {symbol} EPS历史 (近{quarters}季度)\n\n"
+            md_output += f"**摘要**: {summary}\n\n"
+            md_output += _format_table_markdown(
+                rows,
+                "EPS明细",
+                column_order=["date", "actual_eps", "estimated_eps", "surprise_pct"],
             )
-            artifact["component_type"] = ComponentType.EARNINGS_TABLE.value
+
+            artifact = create_artifact_envelope(
+                component_type="earnings_table_markdown",
+                name=f"EPS历史: {symbol}",
+                content={"markdown": md_output, "format": "markdown"},
+                description=summary,
+                metadata={"output_format": "markdown", "symbol": symbol},
+                visible_to_llm=True,
+                display_in_report=True,
+            )
             return create_artifact_response(summary=summary, artifact=artifact)
 
         except SymbolResolutionError as e:

@@ -8,7 +8,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -26,6 +26,48 @@ from src.server.domain.types import (
     MarketStatus,
 )
 from src.server.utils.logger import logger
+
+
+def _to_decimal_price(value: Optional[float]) -> Optional[Decimal]:
+    """Convert price fields to Decimal with 2 decimal places.
+
+    Used for: price, open, high, low, close, change
+    """
+    if value is None:
+        return None
+    rounded = round(value, 2)
+    return Decimal(str(rounded))
+
+
+def _to_decimal_percent(value: Optional[float]) -> Optional[Decimal]:
+    """Convert percentage fields to Decimal with 2 decimal places.
+
+    Used for: change_percent
+    """
+    if value is None:
+        return None
+    rounded = round(value, 2)
+    return Decimal(str(rounded))
+
+
+def _to_decimal_volume(value: Optional[float]) -> Optional[Decimal]:
+    """Convert volume to Decimal as integer.
+
+    Volume should always be a whole number.
+    """
+    if value is None:
+        return None
+    return Decimal(str(int(round(value))))
+
+
+def _to_decimal_market_cap(value: Optional[float]) -> Optional[Decimal]:
+    """Convert market cap to Decimal as integer.
+
+    Market cap should always be a whole number.
+    """
+    if value is None:
+        return None
+    return Decimal(str(int(round(value))))
 
 
 class YahooAdapter(BaseDataAdapter):
@@ -378,26 +420,26 @@ class YahooAdapter(BaseDataAdapter):
 
             asset_price = AssetPrice(
                 ticker=ticker,
-                price=Decimal(str(price)),
+                price=_to_decimal_price(price),
                 currency=currency,
                 timestamp=datetime.utcnow(),
-                volume=Decimal(str(volume)) if volume else Decimal("0"),
-                open_price=Decimal(str(open_price)) if open_price else None,
-                high_price=Decimal(str(high_price)) if high_price else None,
-                low_price=Decimal(str(low_price)) if low_price else None,
-                close_price=Decimal(str(close_price)) if close_price else None,
+                volume=_to_decimal_volume(volume),
+                open_price=_to_decimal_price(open_price),
+                high_price=_to_decimal_price(high_price),
+                low_price=_to_decimal_price(low_price),
+                close_price=_to_decimal_price(close_price),
                 change=None,  # Calculate if needed
                 change_percent=None,
-                market_cap=Decimal(str(market_cap)) if market_cap else None,
+                market_cap=_to_decimal_market_cap(market_cap),
                 source=DataSource.YAHOO,
             )
 
             # Calculate change if possible
             if asset_price.close_price and asset_price.price:
                 asset_price.change = asset_price.price - asset_price.close_price
-                asset_price.change_percent = (
-                    asset_price.change / asset_price.close_price
-                ) * 100
+                # Calculate percentage and round to 2 decimal places
+                change_pct_decimal = (asset_price.change / asset_price.close_price) * 100
+                asset_price.change_percent = _to_decimal_percent(float(change_pct_decimal))
 
             # Cache as dict
             await self.cache.set(cache_key, asset_price.to_dict(), ttl=60)
@@ -454,14 +496,14 @@ class YahooAdapter(BaseDataAdapter):
 
                 price = AssetPrice(
                     ticker=ticker,
-                    price=Decimal(str(row["Close"])),
+                    price=_to_decimal_price(row["Close"]),
                     currency=currency,
                     timestamp=timestamp,
-                    volume=Decimal(str(row["Volume"])),
-                    open_price=Decimal(str(row["Open"])),
-                    high_price=Decimal(str(row["High"])),
-                    low_price=Decimal(str(row["Low"])),
-                    close_price=Decimal(str(row["Close"])),
+                    volume=_to_decimal_volume(row["Volume"]),
+                    open_price=_to_decimal_price(row["Open"]),
+                    high_price=_to_decimal_price(row["High"]),
+                    low_price=_to_decimal_price(row["Low"]),
+                    close_price=_to_decimal_price(row["Close"]),
                     source=DataSource.YAHOO,
                 )
                 prices.append(price)

@@ -1,7 +1,7 @@
 # src/server/mcp/tools/money_flow_tools.py
 """MCP tools for money flow analysis.
 Provides stock money flow and north bound (HSGT) flow data.
-Returns structured data (JSON) for frontend visualization.
+Supports output_format: markdown (default, human-readable) or json (structured).
 
 使用新版 Artifact 结构:
 - component_type 标准化
@@ -23,6 +23,10 @@ from src.server.mcp.tools.artifact_utils import (
     create_chart_artifact,
     create_table_artifact,
     create_symbol_error_response,
+)
+from src.server.mcp.tools.output_format_utils import (
+    _format_money_flow_markdown,
+    OutputFormat,
 )
 from src.server.domain.symbols.errors import SymbolResolutionError
 from src.server.domain.symbols import to_ts_code
@@ -68,7 +72,10 @@ def register_money_flow_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"money-flow"})
     async def get_money_flow(
-        symbol: str, days: int = 20, ctx: Context = None
+        symbol: str,
+        days: int = 20,
+        output_format: OutputFormat = "markdown",
+        ctx: Context = None,
     ) -> Dict[str, Any]:
         """获取个股资金流向数据
 
@@ -79,10 +86,12 @@ def register_money_flow_tools(mcp: FastMCP):
                 - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
                 - 美股: NASDAQ:AAPL, NYSE:TSLA
             days: 获取最近 N 天数据 (默认 20 天)
+            output_format: 输出格式 - "markdown" (默认, 易读) 或 "json" (结构化)
             ctx: FastMCP Context for logging
 
         Returns:
-            ArtifactEnvelope containing money flow data
+            If output_format="markdown": 返回易读的 Markdown 表格
+            If output_format="json": 返回 artifact 结构化数据
         """
         if ctx:
             await ctx.info(
@@ -140,26 +149,42 @@ def register_money_flow_tools(mcp: FastMCP):
                 "amount_unit": amount_unit,
             }
 
-            # 包装为 ArtifactEnvelope (竞品格式)
+            # For JSON format, return original artifact structure
+            if output_format == "json":
+                artifact = create_artifact_envelope(
+                    component_type="money_flow",
+                    name=f"Money Flow: {ts_code}",
+                    content=content,
+                    description=(
+                        f"Main Force (Institutional) Capital Flow: {ts_code} (Last {days} days). "
+                        "Visualizes daily net inflow/outflow trends of Large & Extra-Large orders. "
+                        f"Overall Trend: {trend}."
+                    ),
+                    metadata={
+                        "type": "money_flow",
+                        "ts_code": ts_code,
+                        "days": days,
+                        "amount_unit": amount_unit,
+                    },
+                    visible_to_llm=False,
+                    display_in_report=True,
+                )
+                return create_artifact_response(summary=summary_text, artifact=artifact)
+
+            # For markdown format, render as readable text
+            md_output = f"## {ts_code} 资金流向\n\n"
+            md_output += f"**摘要**: {summary_text}\n\n"
+            md_output += _format_money_flow_markdown(records, "主力资金净流入明细", amount_unit)
+
             artifact = create_artifact_envelope(
-                component_type="money_flow",
-                name=f"Money Flow: {ts_code}",
-                content=content,
-                description=(
-                    f"Main Force (Institutional) Capital Flow: {ts_code} (Last {days} days). "
-                    "Visualizes daily net inflow/outflow trends of Large & Extra-Large orders. "
-                    f"Overall Trend: {trend}."
-                ),
-                metadata={
-                    "type": "money_flow",
-                    "ts_code": ts_code,
-                    "days": days,
-                    "amount_unit": amount_unit,
-                },
-                visible_to_llm=False,
+                component_type="money_flow_markdown",
+                name=f"资金流向: {ts_code}",
+                content={"markdown": md_output, "format": "markdown"},
+                description=summary_text,
+                metadata={"output_format": "markdown", "ts_code": ts_code},
+                visible_to_llm=True,
                 display_in_report=True,
             )
-
             return create_artifact_response(summary=summary_text, artifact=artifact)
 
         except SymbolResolutionError as e:
@@ -1866,3 +1891,195 @@ def register_money_flow_tools(mcp: FastMCP):
                 "error": str(e),
                 "component_type": "sector_valuation_metrics",
             }
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_market_breadth(
+        days: int = 20,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取A股市场广度指标
+
+        市场广度指标反映整体市场参与度和健康程度：
+        - 上涨/下跌家数：衡量市场情绪
+        - 涨跌比(AD Ratio)：>1表示多头占优
+        - 20日新高/新低：突破动能
+        - 中位数收益：剔除权重股影响的真实市场表现
+
+        Args:
+            days: 回溯天数 (默认 20)
+            ctx: FastMCP Context
+
+        Returns:
+            市场广度指标数据
+        """
+        if ctx:
+            await ctx.info("获取市场广度指标", extra={"days": days})
+
+        try:
+            logger.info("MCP tool called: get_market_breadth", days=days)
+            gateway = Container.market_gateway()
+            result = await gateway.get_market_breadth(days=days)
+
+            summary = result.get("summary", {})
+            up_count = summary.get("up_count", 0)
+            down_count = summary.get("down_count", 0)
+            ad_ratio = summary.get("advance_decline_ratio", 0)
+            new_high = summary.get("new_high_20d", 0)
+            new_low = summary.get("new_low_20d", 0)
+            median_ret = summary.get("median_return_pct", 0)
+            trade_date = summary.get("trade_date", "N/A")
+
+            # 判断市场情绪
+            if ad_ratio >= 1.5:
+                sentiment = "强势多头"
+            elif ad_ratio >= 1.0:
+                sentiment = "偏多"
+            elif ad_ratio >= 0.67:
+                sentiment = "偏弱"
+            else:
+                sentiment = "弱势空头"
+
+            # 判断突破动能
+            if new_high > new_low * 2:
+                momentum = "突破向上"
+            elif new_low > new_high * 2:
+                momentum = "破位下行"
+            else:
+                momentum = "震荡整理"
+
+            summary_text = (
+                f"市场广度({trade_date}): 上涨{up_count}/下跌{down_count}, "
+                f"涨跌比{ad_ratio:.2f}({sentiment}); "
+                f"20日新高{new_high}/新低{new_low}({momentum}); "
+                f"中位数收益{median_ret:+.2f}%"
+            )
+
+            artifact = create_artifact_envelope(
+                component_type="market_breadth",
+                name="Market Breadth Indicators",
+                content={
+                    "summary": summary,
+                    "history": result.get("history", []),
+                },
+                description=summary_text,
+                metadata={
+                    "type": "market_breadth",
+                    "days": days,
+                    "trade_date": trade_date,
+                },
+            )
+
+            if ctx:
+                await ctx.info(
+                    "市场广度获取完成",
+                    extra={"ad_ratio": ad_ratio, "sentiment": sentiment},
+                )
+
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+
+        except Exception as e:
+            logger.error(f"Get market breadth failed: {e}", exc_info=True)
+            if ctx:
+                await ctx.error("获取市场广度失败", extra={"error": str(e)})
+            return {"error": str(e), "component_type": "market_breadth"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_relative_strength(
+        symbol: str,
+        benchmark: str = "000300",
+        days: int = 60,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取个股相对强弱指标(RS)
+
+        计算个股相对于基准指数（默认沪深300）的超额收益。
+        RS > 0 表示跑赢基准，RS < 0 表示跑输基准。
+
+        用途:
+        - 筛选强势股/弱势股
+        - 判断板块轮动方向
+        - 辅助择时与配对交易
+
+        Args:
+            symbol: 股票代码 (如 600519, 000001)
+            benchmark: 基准指数代码 (默认 000300=沪深300, 000016=上证50, 000905=中证500)
+            days: 回溯天数 (默认 60)
+            ctx: FastMCP Context
+
+        Returns:
+            相对强弱指标数据
+        """
+        if ctx:
+            await ctx.info(
+                "获取相对强弱指标",
+                extra={"symbol": symbol, "benchmark": benchmark, "days": days},
+            )
+
+        try:
+            logger.info(
+                "MCP tool called: get_relative_strength",
+                symbol=symbol,
+                benchmark=benchmark,
+                days=days,
+            )
+            gateway = Container.market_gateway()
+            result = await gateway.get_relative_strength(
+                symbol=symbol, benchmark=benchmark, days=days
+            )
+
+            rs_pct = result.get("rs_pct", 0)
+            trend = result.get("trend", "neutral")
+            latest_date = result.get("latest_date", "N/A")
+            stock_ret = result.get("latest_stock_return_pct", 0)
+            bench_ret = result.get("latest_benchmark_return_pct", 0)
+            history = result.get("history", [])
+
+            trend_cn = {
+                "outperform": "跑赢基准",
+                "underperform": "跑输基准",
+                "neutral": "与基准持平",
+            }.get(trend, trend)
+
+            summary_text = (
+                f"{symbol} vs {benchmark}({days}日): "
+                f"RS={rs_pct:+.2f}%({trend_cn}); "
+                f"个股收益{stock_ret:+.2f}%, 基准收益{bench_ret:+.2f}%; "
+                f"数据截至{latest_date}"
+            )
+
+            artifact = create_artifact_envelope(
+                component_type="relative_strength",
+                name=f"RS: {symbol} vs {benchmark}",
+                content={
+                    "symbol": symbol,
+                    "benchmark": benchmark,
+                    "days": days,
+                    "rs_pct": rs_pct,
+                    "trend": trend,
+                    "latest_date": latest_date,
+                    "latest_stock_return_pct": stock_ret,
+                    "latest_benchmark_return_pct": bench_ret,
+                    "history": history,
+                },
+                description=summary_text,
+                metadata={
+                    "type": "relative_strength",
+                    "symbol": symbol,
+                    "benchmark": benchmark,
+                    "days": days,
+                },
+            )
+
+            if ctx:
+                await ctx.info(
+                    "相对强弱计算完成",
+                    extra={"rs_pct": rs_pct, "trend": trend},
+                )
+
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+
+        except Exception as e:
+            logger.error(f"Get relative strength failed: {e}", exc_info=True)
+            if ctx:
+                await ctx.error("获取相对强弱失败", extra={"error": str(e)})
+            return {"error": str(e), "component_type": "relative_strength"}

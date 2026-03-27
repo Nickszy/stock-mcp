@@ -182,6 +182,24 @@ async def get_ggt_daily(days: int = 60) -> Dict[str, Any]:
     return await manager.get_ggt_daily(days)
 
 
+async def get_inflation_data(months: int = 60) -> Dict[str, Any]:
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_inflation_data", months=months)
+    return await manager.get_inflation_data(months)
+async def get_pmi_data(months: int = 60) -> Dict[str, Any]:
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_pmi_data", months=months)
+    return await manager.get_pmi_data(months)
+async def get_gdp_data(quarters: int = 20) -> Dict[str, Any]:
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_gdp_data", quarters=quarters)
+    return await manager.get_gdp_data(quarters)
+async def get_social_financing(months: int = 60) -> Dict[str, Any]:
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_social_financing", months=months)
+    return await manager.get_social_financing(months)
+
+
 async def get_us_economic_growth(quarters: int = 20) -> Dict[str, Any]:
     manager = Container.market_gateway()
     logger.info("UseCase: get_us_economic_growth", quarters=quarters)
@@ -198,3 +216,47 @@ async def get_us_interest_rates(days: int = 180) -> Dict[str, Any]:
     manager = Container.market_gateway()
     logger.info("UseCase: get_us_interest_rates", days=days)
     return await manager.get_us_interest_rates(days)
+
+
+async def get_market_breadth(days: int = 20) -> Dict[str, Any]:
+    """Get market breadth indicators: up/down count, new high/low, median return."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_market_breadth", days=days)
+    return await manager.get_market_breadth(days=days)
+
+
+async def get_relative_strength(
+    symbol: str, benchmark: str = "000300", days: int = 60
+) -> Dict[str, Any]:
+    """Get relative strength of a stock vs benchmark index."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_relative_strength", symbol=symbol, benchmark=benchmark, days=days)
+    return await manager.get_relative_strength(symbol=symbol, benchmark=benchmark, days=days)
+
+
+async def get_sector_valuation_metrics(
+    sector_name: str = "",
+    days: int = 250,
+    sample_size: int = 60,
+    sector_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Get sector valuation metrics with historical percentiles."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_sector_valuation_metrics", sector_name=sector_name, days=days)
+    return await manager.get_sector_valuation_metrics(
+        sector_name=sector_name, days=days, sample_size=sample_size, sector_id=sector_id
+    )
+
+
+async def calculate_technical_indicators(
+    symbol: str,
+    indicators: Optional[List[str]] = None,
+    period: str = "daily",
+    days: int = 120,
+) -> Dict[str, Any]:
+    """Calculate technical indicators for a stock."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: calculate_technical_indicators", symbol=symbol, indicators=indicators, days=days)
+    return await manager.calculate_technical_indicators(
+        symbol=symbol, indicators=indicators, period=period, days=days
+    )
