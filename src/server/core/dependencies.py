@@ -39,6 +39,7 @@ from src.server.domain.services.chip_service import ChipService
 
 # Import domain classes
 from src.server.domain.market_gateway import MarketGateway
+from src.server.domain.adapter_manager import AdapterManager
 from src.server.domain.symbols import SymbolResolver
 from src.server.domain.routing import MarketRouter, ProviderHealthTracker, RoutingPolicy
 from src.server.domain.security_master import SecurityMasterRepository
@@ -170,6 +171,15 @@ class Container(containers.DeclarativeContainer):
         sqlite_path=providers.Callable(lambda cfg: cfg.security_master_sqlite_path, config),
     )
 
+    # AdapterManager (multi-source orchestration)
+    adapter_manager = providers.Singleton(
+        AdapterManager,
+        provider_timeout_seconds=providers.Callable(
+            lambda cfg: cfg.timeout.provider_call_seconds,
+            config,
+        ),
+    )
+
     # MarketGateway (unified gateway)
     # NOTE: SymbolResolver receives gateway as "adapter_manager" for backward compatibility
     # during initialization,    # SymbolResolver is created first, then MarketGateway is created with resolver injected.
@@ -184,15 +194,12 @@ class Container(containers.DeclarativeContainer):
     routing_policy = providers.Singleton(RoutingPolicy.load)
     provider_health = providers.Singleton(ProviderHealthTracker)
 
-    # MarketGateway - unified gateway
+    # MarketGateway - unified gateway (wraps adapter_manager + symbol_resolver)
     market_gateway = providers.Singleton(
         MarketGateway,
+        adapter_manager=adapter_manager,
         symbol_resolver=symbol_resolver,
         market_router=None,  # Will be set after router is created
-        provider_timeout_seconds=providers.Callable(
-            lambda cfg: cfg.timeout.provider_call_seconds,
-            config,
-        ),
     )
 
     # MarketRouter (optional advanced routing)
