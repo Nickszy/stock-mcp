@@ -97,6 +97,12 @@ _MARKET_METHODS: Set[str] = {
     "get_bond_yield",
     "get_futures_main",
     "get_option_summary",
+    # New: quantitative analysis
+    "get_sector_pe_pb_historical",
+    "get_etf_flow",
+    "get_style_rotation",
+    "get_futures_basis",
+    "calculate_risk_metrics",
 }
 
 

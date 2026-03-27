@@ -572,3 +572,63 @@ class TestExtendedData:
         """国债收益率曲线."""
         result = await _retry(adapter.get_bond_yield)
         assert "data" in result
+
+
+# ---- 10. 行业估值/ETF/风格/期货基差/风险指标 ----
+
+class TestQuantitativeData:
+    """量化分析数据质量测试."""
+
+    @pytest.mark.asyncio
+    async def test_sector_pe_pb_historical(self, adapter):
+        """行业PE/PB历史分位数据."""
+        result = await _retry(adapter.get_sector_pe_pb_historical, sector_name="银行", days=120)
+        assert "current" in result
+        current = result["current"]
+        assert "pe" in current
+        assert current["pe"] > 0
+        assert "summary" in result or "sector" in result
+
+    @pytest.mark.asyncio
+    async def test_etf_flow(self, adapter):
+        """ETF资金流向数据."""
+        result = await _retry(adapter.get_etf_flow, symbol="510300", days=10)
+        assert "data" in result
+        assert "source" in result
+
+    @pytest.mark.asyncio
+    async def test_style_rotation(self, adapter):
+        """风格轮动指标."""
+        result = await _retry(adapter.get_style_rotation)
+        assert "style_signal" in result or "styles" in result
+        if "style_signal" in result:
+            signal = result["style_signal"]
+            assert signal.get("large_vs_small") in [
+                "大盘强势", "小盘强势", None,
+            ]
+            assert "large_small_spread" in signal
+
+    @pytest.mark.asyncio
+    async def test_futures_basis(self, adapter):
+        """期货基差数据."""
+        result = await _retry(adapter.get_futures_basis, index_code="IF0", days=10)
+        assert "data" in result
+        assert "index_code" in result
+
+    @pytest.mark.asyncio
+    async def test_risk_metrics(self, adapter):
+        """风险指标计算."""
+        result = await _retry(adapter.calculate_risk_metrics, symbol="600519", days=60)
+        assert "risk_metrics" in result
+        metrics = result["risk_metrics"]
+        # Should have at least volatility and max drawdown
+        assert "volatility_annual" in metrics
+        assert "max_drawdown_pct" in metrics
+        # Max drawdown should be <= 0
+        if metrics["max_drawdown_pct"] is not None:
+            assert metrics["max_drawdown_pct"] <= 0, \
+                f"Max drawdown should be negative, got {metrics['max_drawdown_pct']}"
+        # Volatility should be positive
+        if metrics["volatility_annual"] is not None:
+            assert metrics["volatility_annual"] > 0, \
+                f"Volatility should be positive, got {metrics['volatility_annual']}"

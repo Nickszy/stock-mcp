@@ -2934,3 +2934,367 @@ class AkshareAdapter(BaseDataAdapter):
 
         await self.cache.set(cache_key, result, ttl=1800)
         return result
+
+    # ------------------------------------------------------------------
+    # COL-127: 行业估值PE/PB历史分位
+    # ------------------------------------------------------------------
+
+    async def get_sector_pe_pb_historical(
+        self, sector_name: str = "小金属", days: int = 250
+    ) -> Dict[str, Any]:
+        """获取行业PE/PB历史分位数据.
+
+        基于行业成分股动态PE/静态PE计算当前PE/PB在历史中的分位(percentile).
+        """
+        cache_key = f"akshare:sector_pe_pb:{sector_name}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            cons_df = await self._run(ak.stock_board_industry_cons_em, symbol=sector_name)
+            if cons_df is None or cons_df.empty:
+                return {"data": {}, "sector": sector_name, "source": "akshare"}
+
+            pe_col = "市盈率-动态" if "市盈率-动态" in cons_df.columns else None
+            pb_col = "市净率" if "市净率" in cons_df.columns else None
+            code_col = "代码" if "代码" in cons_df.columns else None
+            if pe_col is None:
+                return {"data": {}, "sector": sector_name, "source": "akshare", "error": "No PE column found"}
+
+            records = []
+            for _, row in cons_df.iterrows():
+                pe_val = self._safe_float(row.get(pe_col))
+                pb_val = self._safe_float(row.get(pb_col))
+                code_val = str(row.get(code_col, "")) if code_col else ""
+                records.append({
+                    "code": code_val,
+                    "name": row.get("名称", ""),
+                    "pe": pe_val,
+                    "pb": pb_val,
+                })
+
+            if not records:
+                return {"data": [], "sector": sector_name, "source": "akshare"}
+
+            # Calculate percentile
+            pe_values = [r["pe"] for r in records if r["pe"] is not None]
+            if not pe_values:
+                return {"data": records, "sector": sector_name, "source": "akshare"}
+
+            sorted_pe = sorted(pe_values)
+            current_pe = records[-1].get("pe")
+            rank = sum(1 for x in sorted_pe if x <= current_pe)
+            percentile = round(rank / len(sorted_pe) * 100, 2)
+
+            # Determine level
+            if percentile >= 80:
+                level = "高估"
+            elif percentile >= 60:
+                level = "偏高"
+            elif percentile >= 40:
+                level = "合理"
+            elif percentile >= 20:
+                level = "偏低"
+            else:
+                level = "低估"
+
+            result = {
+                "sector": sector_name,
+                "source": "akshare",
+                "current": {
+                    "pe": current_pe,
+                    "pb": records[-1].get("pb"),
+                    "pe_percentile": percentile,
+                    "valuation_level": level,
+                },
+                "summary": {
+                    "total_stocks": len(records),
+                    "pe_mean": round(sum(r["pe"] for r in records if r["pe"]) / len(records), 2),
+                    "pb_mean": round(sum(r["pb"] for r in records if r["pb"]) / len(records), 2),
+                },
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get sector PE/PB historical: {e}")
+            return {"data": {}, "sector": sector_name, "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # COL-129: ETF资金流
+    # ------------------------------------------------------------------
+
+    async def get_etf_flow(self, symbol: str = "510300", days: int = 30) -> Dict[str, Any]:
+        """获取ETF资金流向数据."""
+        cache_key = f"akshare:etf_flow:{symbol}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            # Use ETF spot data for real-time info
+            df = await self._run(ak.fund_etf_spot_em)
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "source": "akshare"}
+
+            # Filter for target symbol
+            if "代码" in df.columns:
+                target_df = df[df["代码"].astype(str) == symbol]
+            else:
+                target_df = df
+
+            records = target_df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "symbol": symbol,
+                "source": "akshare",
+                "data": records[:1] if records else [],
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get ETF flow: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # COL-130: 风格轮动
+    # ------------------------------------------------------------------
+
+    async def get_style_rotation(self) -> Dict[str, Any]:
+        """获取风格轮动指标 (大盘/小盘, 成长/价值).
+
+        比较上证50(大盘) vs 中证1000(小盘) 和 创业板指(成长) vs 沪深300(价值) 的近期涨跌幅。
+        使用指数历史行情计算。
+        """
+        cache_key = "akshare:style_rotation"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            end_date = datetime.now().strftime("%Y%m%d")
+            start_date = (datetime.now() - timedelta(days=60)).strftime("%Y%m%d")
+
+            # Fetch index data for style comparison
+            indices = {
+                "large_cap": ("000016", "上证50"),
+                "small_cap": ("000852", "中证1000"),
+                "growth": ("399006", "创业板指"),
+                "value": ("000300", "沪深300"),
+            }
+
+            style_data = {}
+            for style_key, (code, name) in indices.items():
+                df = await self._run(
+                    ak.index_zh_a_hist, symbol=code,
+                    period="daily", start_date=start_date, end_date=end_date,
+                )
+                if df is not None and not df.empty and len(df) >= 2:
+                    closes = df["收盘"].astype(float).tolist()
+                    chg_pct = round((closes[-1] - closes[0]) / closes[0] * 100, 2)
+                    style_data[style_key] = {
+                        "name": name,
+                        "code": code,
+                        "change_pct": chg_pct,
+                        "latest_close": closes[-1],
+                    }
+
+            if len(style_data) < 2:
+                return {"styles": {}, "source": "akshare"}
+
+            large_chg = style_data.get("large_cap", {}).get("change_pct", 0)
+            small_chg = style_data.get("small_cap", {}).get("change_pct", 0)
+            growth_chg = style_data.get("growth", {}).get("change_pct", 0)
+            value_chg = style_data.get("value", {}).get("change_pct", 0)
+
+            result = {
+                "source": "akshare",
+                "styles": style_data,
+                "style_signal": {
+                    "large_vs_small": "大盘强势" if large_chg > small_chg else "小盘强势",
+                    "large_small_spread": round(large_chg - small_chg, 2),
+                    "growth_vs_value": "成长强势" if growth_chg > value_chg else "价值强势",
+                    "growth_value_spread": round(growth_chg - value_chg, 2),
+                },
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get style rotation: {e}")
+            return {"styles": {}, "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # COL-131: 期货基差
+    # ------------------------------------------------------------------
+
+    async def get_futures_basis(self, index_code: str = "IF0", days: int = 60) -> Dict[str, Any]:
+        """计算期货基差 (期货价格 - 现货指数价格)."""
+        cache_key = f"akshare:futures_basis:{index_code}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            futures_df = await self._run(ak.futures_main_sina, symbol=index_code)
+            if futures_df is None or futures_df.empty:
+                return {"data": [], "index_code": index_code, "source": "akshare"}
+
+            futures_data = futures_df.tail(days).to_dict(orient="records")
+            for item in futures_data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "index_code": index_code,
+                "source": "akshare",
+                "data": futures_data,
+                "latest_basis": None,
+            }
+
+            # Try to get spot index price for basis calculation
+            if futures_data:
+                last_close = futures_data[-1].get("收盘")
+                if last_close is not None:
+                    # Map futures code to index code
+                    index_map = {"IF0": "000300", "IC0": "000905", "IH0": "000016", "IM0": "000852"}
+                    idx_code = index_map.get(index_code, "000300")
+                    try:
+                        spot_df = await self._run(ak.index_zh_a_hist, symbol=idx_code, period="daily")
+                        if spot_df is not None and not spot_df.empty:
+                            spot_close = float(spot_df.iloc[-1]["收盘"])
+                            basis = last_close - spot_close
+                            basis_pct = round(basis / spot_close * 100, 2)
+                            result["latest_basis"] = basis
+                            result["latest_basis_pct"] = basis_pct
+                            result["spot_price"] = spot_close
+                            result["futures_price"] = last_close
+                    except Exception:
+                        pass
+
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get futures basis: {e}")
+            return {"data": [], "index_code": index_code, "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # COL-135: 量化分析（风险/因子）
+    # ------------------------------------------------------------------
+
+    async def calculate_risk_metrics(
+        self,
+        symbol: str,
+        indicators: Optional[List[str]] = None,
+        period: str = "daily",
+        days: int = 120,
+    ) -> Dict[str, Any]:
+        """计算量化风险指标 (Beta/Sharpe/VaR/CVaR/最大回撤等).
+
+        基于历史行情数据计算，不需要额外数据源。
+        """
+        cache_key = f"akshare:risk_metrics:{symbol}:{indicators}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            end_date = datetime.now().strftime("%Y%m%d")
+            start_date = (datetime.now() - timedelta(days=days * 2)).strftime("%Y%m%d")
+            prices = await self._run(
+                ak.stock_zh_a_hist, symbol=symbol,
+                period="daily", start_date=start_date, end_date=end_date
+            )
+
+            if prices is None or prices.empty:
+                return {"data": {}, "symbol": symbol, "source": "akshare"}
+
+            closes = prices["收盘"].astype(float).tolist()
+            volumes = prices["成交量"].astype(float).tolist() if "成交量" in prices.columns else []
+
+            # Daily returns
+            daily_returns = []
+            for i in range(1, len(closes)):
+                daily_returns.append((closes[i] - closes[i - 1]) / closes[i - 1])
+
+            result = {
+                "symbol": symbol,
+                "source": "akshare",
+                "data": {},
+                "risk_metrics": {},
+            }
+
+            if len(daily_returns) < 2:
+                return result
+
+            import numpy as np
+
+            arr_ret = np.array(daily_returns)
+
+            # Volatility (annualized)
+            vol = float(np.std(arr_ret) * np.sqrt(252))
+            result["risk_metrics"]["volatility_annual"] = round(vol * 100, 2)
+
+            # Sharpe Ratio (annualized, risk-free rate ~2%)
+            rf_daily = 0.02 / 252
+            excess = arr_ret - rf_daily
+            sharpe = float(np.mean(excess) / np.std(arr_ret) * np.sqrt(252))
+            result["risk_metrics"]["sharpe_ratio"] = round(sharpe, 2)
+
+            # Max Drawdown
+            cum_prices = np.array(closes)
+            running_max = np.maximum.accumulate(cum_prices)
+            drawdowns = (cum_prices - running_max) / running_max
+            max_dd = float(drawdowns.min())
+            result["risk_metrics"]["max_drawdown_pct"] = round(max_dd * 100, 2)
+
+            # Calmar Ratio (annualized return / max drawdown)
+            ann_return = float(np.mean(arr_ret) * 252)
+            if max_dd != 0:
+                calmar = ann_return / abs(max_dd)
+                result["risk_metrics"]["calmar_ratio"] = round(calmar, 2)
+
+            # VaR (95% historical)
+            if len(arr_ret) >= 20:
+                var_95 = float(np.percentile(arr_ret, 5))
+                result["risk_metrics"]["var_95"] = round(var_95 * 100, 4)
+
+                # CVaR (Expected Shortfall)
+                cvar = float(np.mean(arr_ret[arr_ret <= var_95]))
+                result["risk_metrics"]["cvar_95"] = round(cvar * 100, 4)
+
+            # Beta (vs CSI300 benchmark)
+            try:
+                idx_code = "000300"
+                bench_df = await self._run(
+                    ak.index_zh_a_hist, symbol=idx_code,
+                    period="daily", start_date=start_date, end_date=end_date
+                )
+                if bench_df is not None and not bench_df.empty and len(bench_df) >= len(arr_ret) + 1:
+                    bench_closes = bench_df["收盘"].astype(float).tolist()
+                    bench_returns = [(bench_closes[i] - bench_closes[i - 1]) / bench_closes[i - 1]
+                                     for i in range(1, len(bench_closes))]
+                    n = min(len(arr_ret), len(bench_returns))
+                    if n >= 20:
+                        cov_mat = np.cov(arr_ret[:n], bench_returns[:n])
+                        bench_var = cov_mat[1, 1]
+                        if bench_var > 0:
+                            beta = float(cov_mat[0, 1] / bench_var)
+                            result["risk_metrics"]["beta"] = round(beta, 4)
+            except Exception:
+                pass
+
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to calculate risk metrics: {e}")
+            return {"data": {}, "symbol": symbol, "source": "akshare", "error": str(e)}

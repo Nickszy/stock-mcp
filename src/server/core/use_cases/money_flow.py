@@ -326,3 +326,46 @@ async def get_option_summary() -> Dict[str, Any]:
     manager = Container.market_gateway()
     logger.info("UseCase: get_option_summary")
     return await manager.get_option_summary()
+
+
+async def get_sector_pe_pb_historical(
+    sector_name: str = "", days: int = 250, sector_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Get sector PE/PB historical data with percentile rankings."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_sector_pe_pb_historical", sector_name=sector_name, days=days)
+    return await manager.get_sector_pe_pb_historical(
+        sector_name=sector_name, days=days, sector_id=sector_id
+    )
+
+
+async def get_etf_flow(symbol: str = "", days: int = 30) -> Dict[str, Any]:
+    """Get ETF flow/subscription data."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_etf_flow", symbol=symbol, days=days)
+    return await manager.get_etf_flow(symbol=symbol, days=days)
+
+
+async def get_style_rotation() -> Dict[str, Any]:
+    """Get style rotation indicators (large-cap vs small-cap)."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_style_rotation")
+    return await manager.get_style_rotation()
+
+
+async def get_futures_basis(index_code: str = "IF0", days: int = 60) -> Dict[str, Any]:
+    """Get futures basis (futures price - spot index price)."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_futures_basis", index_code=index_code, days=days)
+    return await manager.get_futures_basis(index_code=index_code, days=days)
+
+
+async def calculate_risk_metrics(
+    symbol: str, indicators: Optional[List[str]] = None, days: int = 120,
+) -> Dict[str, Any]:
+    """Calculate quantitative risk metrics (Beta/Sharpe/VaR/CVaR/MaxDrawdown)."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: calculate_risk_metrics", symbol=symbol, days=days)
+    return await manager.calculate_risk_metrics(
+        symbol=symbol, indicators=indicators, days=days
+    )
