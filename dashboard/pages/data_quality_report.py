@@ -637,9 +637,14 @@ def show(db, project_root):
     if "current_report" in st.session_state and st.session_state.get("report_generated"):
         report = st.session_state["current_report"]
 
-        # 展示报告（使用 code 有复制按钮）
-        st.code(report, language="markdown")
+        # 渲染报告（表格会更清晰）
+        st.markdown(report)
+
         st.markdown("---")
+
+        # 复制区域
+        with st.expander("📋 复制报告（Markdown 格式）"):
+            st.code(report, language="markdown")
 
     # ========== 高级配置区域 ==========
     with st.expander("🔧 高级配置（批量测试）"):
