@@ -260,3 +260,69 @@ async def calculate_technical_indicators(
     return await manager.calculate_technical_indicators(
         symbol=symbol, indicators=indicators, period=period, days=days
     )
+
+
+# ---- Extended Quantitative Data ----
+
+
+async def get_margin_trading(ticker: str, days: int = 30) -> Dict[str, Any]:
+    """Get margin trading (融资融券) data for a stock."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_margin_trading", ticker=ticker, days=days)
+    return await manager.get_margin_trading(ticker=ticker, days=days)
+
+
+async def get_restricted_release(symbol: str = "", days: int = 90) -> Dict[str, Any]:
+    """Get restricted share release (解禁) data."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_restricted_release", symbol=symbol, days=days)
+    return await manager.get_restricted_release(symbol=symbol, days=days)
+
+
+async def get_repurchase_info(symbol: str = "") -> Dict[str, Any]:
+    """Get stock repurchase (回购) data."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_repurchase_info", symbol=symbol)
+    return await manager.get_repurchase_info(symbol=symbol)
+
+
+async def get_index_constituents(index_code: str = "000300") -> Dict[str, Any]:
+    """Get index constituent stocks."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_index_constituents", index_code=index_code)
+    return await manager.get_index_constituents(index_code=index_code)
+
+
+async def get_index_constituent_weights(index_code: str = "000300") -> Dict[str, Any]:
+    """Get index constituent stock weights."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_index_constituent_weights", index_code=index_code)
+    return await manager.get_index_constituent_weights(index_code=index_code)
+
+
+async def get_fund_nav(fund_code: str = "", days: int = 30) -> Dict[str, Any]:
+    """Get fund NAV data."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_fund_nav", fund_code=fund_code, days=days)
+    return await manager.get_fund_nav(fund_code=fund_code, days=days)
+
+
+async def get_bond_yield() -> Dict[str, Any]:
+    """Get bond yield curve data."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_bond_yield")
+    return await manager.get_bond_yield()
+
+
+async def get_futures_main(symbol: str = "IF0", days: int = 60) -> Dict[str, Any]:
+    """Get futures main contract data."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_futures_main", symbol=symbol, days=days)
+    return await manager.get_futures_main(symbol=symbol, days=days)
+
+
+async def get_option_summary() -> Dict[str, Any]:
+    """Get option market summary with PCR."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_option_summary")
+    return await manager.get_option_summary()

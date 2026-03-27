@@ -2586,3 +2586,351 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.error(f"Failed to calculate technical indicators: {e}")
             raise ValueError(f"Failed to calculate technical indicators: {e}")
+
+    # ------------------------------------------------------------------
+    # 融资融券 / 解禁 / 回购 / 指数成分 / 基金净值
+    # ------------------------------------------------------------------
+
+    async def get_margin_trading(self, ticker: str, days: int = 30) -> Dict[str, Any]:
+        """获取个股融资融券数据."""
+        cache_key = f"akshare:margin:{ticker}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        symbol = self._to_ak_code(ticker)
+        is_sse = symbol.startswith("6")
+
+        try:
+            # These APIs take date param, return all stocks for that date
+            end_date = datetime.now().strftime("%Y%m%d")
+            start_date = (datetime.now() - timedelta(days=days * 2)).strftime("%Y%m%d")
+
+            if is_sse:
+                # stock_margin_detail_sse(date) - returns all SSE margin stocks
+                df = await self._run(ak.stock_margin_detail_sse, date=end_date)
+                if df is not None and not df.empty:
+                    # Filter for our stock
+                    if "标的证券代码" in df.columns:
+                        df = df[df["标的证券代码"].astype(str).str.contains(symbol)]
+            else:
+                df = await self._run(ak.stock_margin_detail_szse, date=end_date)
+                if df is not None and not df.empty:
+                    if "证券代码" in df.columns:
+                        df = df[df["证券代码"].astype(str).str.contains(symbol)]
+
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "source": "akshare"}
+
+            data = df.tail(days).to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "symbol": symbol,
+                "source": "akshare",
+                "exchange": "SSE" if is_sse else "SZSE",
+                "data": data,
+                "summary": {
+                    "latest_margin_balance": data[-1].get("融资余额(元)") or data[-1].get("融资余额") if data else None,
+                    "latest_short_balance": data[-1].get("融券余额(元)") or data[-1].get("融券余额") if data else None,
+                },
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get margin trading for {ticker}: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    async def get_restricted_release(self, symbol: str = "", days: int = 90) -> Dict[str, Any]:
+        """获取限售解禁数据."""
+        cache_key = f"akshare:restricted_release:{symbol}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        result: Dict[str, Any] = {"data": {}, "source": "akshare"}
+
+        try:
+            # Summary - upcoming releases
+            df_summary = await self._run(ak.stock_restricted_release_summary_em)
+            if df_summary is not None and not df_summary.empty:
+                data = df_summary.to_dict(orient="records")
+                for item in data:
+                    for k, v in item.items():
+                        if hasattr(v, "item"):
+                            item[k] = v.item()
+                result["data"]["summary"] = data
+        except Exception as e:
+            self.logger.error(f"Failed to get restricted release summary: {e}")
+
+        try:
+            # Queue - scheduled releases
+            df_queue = await self._run(ak.stock_restricted_release_queue_em)
+            if df_queue is not None and not df_queue.empty:
+                data = df_queue.to_dict(orient="records")
+                for item in data:
+                    for k, v in item.items():
+                        if hasattr(v, "item"):
+                            item[k] = v.item()
+                result["data"]["queue"] = data
+        except Exception as e:
+            self.logger.error(f"Failed to get restricted release queue: {e}")
+
+        await self.cache.set(cache_key, result, ttl=3600)
+        return result
+
+    async def get_repurchase_info(self, symbol: str = "") -> Dict[str, Any]:
+        """获取股票回购数据."""
+        cache_key = f"akshare:repurchase:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_repurchase_em)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            # Filter by symbol if provided
+            if symbol:
+                df = df[df["股票代码"].str.contains(symbol, na=False)]
+
+            data = df.to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "data": data,
+                "total": len(data),
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get repurchase info: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_index_constituents(self, index_code: str = "000300") -> Dict[str, Any]:
+        """获取指数成分股列表."""
+        cache_key = f"akshare:index_constituents:{index_code}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.index_stock_cons_csindex, symbol=index_code)
+            if df is None or df.empty:
+                return {"data": [], "index_code": index_code, "source": "akshare"}
+
+            data = df.to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "index_code": index_code,
+                "total_constituents": len(data),
+                "data": data,
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=86400)  # Daily refresh
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get index constituents: {e}")
+            return {"data": [], "index_code": index_code, "source": "akshare", "error": str(e)}
+
+    async def get_index_constituent_weights(self, index_code: str = "000300") -> Dict[str, Any]:
+        """获取指数成分股权重."""
+        cache_key = f"akshare:index_weights:{index_code}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.index_stock_cons_weight_csindex, symbol=index_code)
+            if df is None or df.empty:
+                return {"data": [], "index_code": index_code, "source": "akshare"}
+
+            data = df.to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "index_code": index_code,
+                "total_constituents": len(data),
+                "data": data,
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=86400)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get index weights: {e}")
+            return {"data": [], "index_code": index_code, "source": "akshare", "error": str(e)}
+
+    async def get_fund_nav(self, fund_code: str = "", days: int = 30) -> Dict[str, Any]:
+        """获取基金净值数据."""
+        cache_key = f"akshare:fund_nav:{fund_code}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            if fund_code:
+                df = await self._run(
+                    ak.fund_open_fund_info_em, fund=fund_code, indicator="单位净值走势"
+                )
+                if df is not None and not df.empty:
+                    data = df.tail(days).to_dict(orient="records")
+                    for item in data:
+                        for k, v in item.items():
+                            if hasattr(v, "item"):
+                                item[k] = v.item()
+                    result = {
+                        "fund_code": fund_code,
+                        "data": data,
+                        "source": "akshare",
+                    }
+                    await self.cache.set(cache_key, result, ttl=1800)
+                    return result
+
+            # Default: get fund ranking
+            df = await self._run(ak.fund_open_fund_rank_em)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            data = df.head(days).to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "data": data,
+                "total": len(data),
+                "source": "akshare",
+                "note": "Top funds by ranking" if not fund_code else "",
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get fund NAV: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_bond_yield(self) -> Dict[str, Any]:
+        """获取国债收益率曲线."""
+        cache_key = "akshare:bond_yield"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.bond_china_yield, start_year="2024")
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            data = df.to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "data": data,
+                "source": "akshare",
+                " curves": ["国债收益率曲线", "国开债收益率曲线"],
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get bond yield: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_futures_main(self, symbol: str = "IF0", days: int = 60) -> Dict[str, Any]:
+        """获取期货主力合约行情."""
+        cache_key = f"akshare:futures_main:{symbol}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.futures_main_sina, symbol=symbol, start_date="19900101", end_date="20991231")
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "source": "akshare"}
+
+            data = df.tail(days).to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "symbol": symbol,
+                "data": data,
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get futures main: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    async def get_option_summary(self) -> Dict[str, Any]:
+        """获取期权市场概览 (上交所 50ETF/300ETF)."""
+        cache_key = "akshare:option_summary"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        result: Dict[str, Any] = {"data": {}, "source": "akshare"}
+
+        try:
+            df_stats = await self._run(ak.option_daily_stats_sse)
+            if df_stats is not None and not df_stats.empty:
+                data = df_stats.to_dict(orient="records")
+                for item in data:
+                    for k, v in item.items():
+                        if hasattr(v, "item"):
+                            item[k] = v.item()
+                result["data"]["daily_stats"] = data
+        except Exception as e:
+            self.logger.error(f"Failed to get option daily stats: {e}")
+
+        try:
+            df_current = await self._run(ak.option_current_day_sse)
+            if df_current is not None and not df_current.empty:
+                # Calculate PCR from call/put data
+                calls = df_current[df_current["类型"] == "认购"] if "类型" in df_current.columns else pd.DataFrame()
+                puts = df_current[df_current["类型"] == "认沽"] if "类型" in df_current.columns else pd.DataFrame()
+
+                call_volume = int(calls["成交量"].sum()) if not calls.empty and "成交量" in calls.columns else 0
+                put_volume = int(puts["成交量"].sum()) if not puts.empty and "成交量" in puts.columns else 0
+                pcr = round(put_volume / call_volume, 4) if call_volume > 0 else 0
+
+                result["data"]["current"] = {
+                    "total_contracts": len(df_current),
+                    "call_count": len(calls),
+                    "put_count": len(puts),
+                    "call_volume": call_volume,
+                    "put_volume": put_volume,
+                    "pcr_volume": pcr,
+                }
+        except Exception as e:
+            self.logger.error(f"Failed to get option current: {e}")
+
+        await self.cache.set(cache_key, result, ttl=1800)
+        return result

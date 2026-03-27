@@ -87,6 +87,16 @@ _MARKET_METHODS: Set[str] = {
     "get_relative_strength",
     "get_sector_valuation_metrics",
     "calculate_technical_indicators",
+    # New: extended data
+    "get_margin_trading",
+    "get_restricted_release",
+    "get_repurchase_info",
+    "get_index_constituents",
+    "get_index_constituent_weights",
+    "get_fund_nav",
+    "get_bond_yield",
+    "get_futures_main",
+    "get_option_summary",
 }
 
 

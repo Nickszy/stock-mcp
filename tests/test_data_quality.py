@@ -493,3 +493,82 @@ class TestCrossValidation:
         if total > 0:
             assert within_bands / total > 0.9, \
                 "BOLL mid should be within bands >90% of time"
+
+
+# ---- 9. 增量数据接口 ----
+
+class TestExtendedData:
+    """融资融券/解禁/回购/指数成分/基金/期货/期权 测试."""
+
+    @pytest.mark.asyncio
+    async def test_margin_trading(self, adapter):
+        """融资融券数据."""
+        result = await _retry(adapter.get_margin_trading, "SSE:600519", days=10)
+        assert "data" in result
+        # May return empty for some stocks due to API limitations
+        data = result.get("data", [])
+        assert isinstance(data, list), f"Should return list, got {type(data)}"
+
+    @pytest.mark.asyncio
+    async def test_restricted_release(self, adapter):
+        """限售解禁数据."""
+        result = await _retry(adapter.get_restricted_release, days=30)
+        assert "data" in result
+        # Should have summary or queue data
+        inner = result.get("data", {})
+        assert isinstance(inner, dict), f"Expected dict, got {type(inner)}"
+
+    @pytest.mark.asyncio
+    async def test_repurchase_info(self, adapter):
+        """回购数据."""
+        result = await _retry(adapter.get_repurchase_info, symbol="600519")
+        assert "data" in result
+        assert "source" in result
+
+    @pytest.mark.asyncio
+    async def test_index_constituents(self, adapter):
+        """指数成分股."""
+        result = await _retry(adapter.get_index_constituents, "000300")
+        assert "data" in result
+        data = result.get("data", [])
+        assert len(data) >= 100, f"CSI300 should have >=100 constituents, got {len(data)}"
+
+    @pytest.mark.asyncio
+    async def test_index_weights(self, adapter):
+        """指数成分权重."""
+        result = await _retry(adapter.get_index_constituent_weights, "000300")
+        assert "data" in result
+        data = result.get("data", [])
+        if data:
+            assert len(data) >= 100, f"CSI300 weights should have >=100 entries, got {len(data)}"
+
+    @pytest.mark.asyncio
+    async def test_fund_nav(self, adapter):
+        """基金净值."""
+        result = await _retry(adapter.get_fund_nav, days=10)
+        assert "data" in result
+        data = result.get("data", [])
+        assert len(data) >= 5, f"Should have fund data, got {len(data)}"
+
+    @pytest.mark.asyncio
+    async def test_futures_main(self, adapter):
+        """期货主力合约."""
+        result = await _retry(adapter.get_futures_main, "IF0", days=10)
+        assert "data" in result
+        data = result.get("data", [])
+        assert len(data) >= 5, f"Should have futures data, got {len(data)}"
+
+    @pytest.mark.asyncio
+    async def test_option_summary(self, adapter):
+        """期权市场概览."""
+        result = await _retry(adapter.get_option_summary)
+        assert "data" in result
+        inner = result.get("data", {})
+        # Should have daily_stats or current
+        assert isinstance(inner, dict)
+
+    @pytest.mark.asyncio
+    async def test_bond_yield(self, adapter):
+        """国债收益率曲线."""
+        result = await _retry(adapter.get_bond_yield)
+        assert "data" in result
