@@ -27,6 +27,7 @@ from src.server.mcp.tools.us_macro_tools import register_us_macro_tools
 from src.server.mcp.tools.sector_research_tools import register_sector_research_tools
 from src.server.mcp.tools.quantitative_tools import register_quantitative_tools
 from src.server.mcp.tools.fund_tools import register_fund_tools
+from src.server.mcp.tools.index_tools import register_index_tools
 
 
 @dataclass(frozen=True)
@@ -144,6 +145,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="基金数据 (搜索/详情/排行/经理/估值/业绩/规模)",
         count=7,
+    ),
+    ToolGroup(
+        name="index",
+        register=register_index_tools,
+        enabled=True,
+        description="A股指数数据 (指数列表/PE-PB估值/行情历史)",
+        count=3,
     ),
 ]
 

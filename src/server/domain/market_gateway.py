@@ -136,6 +136,10 @@ _MARKET_METHODS: Set[str] = {
     "get_fund_valuation",
     "get_fund_performance",
     "get_fund_scale",
+    # Index data (COL-146)
+    "get_index_list",
+    "get_index_pe_pb",
+    "get_index_performance",
 }
 
 

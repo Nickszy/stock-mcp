@@ -4545,3 +4545,132 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"get_fund_scale failed: {e}")
             return {"results": [], "source": "akshare", "error": str(e)}
 
+    # ==================================================================
+    # 指数数据 (Index Data)
+    # ==================================================================
+
+    async def get_index_list(self) -> Dict[str, Any]:
+        """获取A股指数列表：代码、名称、发布日期。"""
+        cache_key = "akshare:index_list"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.index_stock_info)
+            if df is None or df.empty:
+                return {"results": [], "total": 0, "source": "akshare"}
+
+            col_map = {
+                "index_code": "index_code",
+                "display_name": "index_name",
+                "publish_date": "publish_date",
+            }
+            df = df.rename(columns=col_map)
+            records = self._clean_records(df.to_dict(orient="records"))
+            result = {
+                "results": records, "total": len(records), "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=86400)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_index_list failed: {e}")
+            return {"results": [], "total": 0, "source": "akshare", "error": str(e)}
+
+    async def get_index_pe_pb(
+        self, symbol: str = "沪深300", limit: int = 30,
+    ) -> Dict[str, Any]:
+        """获取指数估值（PE/PB）历史数据。
+
+        Args:
+            symbol: 指数名称 (如 '沪深300', '上证50', '创业板指')
+            limit: 返回最近N条数据
+        """
+        cache_key = f"akshare:index_pe_pb:{symbol}:{limit}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.stock_index_pe_lg, symbol=symbol)
+            if df is None or df.empty:
+                return {"results": [], "symbol": symbol, "source": "akshare"}
+
+            col_map = {
+                "日期": "date",
+                "市盈率": "pe",
+                "市净率": "pb",
+            }
+            # Only rename columns that exist
+            for cn, en in col_map.items():
+                if cn in df.columns:
+                    df = df.rename(columns={cn: en})
+
+            total = len(df)
+            df = df.tail(min(limit, 100))
+            records = self._clean_records(df.to_dict(orient="records"))
+
+            result = {
+                "results": records, "total": total,
+                "returned": len(records),
+                "symbol": symbol, "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_index_pe_pb failed: {e}")
+            return {"results": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    async def get_index_performance(
+        self, symbol: str = "000300", period: str = "daily",
+        start_date: str = "", end_date: str = "", limit: int = 60,
+    ) -> Dict[str, Any]:
+        """获取指数行情数据：开盘/收盘/最高/最低/成交量/涨跌幅。
+
+        Args:
+            symbol: 指数代码 (如 '000300'=沪深300, '000001'=上证指数, '399006'=创业板指)
+            period: 周期 (daily/weekly/monthly)
+            start_date: 开始日期 (如 '20250101')
+            end_date: 结束日期 (如 '20260328')
+            limit: 返回最近N条 (default 60)
+        """
+        cache_key = f"akshare:index_perf:{symbol}:{period}:{start_date}:{end_date}:{limit}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            kwargs = {"symbol": symbol, "period": period}
+            if start_date:
+                kwargs["start_date"] = start_date
+            if end_date:
+                kwargs["end_date"] = end_date
+            df = await self._run(ak.index_zh_a_hist, **kwargs)
+            if df is None or df.empty:
+                return {"results": [], "symbol": symbol, "source": "akshare"}
+
+            col_map = {
+                "日期": "date", "开盘": "open", "收盘": "close",
+                "最高": "high", "最低": "low", "成交量": "volume",
+                "成交额": "amount", "振幅": "amplitude",
+                "涨跌幅": "change_pct", "涨跌额": "change", "换手率": "turnover",
+            }
+            df = df.rename(columns=col_map)
+
+            total = len(df)
+            df = df.tail(min(limit, 500))
+            float_fields = (
+                "open", "close", "high", "low", "volume", "amount",
+                "amplitude", "change_pct", "change", "turnover",
+            )
+            records = self._clean_records(df.to_dict(orient="records"), float_fields)
+
+            result = {
+                "results": records, "total": total,
+                "returned": len(records),
+                "symbol": symbol, "period": period,
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_index_performance failed: {e}")
+            return {"results": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
