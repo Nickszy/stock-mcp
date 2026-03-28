@@ -62,6 +62,7 @@ _TICKER_METHODS: Set[str] = {
     "get_us_revenue_segments",
     "get_us_insider_trading",
     "get_us_share_statistics",
+    "get_us_financial_health",
     # US technical
     "get_us_price_history",
     "get_us_volume_analysis",

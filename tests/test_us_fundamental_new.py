@@ -286,6 +286,91 @@ class TestUseCaseDelegates:
         assert hasattr(fu, "get_us_share_statistics")
         assert callable(fu.get_us_share_statistics)
 
+    def test_financial_health_usecase_exists(self):
+        from src.server.core.use_cases import fundamental as fu
+        assert hasattr(fu, "get_us_financial_health")
+        assert callable(fu.get_us_financial_health)
+
+
+class TestYahooAdapterFinancialHealth:
+    """Test the get_us_financial_health method."""
+
+    @pytest.fixture
+    def adapter(self, mock_cache):
+        from src.server.domain.adapters.yahoo_adapter import YahooAdapter
+        return YahooAdapter(mock_cache)
+
+    def test_health_score_computation(self, adapter):
+        """get_us_financial_health should return score with all sections."""
+        mock_info = {
+            "longName": "Apple Inc.",
+            "shortName": "AAPL",
+            "sector": "Technology",
+            "industry": "Consumer Electronics",
+            "marketCap": 3500000000000,
+            "grossMargins": 0.46,
+            "operatingMargins": 0.32,
+            "profitMargins": 0.26,
+            "returnOnEquity": 1.60,
+            "returnOnAssets": 0.28,
+            "currentRatio": 0.87,
+            "quickRatio": 0.80,
+            "debtToEquity": 1.87,
+            "trailingPE": 33.5,
+            "forwardPE": 28.0,
+            "priceToBook": 55.0,
+            "priceToSalesTrailing12Months": 9.0,
+            "enterpriseToEbitda": 24.0,
+            "pegRatio": 2.8,
+            "revenueGrowth": 0.05,
+            "earningsGrowth": 0.10,
+            "revenuePerShare": 24.5,
+            "trailingEps": 6.5,
+            "dividendYield": 0.005,
+            "payoutRatio": 0.15,
+            "dividendRate": 0.96,
+        }
+
+        mock_ticker = MagicMock()
+        mock_ticker.info = mock_info
+
+        with patch.object(adapter, "_run", _make_mock_run(mock_ticker)):
+            result = _run(adapter.get_us_financial_health("NASDAQ:AAPL"))
+
+        assert result["ticker"] == "NASDAQ:AAPL"
+        assert result["name"] == "Apple Inc."
+        assert "health_score" in result
+        assert 0 <= result["health_score"] <= 100
+        assert "grade" in result
+        assert "grade_label" in result
+        assert "profitability" in result
+        assert "liquidity" in result
+        assert "solvency" in result
+        assert "valuation" in result
+        assert "growth" in result
+        assert "dividend" in result
+        assert "score_breakdown" in result
+        assert "key_findings" in result
+        # Check specific values
+        assert result["profitability"]["net_margin"] == 26.0
+        assert result["profitability"]["roe"] == 160.0
+        assert result["liquidity"]["current_ratio"] == 0.87
+
+
+class TestRegistryFinancialHealth:
+    """Verify registry includes health tool."""
+
+    def test_us_fundamental_count_with_health(self):
+        from src.server.mcp.registry import TOOL_GROUPS
+        us_fund = [g for g in TOOL_GROUPS if g.name == "us-fundamental"]
+        assert len(us_fund) == 1
+        assert us_fund[0].count == 10
+
+    def test_financial_health_usecase_exists(self):
+        from src.server.core.use_cases import fundamental as fu
+        assert hasattr(fu, "get_us_financial_health")
+        assert callable(fu.get_us_financial_health)
+
 
 # ---- Registry Tests ----
 
@@ -297,14 +382,14 @@ class TestRegistryUpdated:
         from src.server.mcp.registry import TOOL_GROUPS
         us_fund = [g for g in TOOL_GROUPS if g.name == "us-fundamental"]
         assert len(us_fund) == 1
-        assert us_fund[0].count == 9
+        assert us_fund[0].count == 10
         assert us_fund[0].enabled is True
 
     def test_total_enabled_tool_count_increased(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        # Should be at least 83 (original 78 + 5 new)
-        assert total >= 83, f"Expected >= 83, got {total}"
+        # Should be at least 84 (original 78 + 6 new: 5 + health score)
+        assert total >= 84, f"Expected >= 84, got {total}"
 
 
 # ---- ComponentType Tests ----

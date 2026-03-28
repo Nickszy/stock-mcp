@@ -1793,3 +1793,340 @@ class YahooAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.error(f"get_us_share_statistics failed for {ticker}: {e}")
             raise ValueError(f"get_us_share_statistics failed for {ticker}: {e}")
+
+    # ------------------------------------------------------------------
+    # US Financial Health Score
+    # ------------------------------------------------------------------
+    async def get_us_financial_health(self, ticker: str) -> Dict[str, Any]:
+        """Compute comprehensive financial health score for a US stock.
+
+        Aggregates data from income statement, balance sheet, cash flow
+        and the info dict to compute profitability, liquidity, solvency,
+        efficiency and growth ratios. Returns a composite 0-100 score
+        with letter grade and key findings.
+        """
+        cache_key = f"yahoo:us_health:{ticker}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        ticker_norm = self._to_yf_ticker(ticker)
+        try:
+            ticker_obj = await self._run(yf.Ticker, ticker_norm)
+
+            def _fetch():
+                info = ticker_obj.info
+                return info
+
+            info = await self._run(_fetch)
+            if not info or not isinstance(info, dict):
+                raise ValueError(f"No info data for {ticker}")
+
+            import math
+
+            def _safe(key):
+                v = info.get(key)
+                if v is None:
+                    return None
+                try:
+                    f = float(v)
+                    return None if math.isnan(f) or math.isinf(f) else f
+                except Exception:
+                    return None
+
+            # ------------------------------------------------------------------
+            # 1. Profitability ratios
+            # ------------------------------------------------------------------
+            gross_margin = _safe("grossMargins")
+            operating_margin = _safe("operatingMargins")
+            net_margin = _safe("profitMargins")
+            roe = _safe("returnOnEquity")
+            roa = _safe("returnOnAssets")
+
+            profitability = {
+                "gross_margin": round(gross_margin * 100, 1) if gross_margin else None,
+                "operating_margin": round(operating_margin * 100, 1) if operating_margin else None,
+                "net_margin": round(net_margin * 100, 1) if net_margin else None,
+                "roe": round(roe * 100, 1) if roe else None,
+                "roa": round(roa * 100, 1) if roa else None,
+            }
+
+            # ------------------------------------------------------------------
+            # 2. Liquidity ratios
+            # ------------------------------------------------------------------
+            current_ratio = _safe("currentRatio")
+            quick_ratio = _safe("quickRatio")
+
+            liquidity = {
+                "current_ratio": round(current_ratio, 2) if current_ratio else None,
+                "quick_ratio": round(quick_ratio, 2) if quick_ratio else None,
+            }
+
+            # ------------------------------------------------------------------
+            # 3. Solvency / Leverage ratios
+            # ------------------------------------------------------------------
+            debt_to_equity = _safe("debtToEquity")
+            interest_coverage = None
+            # Try to compute from raw data
+            operating_income = _safe("operatingIncome") or _safe("ebit")
+            interest_expense = _safe("interestExpense")
+            if operating_income and interest_expense and interest_expense != 0:
+                interest_coverage = round(operating_income / abs(interest_expense), 1)
+
+            solvency = {
+                "debt_to_equity": round(debt_to_equity, 2) if debt_to_equity else None,
+                "interest_coverage": interest_coverage,
+            }
+
+            # ------------------------------------------------------------------
+            # 4. Valuation metrics
+            # ------------------------------------------------------------------
+            pe_ttm = _safe("trailingPE")
+            pe_forward = _safe("forwardPE")
+            pb = _safe("priceToBook")
+            ps = _safe("priceToSalesTrailing12Months")
+            ev_ebitda = _safe("enterpriseToEbitda")
+            peg = _safe("pegRatio")
+
+            valuation = {
+                "pe_ttm": round(pe_ttm, 1) if pe_ttm else None,
+                "pe_forward": round(pe_forward, 1) if pe_forward else None,
+                "pb": round(pb, 2) if pb else None,
+                "ps": round(ps, 2) if ps else None,
+                "ev_ebitda": round(ev_ebitda, 1) if ev_ebitda else None,
+                "peg": round(peg, 2) if peg else None,
+            }
+
+            # ------------------------------------------------------------------
+            # 5. Growth rates
+            # ------------------------------------------------------------------
+            revenue_growth = _safe("revenueGrowth")
+            earnings_growth = _safe("earningsGrowth")
+            revenue_per_share = _safe("revenuePerShare")
+            earnings_per_share = _safe("trailingEps")
+
+            growth = {
+                "revenue_growth_yoy": round(revenue_growth * 100, 1) if revenue_growth else None,
+                "earnings_growth_yoy": round(earnings_growth * 100, 1) if earnings_growth else None,
+                "revenue_per_share": round(revenue_per_share, 2) if revenue_per_share else None,
+                "eps_ttm": round(earnings_per_share, 2) if earnings_per_share else None,
+            }
+
+            # ------------------------------------------------------------------
+            # 6. Dividend info
+            # ------------------------------------------------------------------
+            div_yield = _safe("dividendYield")
+            payout_ratio = _safe("payoutRatio")
+            div_rate = _safe("dividendRate")
+
+            dividend = {
+                "yield": round(div_yield * 100, 2) if div_yield else None,
+                "payout_ratio": round(payout_ratio * 100, 1) if payout_ratio else None,
+                "annual_rate": round(div_rate, 2) if div_rate else None,
+            }
+
+            # ------------------------------------------------------------------
+            # 7. Compute composite health score (0-100)
+            # ------------------------------------------------------------------
+            score_components = []
+            max_score = 0
+
+            # Profitability (weight: 30)
+            profit_weight = 30
+            profit_score = 0
+            if net_margin is not None:
+                if net_margin > 0.20:
+                    profit_score += 10
+                elif net_margin > 0.10:
+                    profit_score += 7
+                elif net_margin > 0.05:
+                    profit_score += 4
+                elif net_margin > 0:
+                    profit_score += 2
+            if roe is not None:
+                if 0.10 < roe < 0.40:
+                    profit_score += 10
+                elif 0.05 < roe < 0.50:
+                    profit_score += 6
+                elif roe > 0:
+                    profit_score += 3
+            if operating_margin is not None:
+                if operating_margin > 0.20:
+                    profit_score += 10
+                elif operating_margin > 0.10:
+                    profit_score += 7
+                elif operating_margin > 0:
+                    profit_score += 3
+            score_components.append(("profitability", profit_score, profit_weight))
+            max_score += profit_weight
+
+            # Liquidity (weight: 15)
+            liq_weight = 15
+            liq_score = 0
+            if current_ratio is not None:
+                if 1.5 <= current_ratio <= 3.0:
+                    liq_score += 8
+                elif 1.0 <= current_ratio <= 5.0:
+                    liq_score += 5
+                elif current_ratio > 0:
+                    liq_score += 2
+            if quick_ratio is not None:
+                if 1.0 <= quick_ratio <= 2.5:
+                    liq_score += 7
+                elif 0.5 <= quick_ratio <= 4.0:
+                    liq_score += 4
+            score_components.append(("liquidity", liq_score, liq_weight))
+            max_score += liq_weight
+
+            # Solvency (weight: 20)
+            solv_weight = 20
+            solv_score = 0
+            if debt_to_equity is not None:
+                if debt_to_equity < 0.5:
+                    solv_score += 10
+                elif debt_to_equity < 1.0:
+                    solv_score += 8
+                elif debt_to_equity < 2.0:
+                    solv_score += 5
+                elif debt_to_equity < 3.0:
+                    solv_score += 2
+            if interest_coverage is not None:
+                if interest_coverage > 10:
+                    solv_score += 10
+                elif interest_coverage > 5:
+                    solv_score += 7
+                elif interest_coverage > 2:
+                    solv_score += 4
+                elif interest_coverage > 0:
+                    solv_score += 1
+            score_components.append(("solvency", solv_score, solv_weight))
+            max_score += solv_weight
+
+            # Growth (weight: 20)
+            growth_weight = 20
+            growth_score = 0
+            if revenue_growth is not None:
+                if revenue_growth > 0.20:
+                    growth_score += 10
+                elif revenue_growth > 0.10:
+                    growth_score += 8
+                elif revenue_growth > 0:
+                    growth_score += 5
+                elif revenue_growth > -0.10:
+                    growth_score += 2
+            if earnings_growth is not None:
+                if earnings_growth > 0.20:
+                    growth_score += 10
+                elif earnings_growth > 0.10:
+                    growth_score += 7
+                elif earnings_growth > 0:
+                    growth_score += 4
+                elif earnings_growth > -0.10:
+                    growth_score += 2
+            score_components.append(("growth", growth_score, growth_weight))
+            max_score += growth_weight
+
+            # Valuation reasonableness (weight: 15)
+            val_weight = 15
+            val_score = 0
+            if pe_ttm is not None and pe_ttm > 0:
+                if 8 <= pe_ttm <= 25:
+                    val_score += 5
+                elif 25 < pe_ttm <= 40:
+                    val_score += 3
+                elif pe_ttm <= 50:
+                    val_score += 1
+            if peg is not None and peg > 0:
+                if peg < 1.0:
+                    val_score += 5
+                elif peg < 2.0:
+                    val_score += 3
+                elif peg < 3.0:
+                    val_score += 1
+            if pb is not None and pb > 0:
+                if pb < 3.0:
+                    val_score += 5
+                elif pb < 6.0:
+                    val_score += 3
+                elif pb < 10.0:
+                    val_score += 1
+            score_components.append(("valuation", val_score, val_weight))
+            max_score += val_weight
+
+            # Calculate total score
+            total_score = sum(s for _, s, _ in score_components)
+            health_score = round(total_score / max_score * 100, 1) if max_score > 0 else 0
+
+            # Letter grade
+            if health_score >= 85:
+                grade = "A+"
+                label = "极优"
+            elif health_score >= 75:
+                grade = "A"
+                label = "优秀"
+            elif health_score >= 65:
+                grade = "B+"
+                label = "良好"
+            elif health_score >= 55:
+                grade = "B"
+                label = "中等偏上"
+            elif health_score >= 45:
+                grade = "B-"
+                label = "中等"
+            elif health_score >= 35:
+                grade = "C+"
+                label = "中等偏下"
+            elif health_score >= 25:
+                grade = "C"
+                label = "较弱"
+            else:
+                grade = "D"
+                label = "风险较高"
+
+            # Key findings
+            findings = []
+            if net_margin and net_margin > 0.15:
+                findings.append(f"高净利润率({net_margin*100:.1f}%)")
+            elif net_margin and net_margin < 0.05:
+                findings.append(f"低净利润率({net_margin*100:.1f}%)")
+            if roe and roe > 0.20:
+                findings.append(f"高ROE({roe*100:.1f}%)")
+            if debt_to_equity and debt_to_equity > 2.0:
+                findings.append(f"高负债率(D/E={debt_to_equity:.1f})")
+            elif debt_to_equity and debt_to_equity < 0.3:
+                findings.append(f"低负债率(D/E={debt_to_equity:.1f})")
+            if revenue_growth and revenue_growth > 0.20:
+                findings.append(f"高营收增长({revenue_growth*100:.1f}%)")
+            elif revenue_growth and revenue_growth < -0.10:
+                findings.append(f"营收下滑({revenue_growth*100:.1f}%)")
+            if current_ratio and current_ratio < 1.0:
+                findings.append(f"流动性风险(流动比率={current_ratio:.1f})")
+            if div_yield and div_yield > 0.04:
+                findings.append(f"高股息率({div_yield*100:.1f}%)")
+
+            result = {
+                "ticker": ticker,
+                "name": info.get("longName") or info.get("shortName", ""),
+                "sector": info.get("sector", ""),
+                "industry": info.get("industry", ""),
+                "market_cap": _safe("marketCap"),
+                "health_score": health_score,
+                "grade": grade,
+                "grade_label": label,
+                "score_breakdown": {
+                    name: {"score": s, "max": m, "pct": round(s / m * 100, 0) if m > 0 else 0}
+                    for name, s, m in score_components
+                },
+                "profitability": profitability,
+                "liquidity": liquidity,
+                "solvency": solvency,
+                "valuation": valuation,
+                "growth": growth,
+                "dividend": dividend,
+                "key_findings": findings,
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_us_financial_health failed for {ticker}: {e}")
+            raise ValueError(f"get_us_financial_health failed for {ticker}: {e}")

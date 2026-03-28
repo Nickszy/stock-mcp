@@ -67,6 +67,7 @@ get_us_analyst_recommendations = _gw_usecase("get_us_analyst_recommendations")
 get_us_revenue_segments = _gw_usecase("get_us_revenue_segments")
 get_us_insider_trading = _gw_usecase("get_us_insider_trading")
 get_us_share_statistics = _gw_usecase("get_us_share_statistics")
+get_us_financial_health = _gw_usecase("get_us_financial_health")
 
 
 # ---------------------------------------------------------------------------

@@ -783,6 +783,79 @@ def register_us_fundamental_tools(mcp: FastMCP):
             )
             return create_artifact_response(summary=summary, artifact=artifact)
 
+    # ------------------------------------------------------------------
+    # get_us_financial_health
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"us-fundamental", "health-score"})
+    async def get_us_financial_health(
+        symbol: str,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get comprehensive financial health score for a US stock.
+
+        Computes profitability (margins, ROE, ROA), liquidity (current/quick ratio),
+        solvency (debt-to-equity, interest coverage), growth (revenue/earnings growth),
+        and valuation (PE, PEG, PB) metrics. Returns a composite 0-100 health score
+        with letter grade and key findings.
+
+        Use this as the primary tool for answering "Is this stock financially healthy?"
+        or "What is the financial quality of this company?".
+
+        Args:
+            symbol: US stock ticker. Format: EXCHANGE:SYMBOL
+                Examples: NASDAQ:AAPL, NYSE:TSLA, NASDAQ:NVDA
+            ctx: FastMCP Context
+
+        Returns:
+            ArtifactResponse with health score breakdown and LLM summary
+        """
+        if ctx:
+            await ctx.info(f"🏥 计算财务健康评分: {symbol}")
+        try:
+            logger.info("MCP tool: get_us_financial_health", symbol=symbol)
+            data = await fundamental_use_cases.get_us_financial_health(symbol)
+
+            name = data.get("name", symbol)
+            score = data.get("health_score", 0)
+            grade = data.get("grade", "?")
+            label = data.get("grade_label", "")
+            findings = data.get("key_findings", [])
+            breakdown = data.get("score_breakdown", {})
+
+            # Build summary
+            findings_str = "; ".join(findings[:4]) if findings else "无明显异常"
+            summary = (
+                f"{name} ({symbol}) 财务健康: {score}分({grade} {label})"
+                f" | 关键发现: {findings_str}"
+            )
+
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.US_COMPANY_PROFILE.value,
+                name=f"{symbol} 财务健康评分",
+                content=data,
+                description=summary,
+                metadata={"ticker": symbol, "health_score": score, "grade": grade},
+                visible_to_llm=True,
+                display_in_report=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except SymbolResolutionError as e:
+            return create_symbol_error_response(
+                e, ComponentType.US_COMPANY_PROFILE, f"{symbol} 财务健康"
+            )
+        except Exception as e:
+            logger.error("get_us_financial_health error", symbol=symbol, error=str(e))
+            summary = f"获取 {symbol} 财务健康评分失败: {e}"
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.US_COMPANY_PROFILE.value,
+                name=f"{symbol} 财务健康",
+                content={"error": str(e)},
+                description=summary,
+                visible_to_llm=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
