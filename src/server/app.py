@@ -30,6 +30,10 @@ from src.server.api.routes import (
     fundamental_router,
     money_flow_router,
     fact_pack_router,
+    fund_router,
+    etf_router,
+    index_router,
+    quantitative_router,
 )
 from src.server.utils.logger import logger
 from src.server.middleware import JsonArgumentsFixMiddleware
@@ -181,6 +185,10 @@ def create_app():
     app.include_router(fundamental_router, tags=["Fundamental"])
     app.include_router(money_flow_router, tags=["Money Flow"])
     app.include_router(fact_pack_router, tags=["Fact Pack"])
+    app.include_router(fund_router, tags=["Fund Data"])
+    app.include_router(etf_router, tags=["ETF Data"])
+    app.include_router(index_router, tags=["Index Data"])
+    app.include_router(quantitative_router, tags=["Quantitative Analysis"])
 
     logger.info("✅ RESTful API routes registered")
     logger.info("   - Health check: /health")
@@ -189,6 +197,11 @@ def create_app():
     logger.info("   - News: /api/v1/news/*")
     logger.info("   - Fundamental: /api/v1/fundamental/*")
     logger.info("   - Money Flow: /api/v1/money-flow/*")
+    logger.info("   - Fact Pack: /api/v1/fact-pack/*")
+    logger.info("   - Fund Data: /api/v1/fund/*")
+    logger.info("   - ETF Data: /api/v1/etf/*")
+    logger.info("   - Index Data: /api/v1/index/*")
+    logger.info("   - Quantitative: /api/v1/quant/*")
 
     # 6. Mount MCP protocol endpoint
     if mcp_app:

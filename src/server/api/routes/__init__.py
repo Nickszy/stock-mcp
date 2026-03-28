@@ -7,6 +7,10 @@ from .news import router as news_router
 from .fundamental import router as fundamental_router
 from .money_flow import router as money_flow_router
 from .fact_pack import router as fact_pack_router
+from .fund import router as fund_router
+from .etf import router as etf_router
+from .index import router as index_router
+from .quantitative import router as quantitative_router
 
 __all__ = [
     "market_data_router",
@@ -15,4 +19,8 @@ __all__ = [
     "fundamental_router",
     "money_flow_router",
     "fact_pack_router",
+    "fund_router",
+    "etf_router",
+    "index_router",
+    "quantitative_router",
 ]
