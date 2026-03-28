@@ -2985,7 +2985,7 @@ class AkshareAdapter(BaseDataAdapter):
             if not records:
                 return {"data": [], "sector": sector_name, "source": "akshare"}
 
-            # Calculate percentile
+            # Calculate percentile (fact-only, no analytical labels)
             pe_values = [r["pe"] for r in records if r["pe"] is not None]
             if not pe_values:
                 return {"data": records, "sector": sector_name, "source": "akshare"}
@@ -2995,18 +2995,6 @@ class AkshareAdapter(BaseDataAdapter):
             rank = sum(1 for x in sorted_pe if x <= current_pe)
             percentile = round(rank / len(sorted_pe) * 100, 2)
 
-            # Determine level
-            if percentile >= 80:
-                level = "高估"
-            elif percentile >= 60:
-                level = "偏高"
-            elif percentile >= 40:
-                level = "合理"
-            elif percentile >= 20:
-                level = "偏低"
-            else:
-                level = "低估"
-
             result = {
                 "sector": sector_name,
                 "source": "akshare",
@@ -3014,7 +3002,6 @@ class AkshareAdapter(BaseDataAdapter):
                     "pe": current_pe,
                     "pb": records[-1].get("pb"),
                     "pe_percentile": percentile,
-                    "valuation_level": level,
                 },
                 "summary": {
                     "total_stocks": len(records),
@@ -5937,12 +5924,41 @@ class AkshareAdapter(BaseDataAdapter):
         # --- 6. Index / Sector (指数/板块行情) ---
         try:
             sector = await self.get_sector_trend()
-            if sector and "error" not in sector:
-                facts["index"] = {
-                    k: v for k, v in sector.items()
-                    if k not in ("source", "error")
-                }
-                coverage["index"] = "partial"
+            index_data: Dict[str, Any] = {
+                k: v for k, v in sector.items()
+                if k not in ("source", "error")
+            } if sector and "error" not in sector else {}
+
+            # Add sector valuation percentile if we can determine the industry
+            try:
+                cm_df = await self._run(ak.stock_individual_info_em, symbol=symbol)
+                if cm_df is not None and not cm_df.empty:
+                    industry = None
+                    for _, row in cm_df.iterrows():
+                        if str(row.get("item", "")) == "行业":
+                            industry = str(row.get("value", ""))
+                            break
+                    if industry:
+                        sv = await self.get_sector_pe_pb_historical(sector_name=industry)
+                        if sv and "error" not in sv and "current" in sv:
+                            # Only keep fact fields, strip analytical labels
+                            sv_current = sv.get("current", {})
+                            index_data["sector_valuation"] = {
+                                "industry": industry,
+                                "pe": sv_current.get("pe"),
+                                "pb": sv_current.get("pb"),
+                                "pe_percentile": sv_current.get("pe_percentile"),
+                                "total_stocks": sv.get("summary", {}).get("total_stocks"),
+                                "pe_mean": sv.get("summary", {}).get("pe_mean"),
+                                "pb_mean": sv.get("summary", {}).get("pb_mean"),
+                            }
+                            source_trace["sector_valuation"] = {"provider": "akshare", "api": "get_sector_pe_pb_historical"}
+            except Exception:
+                pass
+
+            if index_data:
+                facts["index"] = index_data
+                coverage["index"] = "partial" if "sector_valuation" not in index_data else "complete"
                 source_trace["index"] = {"provider": "akshare"}
             else:
                 coverage["index"] = "missing"
