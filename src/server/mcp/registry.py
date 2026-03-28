@@ -28,6 +28,7 @@ from src.server.mcp.tools.sector_research_tools import register_sector_research_
 from src.server.mcp.tools.quantitative_tools import register_quantitative_tools
 from src.server.mcp.tools.fund_tools import register_fund_tools
 from src.server.mcp.tools.index_tools import register_index_tools
+from src.server.mcp.tools.etf_tools import register_etf_tools
 
 
 @dataclass(frozen=True)
@@ -151,6 +152,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         register=register_index_tools,
         enabled=True,
         description="A股指数数据 (指数列表/PE-PB估值/行情历史)",
+        count=3,
+    ),
+    ToolGroup(
+        name="etf",
+        register=register_etf_tools,
+        enabled=True,
+        description="A股ETF数据 (列表/详情/行情历史)",
         count=3,
     ),
 ]

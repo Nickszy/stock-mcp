@@ -4674,3 +4674,176 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"get_index_performance failed: {e}")
             return {"results": [], "symbol": symbol, "source": "akshare", "error": str(e)}
 
+    # ------------------------------------------------------------------
+    # ETF data methods
+    # ------------------------------------------------------------------
+
+    async def get_etf_list(self, etf_type: str = "", limit: int = 50) -> Dict[str, Any]:
+        """Get ETF list with real-time quotes from East Money.
+
+        Args:
+            etf_type: Filter by type (e.g. '股票型', '债券型', '商品型', '跨境型')
+            limit: Max results (default 50, max 500)
+        """
+        cache_key = f"etf_list:{etf_type}:{limit}"
+        try:
+            cached = await self.cache.get(cache_key)
+            if cached:
+                return cached
+
+            df = await self._run(ak.fund_etf_spot_em)
+            if df is None or df.empty:
+                return {"results": [], "total": 0, "returned": 0, "source": "akshare"}
+
+            # Column mapping (Chinese → English)
+            col_map = {
+                "代码": "etf_code", "名称": "etf_name", "最新价": "price",
+                "IOPV实时估值": "iopv", "涨跌额": "change", "涨跌幅": "change_pct",
+                "成交量": "volume", "成交额": "amount", "开盘价": "open",
+                "最高价": "high", "最低价": "low", "昨收": "prev_close",
+                "换手率": "turnover", "流通市值": "circulating_market_cap",
+                "总市值": "total_market_cap",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+
+            # Apply type filter if provided
+            if etf_type:
+                if "etf_name" in df.columns:
+                    type_keywords = {
+                        "股票型": ["ETF", "指数"],
+                        "债券型": ["债", "国债", "国开"],
+                        "商品型": ["黄金", "原油", "商品"],
+                        "跨境型": ["纳斯达克", "标普", "恒生", "日经", "德国", "QDII"],
+                    }
+                    keywords = type_keywords.get(etf_type, [etf_type])
+                    mask = df["etf_name"].apply(
+                        lambda x: any(kw in str(x) for kw in keywords) if pd.notna(x) else False
+                    )
+                    df = df[mask]
+
+            total = len(df)
+            df = df.head(min(limit, 500))
+            float_fields = (
+                "price", "change", "change_pct", "volume", "amount",
+                "open", "high", "low", "prev_close", "turnover",
+            )
+            records = self._clean_records(df.to_dict(orient="records"), float_fields)
+
+            result = {
+                "results": records, "total": total,
+                "returned": len(records),
+                "etf_type": etf_type or "all",
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_etf_list failed: {e}")
+            return {"results": [], "total": 0, "source": "akshare", "error": str(e)}
+
+    async def get_etf_detail(self, symbol: str) -> Dict[str, Any]:
+        """Get ETF detail info from East Money fund daily data.
+
+        Args:
+            symbol: ETF code (e.g. '510300', '159919')
+        """
+        cache_key = f"etf_detail:{symbol}"
+        try:
+            cached = await self.cache.get(cache_key)
+            if cached:
+                return cached
+
+            df = await self._run(ak.fund_etf_fund_daily_em)
+            if df is None or df.empty:
+                return {"results": [], "source": "akshare", "error": "No ETF data"}
+
+            # Filter for the specific ETF
+            code_col = [c for c in df.columns if "代码" in c]
+            if code_col:
+                target_df = df[df[code_col[0]].astype(str) == symbol]
+            else:
+                target_df = df[df.iloc[:, 0].astype(str) == symbol]
+
+            if target_df.empty:
+                return {"results": [], "symbol": symbol, "source": "akshare", "error": "ETF not found"}
+
+            row = target_df.iloc[0]
+            # Build detail dict from available columns
+            detail = {}
+            for col in df.columns:
+                val = row[col]
+                if pd.isna(val):
+                    detail[col] = None
+                else:
+                    detail[col] = val
+
+            result = {
+                "symbol": symbol, "detail": detail,
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=600)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_etf_detail failed: {e}")
+            return {"results": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    async def get_etf_performance(
+        self, symbol: str = "510300",
+        period: str = "daily",
+        start_date: str = "",
+        end_date: str = "",
+        limit: int = 60,
+    ) -> Dict[str, Any]:
+        """Get ETF price history with OHLCV data.
+
+        Args:
+            symbol: ETF code (e.g. '510300')
+            period: 'daily', 'weekly', 'monthly'
+            start_date: Start date (e.g. '20260101')
+            end_date: End date (e.g. '20260328')
+            limit: Max results (default 60, max 500)
+        """
+        cache_key = f"etf_perf:{symbol}:{period}:{start_date}:{end_date}:{limit}"
+        try:
+            cached = await self.cache.get(cache_key)
+            if cached:
+                return cached
+
+            df = await self._run(
+                ak.fund_etf_hist_em,
+                symbol=symbol, period=period,
+                start_date=start_date, end_date=end_date,
+                adjust="qfq",
+            )
+            if df is None or df.empty:
+                return {"results": [], "symbol": symbol, "source": "akshare"}
+
+            # Column mapping
+            col_map = {
+                "日期": "date", "开盘": "open", "收盘": "close",
+                "最高": "high", "最低": "low", "成交量": "volume",
+                "成交额": "amount", "振幅": "amplitude",
+                "涨跌幅": "change_pct", "涨跌额": "change", "换手率": "turnover",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+
+            total = len(df)
+            df = df.tail(min(limit, 500))
+            float_fields = (
+                "open", "close", "high", "low", "change_pct",
+                "change", "amplitude", "turnover",
+            )
+            records = self._clean_records(df.to_dict(orient="records"), float_fields)
+
+            result = {
+                "results": records, "total": total,
+                "returned": len(records),
+                "symbol": symbol, "period": period,
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_etf_performance failed: {e}")
+            return {"results": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+

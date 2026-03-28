@@ -140,6 +140,10 @@ _MARKET_METHODS: Set[str] = {
     "get_index_list",
     "get_index_pe_pb",
     "get_index_performance",
+    # ETF data
+    "get_etf_list",
+    "get_etf_detail",
+    "get_etf_performance",
 }
 
 
