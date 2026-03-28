@@ -412,6 +412,27 @@ async def calculate_support_resistance(
 
 
 @router.post(
+    "/signals/technical",
+    summary="获取确定性技术信号",
+    description="基于 RSI/MACD/布林带生成事实型技术信号 (超买/超卖/金叉/死叉/突破), 不做分析结论",
+)
+async def get_technical_signals(
+    symbol: str = Query(..., description="资产代码: SSE:600519, NASDAQ:AAPL"),
+) -> Dict[str, Any]:
+    """获取确定性技术信号"""
+    try:
+        logger.info("API: get_technical_signals called", symbol=symbol)
+        result = await technical_use_cases.get_technical_signals(raw_symbol=symbol)
+        return rest_response(data=result, symbol=symbol)
+    except Exception as e:
+        logger.error(f"API error in get_technical_signals: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get technical signals: {str(e)}"
+        )
+
+
+@router.post(
     "/report",
     summary="获取市场综合报告",
     description="获取资产的综合市场报告，包括价格和基本信息",

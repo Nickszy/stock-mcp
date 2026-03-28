@@ -86,3 +86,4 @@ async def generate_trading_signal(
 get_us_price_history = _gw_usecase("get_us_price_history")
 get_us_volume_analysis = _gw_usecase("get_us_volume_analysis")
 get_us_sector_etf_analysis = _gw_usecase("get_us_sector_etf_analysis")
+get_technical_signals = _gw_usecase("get_technical_signals")

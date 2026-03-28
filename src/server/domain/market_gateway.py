@@ -651,6 +651,11 @@ class MarketGateway:
             end_date=end_date,
         )
 
+    async def get_technical_signals(self, raw_symbol: str) -> Dict[str, Any]:
+        """Get deterministic technical signals (RSI/MACD/BOLL) for a symbol."""
+        resolved = await self.resolve_ticker(raw_symbol)
+        return await self._dispatch_ticker("get_technical_signals", resolved)
+
     async def get_north_bound_flow(self, days: int = 30) -> Dict[str, Any]:
         """North-bound flow with Tushare preference."""
         if DataSource.TUSHARE in self.adapters:
