@@ -48,6 +48,12 @@ class ComponentType(str, Enum):
     US_VOLUME_ANALYSIS = "us_volume_analysis"
     US_SECTOR_ETF = "us_sector_etf"
     US_NEWS_SENTIMENT = "us_news_sentiment"
+    # New US fundamental components
+    US_COMPANY_PROFILE = "us_company_profile"
+    US_ANALYST_RECOMMENDATIONS = "us_analyst_recommendations"
+    US_REVENUE_SEGMENTS = "us_revenue_segments"
+    US_INSIDER_TRADING = "us_insider_trading"
+    US_SHARE_STATISTICS = "us_share_statistics"
     # 其他
     OTHER = "other"
 

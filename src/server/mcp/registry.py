@@ -98,8 +98,8 @@ TOOL_GROUPS: List[ToolGroup] = [
         name="us-fundamental",
         register=register_us_fundamental_tools,
         enabled=True,
-        description="美股基本面 (EPS历史/现金流/估值/机构持仓)",
-        count=4,
+        description="美股基本面 (公司概况/EPS/现金流/估值/机构持仓/分析师评级/收入构成/内部人交易/做空数据)",
+        count=9,
     ),
     ToolGroup(
         name="us-technical",

@@ -1315,3 +1315,481 @@ class YahooAdapter(BaseDataAdapter):
             raise ValueError(
                 f"get_us_sector_etf_analysis failed for {sector_name}: {e}"
             )
+
+    # ------------------------------------------------------------------
+    # US Company Profile
+    # ------------------------------------------------------------------
+    async def get_us_company_profile(self, ticker: str) -> Dict[str, Any]:
+        """Fetch comprehensive company profile from Yahoo Finance."""
+        cache_key = f"yahoo:us_profile:{ticker}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        ticker_norm = self._to_yf_ticker(ticker)
+        try:
+            ticker_obj = await self._run(yf.Ticker, ticker_norm)
+
+            def _fetch():
+                return ticker_obj.info
+
+            info = await self._run(_fetch)
+            if not info or not isinstance(info, dict):
+                raise ValueError(f"No info for {ticker}")
+
+            import math
+
+            def _safe(key):
+                v = info.get(key)
+                if v is None:
+                    return None
+                try:
+                    f = float(v)
+                    return None if math.isnan(f) or math.isinf(f) else f
+                except Exception:
+                    return v
+
+            result = {
+                "ticker": ticker,
+                "name": info.get("longName") or info.get("shortName", ""),
+                "sector": info.get("sector", ""),
+                "industry": info.get("industry", ""),
+                "country": info.get("country", ""),
+                "city": info.get("city", ""),
+                "state": info.get("state", ""),
+                "address": info.get("address1", ""),
+                "website": info.get("website", ""),
+                "phone": info.get("phone", ""),
+                "employees": _safe("fullTimeEmployees"),
+                "description": info.get("longBusinessSummary", ""),
+                "market_cap": _safe("marketCap"),
+                "enterprise_value": _safe("enterpriseValue"),
+                "exchange": info.get("exchange", ""),
+                "quote_type": info.get("quoteType", ""),
+                "currency": info.get("currency", ""),
+                "founded_year": info.get("companyOfficers", [{}])
+                and info.get("maxAge"),
+                "ceo": "",
+                # Key financial snapshot
+                "pe_ttm": _safe("trailingPE"),
+                "pe_forward": _safe("forwardPE"),
+                "pb": _safe("priceToBook"),
+                "dividend_yield": _safe("dividendYield"),
+                "beta": _safe("beta"),
+                "52week_high": _safe("fiftyTwoWeekHigh"),
+                "52week_low": _safe("fiftyTwoWeekLow"),
+                "50day_ma": _safe("fiftyDayAverage"),
+                "200day_ma": _safe("twoHundredDayAverage"),
+                "avg_volume": _safe("averageVolume"),
+                "shares_outstanding": _safe("sharesOutstanding"),
+                "float_shares": _safe("floatShares"),
+            }
+
+            # Extract CEO from company officers
+            officers = info.get("companyOfficers") or []
+            for officer in officers:
+                title = str(officer.get("title", "")).lower()
+                if "ceo" in title or "chief executive" in title:
+                    result["ceo"] = officer.get("name", "")
+                    break
+
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_us_company_profile failed for {ticker}: {e}")
+            raise ValueError(f"get_us_company_profile failed for {ticker}: {e}")
+
+    # ------------------------------------------------------------------
+    # US Analyst Recommendations
+    # ------------------------------------------------------------------
+    async def get_us_analyst_recommendations(self, ticker: str) -> Dict[str, Any]:
+        """Fetch analyst recommendations and upgrade/downgrade history."""
+        cache_key = f"yahoo:us_analyst:{ticker}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        ticker_norm = self._to_yf_ticker(ticker)
+        try:
+            ticker_obj = await self._run(yf.Ticker, ticker_norm)
+
+            def _fetch():
+                rec = ticker_obj.recommendations
+                summary = ticker_obj.recommendations_summary
+                upgrades = ticker_obj.upgrades_downgrades
+                info = ticker_obj.info
+                return rec, summary, upgrades, info
+
+            rec_df, summary_df, upgrades_df, info = await self._run(_fetch)
+
+            # Target price from info
+            target_price = None
+            if info and isinstance(info, dict):
+                target_price = info.get("targetHighPrice")
+                target_low = info.get("targetLowPrice")
+                target_mean = info.get("targetMeanPrice")
+                target_median = info.get("targetMedianPrice")
+                current_price = info.get("currentPrice")
+                num_analysts = info.get("numberOfAnalystOpinions")
+            else:
+                target_low = target_mean = target_median = current_price = None
+                num_analysts = None
+
+            # Parse recommendations
+            recommendations = []
+            if rec_df is not None and not rec_df.empty:
+                for _, row in rec_df.tail(10).iterrows():
+                    period = row.get("period") or row.get("To Period") or ""
+                    recommendations.append(
+                        {
+                            "period": str(period)[:10] if period else "",
+                            "strong_buy": int(row.get("strongBuy", 0)),
+                            "buy": int(row.get("buy", 0)),
+                            "hold": int(row.get("hold", 0)),
+                            "sell": int(row.get("sell", 0)),
+                            "strong_sell": int(row.get("strongSell", 0)),
+                        }
+                    )
+
+            # Parse summary
+            summary_data = {}
+            if summary_df is not None and not summary_df.empty:
+                for _, row in summary_df.iterrows():
+                    summary_data = {
+                        "strong_buy": int(row.get("strongBuy", 0)),
+                        "buy": int(row.get("buy", 0)),
+                        "hold": int(row.get("hold", 0)),
+                        "sell": int(row.get("sell", 0)),
+                        "strong_sell": int(row.get("strongSell", 0)),
+                    }
+
+            # Parse upgrades/downgrades (last 30 entries)
+            upgrade_history = []
+            if upgrades_df is not None and not upgrades_df.empty:
+                for _, row in upgrades_df.tail(30).iterrows():
+                    grade_date = row.get("GradeDate") or row.get("Date")
+                    firm = row.get("Firm") or row.get("firm") or ""
+                    from_grade = row.get("From Grade") or row.get("fromGrade") or ""
+                    to_grade = row.get("To Grade") or row.get("toGrade") or ""
+                    action = row.get("Action") or ""
+
+                    # Map action to Chinese labels for AI readability
+                    action_map = {
+                        "up": "上调",
+                        "down": "下调",
+                        "main": "维持",
+                        "reit": "维持",
+                        "init": "首次覆盖",
+                    }
+                    action_label = action_map.get(str(action).lower(), str(action))
+
+                    upgrade_history.append(
+                        {
+                            "date": str(grade_date)[:10] if grade_date else "",
+                            "firm": str(firm),
+                            "from_grade": str(from_grade),
+                            "to_grade": str(to_grade),
+                            "action": action_label,
+                        }
+                    )
+
+            result = {
+                "ticker": ticker,
+                "target_price": {
+                    "high": target_price,
+                    "low": target_low,
+                    "mean": target_mean,
+                    "median": target_median,
+                },
+                "current_price": current_price,
+                "num_analysts": num_analysts,
+                "recommendations": recommendations,
+                "summary": summary_data,
+                "upgrade_history": upgrade_history,
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(
+                f"get_us_analyst_recommendations failed for {ticker}: {e}"
+            )
+            raise ValueError(
+                f"get_us_analyst_recommendations failed for {ticker}: {e}"
+            )
+
+    # ------------------------------------------------------------------
+    # US Revenue Segments
+    # ------------------------------------------------------------------
+    async def get_us_revenue_segments(self, ticker: str) -> Dict[str, Any]:
+        """Fetch revenue breakdown by geography and business segment."""
+        cache_key = f"yahoo:us_segments:{ticker}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        ticker_norm = self._to_yf_ticker(ticker)
+        try:
+            ticker_obj = await self._run(yf.Ticker, ticker_norm)
+
+            def _fetch():
+                info = ticker_obj.info
+                return info
+
+            info = await self._run(_fetch)
+
+            # Geographic segments
+            geo_segments = []
+            geo_fields = {
+                "revenueFromGeography_us": ("United States", "us"),
+                "revenueFromGeography_europe": ("Europe", "europe"),
+                "revenueFromGeography_china": ("China", "china"),
+                "revenueFromGeography_japan": ("Japan", "japan"),
+                "revenueFromGeography_asiaPacific": ("Asia Pacific", "asia_pacific"),
+                "revenueFromGeography_americas": ("Americas", "americas"),
+                "revenueFromGeography_emergingMarkets": ("Emerging Markets", "emerging_markets"),
+                "revenueFromGeography_row": ("Rest of World", "row"),
+            }
+            total_geo = 0
+            for field, (label, key) in geo_fields.items():
+                val = info.get(field)
+                if val is not None:
+                    try:
+                        val = float(val)
+                        geo_segments.append(
+                            {"region": label, "key": key, "revenue": val}
+                        )
+                        total_geo += val
+                    except (TypeError, ValueError):
+                        pass
+
+            # Calculate percentages
+            for seg in geo_segments:
+                seg["pct"] = round(seg["revenue"] / total_geo * 100, 1) if total_geo > 0 else 0
+
+            # Business/product segments
+            biz_segments = []
+            biz_fields = {
+                "revenueFromBusiness_product": ("Product Revenue", "product"),
+                "revenueFromBusiness_service": ("Service Revenue", "service"),
+                "revenueFromBusiness_hardware": ("Hardware Revenue", "hardware"),
+                "revenueFromBusiness_software": ("Software Revenue", "software"),
+                "revenueFromBusiness_advertising": ("Advertising Revenue", "advertising"),
+                "revenueFromBusiness_subscriptions": ("Subscription Revenue", "subscriptions"),
+                "revenueFromBusiness_licensing": ("Licensing Revenue", "licensing"),
+            }
+            total_biz = 0
+            for field, (label, key) in biz_fields.items():
+                val = info.get(field)
+                if val is not None:
+                    try:
+                        val = float(val)
+                        biz_segments.append(
+                            {"segment": label, "key": key, "revenue": val}
+                        )
+                        total_biz += val
+                    except (TypeError, ValueError):
+                        pass
+
+            for seg in biz_segments:
+                seg["pct"] = round(seg["revenue"] / total_biz * 100, 1) if total_biz > 0 else 0
+
+            # Total revenue for context
+            total_revenue = info.get("totalRevenue")
+
+            result = {
+                "ticker": ticker,
+                "name": info.get("longName") or info.get("shortName", ""),
+                "total_revenue": total_revenue,
+                "currency": info.get("currency", "USD"),
+                "geographic_segments": geo_segments,
+                "business_segments": biz_segments,
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_us_revenue_segments failed for {ticker}: {e}")
+            raise ValueError(f"get_us_revenue_segments failed for {ticker}: {e}")
+
+    # ------------------------------------------------------------------
+    # US Insider Trading
+    # ------------------------------------------------------------------
+    async def get_us_insider_trading(self, ticker: str) -> Dict[str, Any]:
+        """Fetch recent insider purchase and sale transactions."""
+        cache_key = f"yahoo:us_insider:{ticker}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        ticker_norm = self._to_yf_ticker(ticker)
+        try:
+            ticker_obj = await self._run(yf.Ticker, ticker_norm)
+
+            def _fetch():
+                purchases = ticker_obj.insider_purchases
+                transactions = ticker_obj.insider_transactions
+                return purchases, transactions
+
+            purchases_df, transactions_df = await self._run(_fetch)
+
+            # Parse insider purchases
+            purchases = []
+            if purchases_df is not None and not purchases_df.empty:
+                for _, row in purchases_df.head(20).iterrows():
+                    purchases.append(
+                        {
+                            "insider_name": str(row.get("Insider", "")),
+                            "title": str(row.get("Title", "")),
+                            "transaction_date": str(row.get("Date", ""))[:10],
+                            "shares": int(row.get("Shares", 0)) if row.get("Shares") else None,
+                            "value": float(row.get("Value", 0)) if row.get("Value") else None,
+                            "transaction_type": "Purchase",
+                        }
+                    )
+
+            # Parse insider transactions (includes both buys and sells)
+            transactions = []
+            if transactions_df is not None and not transactions_df.empty:
+                for _, row in transactions_df.head(30).iterrows():
+                    shares_raw = row.get("Shares")
+                    value_raw = row.get("Value")
+                    tx_type = str(row.get("Transaction", "")).lower()
+
+                    # Classify transaction direction
+                    if "buy" in tx_type or "purchase" in tx_type:
+                        direction = "买入"
+                    elif "sell" in tx_type or "sale" in tx_type:
+                        direction = "卖出"
+                    else:
+                        direction = str(row.get("Transaction", ""))
+
+                    transactions.append(
+                        {
+                            "insider_name": str(row.get("Insider", "")),
+                            "title": str(row.get("Title", "")),
+                            "transaction_date": str(row.get("Date", ""))[:10],
+                            "shares": int(shares_raw) if shares_raw else None,
+                            "value": float(value_raw) if value_raw else None,
+                            "transaction_type": direction,
+                        }
+                    )
+
+            # Summary statistics
+            buy_count = sum(1 for t in transactions if "买" in t.get("transaction_type", ""))
+            sell_count = sum(1 for t in transactions if "卖" in t.get("transaction_type", ""))
+            buy_value = sum(t.get("value", 0) or 0 for t in transactions if "买" in t.get("transaction_type", ""))
+            sell_value = sum(t.get("value", 0) or 0 for t in transactions if "卖" in t.get("transaction_type", ""))
+
+            result = {
+                "ticker": ticker,
+                "purchases": purchases,
+                "transactions": transactions,
+                "summary": {
+                    "total_transactions": len(transactions),
+                    "buy_count": buy_count,
+                    "sell_count": sell_count,
+                    "buy_value": buy_value,
+                    "sell_value": sell_value,
+                    "net_sentiment": "insider_buying" if buy_value > sell_value else "insider_selling" if sell_value > buy_value else "neutral",
+                },
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_us_insider_trading failed for {ticker}: {e}")
+            raise ValueError(f"get_us_insider_trading failed for {ticker}: {e}")
+
+    # ------------------------------------------------------------------
+    # US Share Statistics
+    # ------------------------------------------------------------------
+    async def get_us_share_statistics(self, ticker: str) -> Dict[str, Any]:
+        """Fetch share statistics including short interest and float."""
+        cache_key = f"yahoo:us_share_stats:{ticker}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        ticker_norm = self._to_yf_ticker(ticker)
+        try:
+            ticker_obj = await self._run(yf.Ticker, ticker_norm)
+
+            def _fetch():
+                info = ticker_obj.info
+                shares = ticker_obj.shares
+                return info, shares
+
+            info, shares_df = await self._run(_fetch)
+
+            import math
+
+            def _safe(key):
+                v = info.get(key)
+                if v is None:
+                    return None
+                try:
+                    f = float(v)
+                    return None if math.isnan(f) or math.isinf(f) else f
+                except Exception:
+                    return None
+
+            # From info dict
+            shares_outstanding = _safe("sharesOutstanding")
+            float_shares = _safe("floatShares")
+            shares_short = _safe("sharesShort")
+            shares_short_prior = _safe("sharesShortPriorMonth")
+            short_ratio = _safe("shortRatio")
+            short_pct_float = _safe("shortPercentOfFloat")
+
+            # Calculate derived metrics
+            if shares_short and float_shares and float_shares > 0:
+                short_pct_calculated = round(shares_short / float_shares * 100, 2)
+            else:
+                short_pct_calculated = None
+
+            if shares_short and info.get("averageVolume") and info["averageVolume"] > 0:
+                days_to_cover = round(shares_short / info["averageVolume"], 1)
+            else:
+                days_to_cover = short_ratio
+
+            # Shares dataframe (historical share count changes)
+            share_history = []
+            if shares_df is not None and not shares_df.empty:
+                for idx, row in shares_df.head(10).iterrows():
+                    share_history.append(
+                        {
+                            "date": str(idx)[:10] if idx else "",
+                            "shares_outstanding": int(row.get("Shares Outstanding", 0)) if row.get("Shares Outstanding") else None,
+                            "float_shares": int(row.get("Float", 0)) if row.get("Float") else None,
+                        }
+                    )
+
+            # Institutional ownership percentage
+            inst_pct = _safe("heldPercentInstitutions")
+            insider_pct = _safe("heldPercentInsiders")
+
+            # 5% holders
+            five_pct = _safe("heldPercentMutualFunds")
+
+            result = {
+                "ticker": ticker,
+                "name": info.get("longName") or info.get("shortName", ""),
+                "shares_outstanding": shares_outstanding,
+                "float_shares": float_shares,
+                "short_interest": {
+                    "shares_short": shares_short,
+                    "shares_short_prior_month": shares_short_prior,
+                    "short_pct_of_float": short_pct_calculated or short_pct_float,
+                    "short_ratio": short_ratio,
+                    "days_to_cover": days_to_cover,
+                },
+                "ownership": {
+                    "institutional_pct": round(inst_pct * 100, 1) if inst_pct else None,
+                    "insider_pct": round(insider_pct * 100, 1) if insider_pct else None,
+                    "mutual_funds_pct": round(five_pct * 100, 1) if five_pct else None,
+                },
+                "share_history": share_history,
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_us_share_statistics failed for {ticker}: {e}")
+            raise ValueError(f"get_us_share_statistics failed for {ticker}: {e}")

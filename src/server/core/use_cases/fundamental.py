@@ -62,6 +62,11 @@ get_earnings_history = _gw_usecase("get_earnings_history")
 get_cash_flow_quality = _gw_usecase("get_cash_flow_quality")
 get_us_valuation_metrics = _gw_usecase("get_us_valuation_metrics")
 get_us_institutional_holdings = _gw_usecase("get_us_institutional_holdings")
+get_us_company_profile = _gw_usecase("get_us_company_profile")
+get_us_analyst_recommendations = _gw_usecase("get_us_analyst_recommendations")
+get_us_revenue_segments = _gw_usecase("get_us_revenue_segments")
+get_us_insider_trading = _gw_usecase("get_us_insider_trading")
+get_us_share_statistics = _gw_usecase("get_us_share_statistics")
 
 
 # ---------------------------------------------------------------------------

@@ -393,6 +393,396 @@ def register_us_fundamental_tools(mcp: FastMCP):
             )
             return create_artifact_response(summary=summary, artifact=artifact)
 
+    # ------------------------------------------------------------------
+    # get_us_company_profile
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"us-fundamental", "profile"})
+    async def get_us_company_profile(
+        symbol: str,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get comprehensive company profile for a US stock.
+
+        Returns company overview including sector, industry, description,
+        employees, CEO, market cap, key financial metrics, and price ranges.
+        Essential for understanding what the company does before deeper analysis.
+
+        Args:
+            symbol: US stock ticker. Format: EXCHANGE:SYMBOL
+                Examples: NASDAQ:AAPL, NYSE:TSLA, NASDAQ:NVDA
+            ctx: FastMCP Context
+
+        Returns:
+            ArtifactResponse with company profile and LLM summary
+        """
+        if ctx:
+            await ctx.info(f"🏢 获取公司概况: {symbol}")
+        try:
+            logger.info("MCP tool: get_us_company_profile", symbol=symbol)
+            data = await fundamental_use_cases.get_us_company_profile(symbol)
+
+            name = data.get("name", symbol)
+            sector = data.get("sector", "")
+            industry = data.get("industry", "")
+            mcap = data.get("market_cap")
+            employees = data.get("employees")
+            ceo = data.get("ceo", "")
+
+            summary = (
+                f"{name} ({symbol}): {sector}/{industry}"
+                f"{f', CEO={ceo}' if ceo else ''}"
+                f"{f', 员工={int(employees):,}' if employees else ''}"
+                f"{f', 市值={_fmt_billions(mcap)}' if mcap else ''}"
+            ).rstrip()
+
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.US_COMPANY_PROFILE.value,
+                name=f"{symbol} 公司概况",
+                content=data,
+                description=summary,
+                metadata={"ticker": symbol},
+                visible_to_llm=True,
+                display_in_report=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except SymbolResolutionError as e:
+            return create_symbol_error_response(
+                e, ComponentType.US_COMPANY_PROFILE, f"{symbol} 公司概况"
+            )
+        except Exception as e:
+            logger.error("get_us_company_profile error", symbol=symbol, error=str(e))
+            summary = f"获取 {symbol} 公司概况失败: {e}"
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.US_COMPANY_PROFILE.value,
+                name=f"{symbol} 公司概况",
+                content={"error": str(e)},
+                description=summary,
+                visible_to_llm=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+    # ------------------------------------------------------------------
+    # get_us_analyst_recommendations
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"us-fundamental", "analyst"})
+    async def get_us_analyst_recommendations(
+        symbol: str,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get analyst recommendations and upgrade/downgrade history for a US stock.
+
+        Returns consensus ratings (strong buy/buy/hold/sell/strong sell), target prices,
+        and recent analyst upgrade/downgrade events. Critical for gauging
+        Wall Street sentiment.
+
+        Args:
+            symbol: US stock ticker. Format: EXCHANGE:SYMBOL
+                Examples: NASDAQ:AAPL, NYSE:TSLA, NASDAQ:NVDA
+            ctx: FastMCP Context
+
+        Returns:
+            ArtifactResponse with analyst data and LLM summary
+        """
+        if ctx:
+            await ctx.info(f"📊 获取分析师评级: {symbol}")
+        try:
+            logger.info("MCP tool: get_us_analyst_recommendations", symbol=symbol)
+            data = await fundamental_use_cases.get_us_analyst_recommendations(symbol)
+
+            target = data.get("target_price", {})
+            current = data.get("current_price")
+            num_analysts = data.get("num_analysts", 0)
+            recs = data.get("recommendations", [])
+            upgrades = data.get("upgrade_history", [])
+            summary_data = data.get("summary", {})
+
+            # Build consensus summary
+            total_buy = summary_data.get("strong_buy", 0) + summary_data.get("buy", 0)
+            total_sell = summary_data.get("sell", 0) + summary_data.get("strong_sell", 0)
+            total_hold = summary_data.get("hold", 0)
+            consensus = (
+                "看多" if total_buy > total_sell + total_hold
+                else "看空" if total_sell > total_buy + total_hold
+                else "中性"
+            )
+
+            target_mean = target.get("mean")
+            upside_pct = (
+                f" +{(target_mean - current) / current * 100:.1f}%"
+                if target_mean and current and current > 0
+                else ""
+            )
+
+            summary = (
+                f"{symbol} 分析师共识: {consensus}"
+                f" (买{total_buy}/持{total_hold}/卖{total_sell}, {num_analysts}位分析师)"
+                f"{f', 目标价${target_mean:.2f}{upside_pct}' if target_mean else ''}"
+                f"{f', 近{len(upgrades)}条评级变动' if upgrades else ''}"
+            ).rstrip()
+
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.US_ANALYST_RECOMMENDATIONS.value,
+                name=f"{symbol} 分析师评级",
+                content=data,
+                description=summary,
+                metadata={"ticker": symbol},
+                visible_to_llm=True,
+                display_in_report=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except SymbolResolutionError as e:
+            return create_symbol_error_response(
+                e, ComponentType.US_ANALYST_RECOMMENDATIONS, f"{symbol} 分析师评级"
+            )
+        except Exception as e:
+            logger.error("get_us_analyst_recommendations error", symbol=symbol, error=str(e))
+            summary = f"获取 {symbol} 分析师评级失败: {e}"
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.US_ANALYST_RECOMMENDATIONS.value,
+                name=f"{symbol} 分析师评级",
+                content={"error": str(e)},
+                description=summary,
+                visible_to_llm=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+    # ------------------------------------------------------------------
+    # get_us_revenue_segments
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"us-fundamental", "segments"})
+    async def get_us_revenue_segments(
+        symbol: str,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get revenue breakdown by geography and business segment for a US stock.
+
+        Returns geographic revenue distribution (US, Europe, Asia, etc.) and
+        business segment breakdown (Product, Service, etc.) with percentages.
+        Shows how the company generates revenue across regions and segments.
+
+        Args:
+            symbol: US stock ticker. Format: EXCHANGE:SYMBOL
+                Examples: NASDAQ:AAPL, NYSE:TSLA, NASDAQ:NVDA
+            ctx: FastMCP Context
+
+        Returns:
+            ArtifactResponse with segment data and LLM summary
+        """
+        if ctx:
+            await ctx.info(f"🌍 获取收入构成: {symbol}")
+        try:
+            logger.info("MCP tool: get_us_revenue_segments", symbol=symbol)
+            data = await fundamental_use_cases.get_us_revenue_segments(symbol)
+
+            geo = data.get("geographic_segments", [])
+            biz = data.get("business_segments", [])
+            total_rev = data.get("total_revenue")
+
+            parts = []
+            if geo:
+                top_geo = max(geo, key=lambda x: x.get("revenue", 0))
+                parts.append(
+                    f"区域: {top_geo['region']}({top_geo.get('pct', 0)}%)"
+                    if top_geo.get("pct")
+                    else f"区域: {len(geo)}个"
+                )
+            if biz:
+                top_biz = max(biz, key=lambda x: x.get("revenue", 0))
+                parts.append(
+                    f"业务: {top_biz['segment']}({top_biz.get('pct', 0)}%)"
+                    if top_biz.get("pct")
+                    else f"业务: {len(biz)}个"
+                )
+            if total_rev:
+                parts.append(f"总营收={_fmt_billions(total_rev)}")
+
+            summary = f"{symbol} 收入构成: {', '.join(parts)}" if parts else f"{symbol} 收入构成: 暂无数据"
+
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.US_REVENUE_SEGMENTS.value,
+                name=f"{symbol} 收入构成",
+                content=data,
+                description=summary,
+                metadata={"ticker": symbol},
+                visible_to_llm=True,
+                display_in_report=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except SymbolResolutionError as e:
+            return create_symbol_error_response(
+                e, ComponentType.US_REVENUE_SEGMENTS, f"{symbol} 收入构成"
+            )
+        except Exception as e:
+            logger.error("get_us_revenue_segments error", symbol=symbol, error=str(e))
+            summary = f"获取 {symbol} 收入构成失败: {e}"
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.US_REVENUE_SEGMENTS.value,
+                name=f"{symbol} 收入构成",
+                content={"error": str(e)},
+                description=summary,
+                visible_to_llm=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+    # ------------------------------------------------------------------
+    # get_us_insider_trading
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"us-fundamental", "insider"})
+    async def get_us_insider_trading(
+        symbol: str,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get recent insider trading activity for a US stock.
+
+        Returns insider purchases and sales with transaction details.
+        Includes net sentiment (buying vs selling pressure).
+        Insiders (CEO, CFO, directors) have information advantage -
+        clusters of insider buying often signal confidence.
+
+        Args:
+            symbol: US stock ticker. Format: EXCHANGE:SYMBOL
+                Examples: NASDAQ:AAPL, NYSE:TSLA, NASDAQ:NVDA
+            ctx: FastMCP Context
+
+        Returns:
+            ArtifactResponse with insider transactions and LLM summary
+        """
+        if ctx:
+            await ctx.info(f"👤 获取内部人交易: {symbol}")
+        try:
+            logger.info("MCP tool: get_us_insider_trading", symbol=symbol)
+            data = await fundamental_use_cases.get_us_insider_trading(symbol)
+
+            txns = data.get("transactions", [])
+            s = data.get("summary", {})
+            buys = s.get("buy_count", 0)
+            sells = s.get("sell_count", 0)
+            sentiment = s.get("net_sentiment", "neutral")
+
+            sentiment_label = {
+                "insider_buying": "净买入(看多信号)",
+                "insider_selling": "净卖出(看空信号)",
+                "neutral": "中性",
+            }.get(sentiment, sentiment)
+
+            summary = (
+                f"{symbol} 内部人交易: {len(txns)}笔"
+                f"(买入{buys}笔/卖出{sells}笔)"
+                f", 整体情绪: {sentiment_label}"
+            )
+
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.US_INSIDER_TRADING.value,
+                name=f"{symbol} 内部人交易",
+                content=data,
+                description=summary,
+                metadata={"ticker": symbol},
+                visible_to_llm=True,
+                display_in_report=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except SymbolResolutionError as e:
+            return create_symbol_error_response(
+                e, ComponentType.US_INSIDER_TRADING, f"{symbol} 内部人交易"
+            )
+        except Exception as e:
+            logger.error("get_us_insider_trading error", symbol=symbol, error=str(e))
+            summary = f"获取 {symbol} 内部人交易失败: {e}"
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.US_INSIDER_TRADING.value,
+                name=f"{symbol} 内部人交易",
+                content={"error": str(e)},
+                description=summary,
+                visible_to_llm=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+    # ------------------------------------------------------------------
+    # get_us_share_statistics
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"us-fundamental", "short-interest"})
+    async def get_us_share_statistics(
+        symbol: str,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get share statistics including short interest for a US stock.
+
+        Returns shares outstanding, float, short interest (% of float),
+        days to cover, institutional ownership %, and insider ownership %.
+        High short interest can indicate bearish sentiment or short squeeze potential.
+
+        Args:
+            symbol: US stock ticker. Format: EXCHANGE:SYMBOL
+                Examples: NASDAQ:TSLA, NASDAQ:GME, NYSE:AMC
+            ctx: FastMCP Context
+
+        Returns:
+            ArtifactResponse with share statistics and LLM summary
+        """
+        if ctx:
+            await ctx.info(f"📊 获取股份统计: {symbol}")
+        try:
+            logger.info("MCP tool: get_us_share_statistics", symbol=symbol)
+            data = await fundamental_use_cases.get_us_share_statistics(symbol)
+
+            short = data.get("short_interest", {})
+            ownership = data.get("ownership", {})
+            short_pct = short.get("short_pct_of_float")
+            days_cover = short.get("days_to_cover")
+            inst_pct = ownership.get("institutional_pct")
+
+            # Classify short interest level
+            if short_pct and short_pct > 20:
+                short_label = "高做空比率(潜在轧空风险)"
+            elif short_pct and short_pct > 10:
+                short_label = "中等做空"
+            elif short_pct:
+                short_label = "低做空"
+            else:
+                short_label = ""
+
+            summary = (
+                f"{symbol} 股份统计: 流通股={_fmt_shares(data.get('float_shares'))}股"
+            )
+            if short_pct:
+                summary += f", 做空比率={short_pct:.1f}%({short_label})"
+            if days_cover:
+                summary += f", 空头需{days_cover:.1f}天回补"
+            if inst_pct:
+                summary += f", 机构持股={inst_pct}%"
+            summary = summary.rstrip()
+
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.US_SHARE_STATISTICS.value,
+                name=f"{symbol} 股份统计",
+                content=data,
+                description=summary,
+                metadata={"ticker": symbol},
+                visible_to_llm=True,
+                display_in_report=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except SymbolResolutionError as e:
+            return create_symbol_error_response(
+                e, ComponentType.US_SHARE_STATISTICS, f"{symbol} 股份统计"
+            )
+        except Exception as e:
+            logger.error("get_us_share_statistics error", symbol=symbol, error=str(e))
+            summary = f"获取 {symbol} 股份统计失败: {e}"
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.US_SHARE_STATISTICS.value,
+                name=f"{symbol} 股份统计",
+                content={"error": str(e)},
+                description=summary,
+                visible_to_llm=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -400,7 +790,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
 
 
 def _fmt_billions(val) -> str:
-    """Format a large number as billions/millions string."""
+    """Format a large number as billions/millions string (dollar prefixed)."""
     if val is None:
         return "N/A"
     try:
@@ -414,3 +804,22 @@ def _fmt_billions(val) -> str:
     if abs(v) >= 1e6:
         return f"${v / 1e6:.2f}M"
     return f"${v:,.0f}"
+
+
+def _fmt_shares(val) -> str:
+    """Format a share count as billions/millions (no dollar prefix)."""
+    if val is None:
+        return "N/A"
+    try:
+        v = float(val)
+    except Exception:
+        return "N/A"
+    if abs(v) >= 1e12:
+        return f"{v / 1e12:.2f}T"
+    if abs(v) >= 1e9:
+        return f"{v / 1e9:.2f}B"
+    if abs(v) >= 1e6:
+        return f"{v / 1e6:.2f}M"
+    if abs(v) >= 1e3:
+        return f"{v / 1e3:.1f}K"
+    return f"{v:,.0f}"

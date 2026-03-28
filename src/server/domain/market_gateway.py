@@ -57,6 +57,11 @@ _TICKER_METHODS: Set[str] = {
     "get_cash_flow_quality",
     "get_us_valuation_metrics",
     "get_us_institutional_holdings",
+    "get_us_company_profile",
+    "get_us_analyst_recommendations",
+    "get_us_revenue_segments",
+    "get_us_insider_trading",
+    "get_us_share_statistics",
     # US technical
     "get_us_price_history",
     "get_us_volume_analysis",
