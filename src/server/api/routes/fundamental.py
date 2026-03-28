@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, status, Query
 from typing import Dict, Any
 from src.server.utils.logger import logger
 from src.server.core.use_cases import fundamental as fundamental_use_cases
+from src.server.core.dependencies import Container
 from src.server.domain.response_contract import rest_response
 
 router = APIRouter(prefix="/api/v1/fundamental", tags=["Fundamental Analysis"])
@@ -135,4 +136,88 @@ async def get_profit_forecast(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get profit forecast: {str(e)}"
+        )
+
+
+# ------------------------------------------------------------------
+# Gateway-based GET endpoints
+# ------------------------------------------------------------------
+
+@router.get(
+    "/main-business",
+    summary="主营业务构成",
+    description="按产品/地区/板块拆分主营业务收入",
+)
+async def get_main_business(
+    symbol: str = Query(..., description="股票代码 (如 600519)"),
+) -> Dict[str, Any]:
+    try:
+        logger.info("API: get_mainbz_info", symbol=symbol)
+        result = await Container.market_gateway().get_mainbz_info(ticker=symbol)
+        return rest_response(data=result, symbol=symbol, source="akshare")
+    except Exception as e:
+        logger.error(f"API error in get_mainbz_info: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get main business: {str(e)}",
+        )
+
+
+@router.get(
+    "/shareholders",
+    summary="股东信息",
+    description="前十大股东及高管持股变动",
+)
+async def get_shareholder_info(
+    symbol: str = Query(..., description="股票代码 (如 600519)"),
+) -> Dict[str, Any]:
+    try:
+        logger.info("API: get_shareholder_info", symbol=symbol)
+        result = await Container.market_gateway().get_shareholder_info(ticker=symbol)
+        return rest_response(data=result, symbol=symbol, source="akshare")
+    except Exception as e:
+        logger.error(f"API error in get_shareholder_info: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get shareholder info: {str(e)}",
+        )
+
+
+@router.get(
+    "/dividends",
+    summary="分红信息",
+    description="分红历史/股息率/送配记录",
+)
+async def get_dividend_info(
+    symbol: str = Query(..., description="股票代码 (如 600519)"),
+) -> Dict[str, Any]:
+    try:
+        logger.info("API: get_dividend_info", symbol=symbol)
+        result = await Container.market_gateway().get_dividend_info(ticker=symbol)
+        return rest_response(data=result, symbol=symbol, source="akshare")
+    except Exception as e:
+        logger.error(f"API error in get_dividend_info: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get dividend info: {str(e)}",
+        )
+
+
+@router.get(
+    "/valuation",
+    summary="估值指标",
+    description="PE/PB/PS/股息率等估值指标",
+)
+async def get_valuation_metrics(
+    symbol: str = Query(..., description="股票代码 (如 600519)"),
+) -> Dict[str, Any]:
+    try:
+        logger.info("API: get_valuation_metrics", symbol=symbol)
+        result = await Container.market_gateway().get_valuation_metrics(ticker=symbol)
+        return rest_response(data=result, symbol=symbol, source="akshare")
+    except Exception as e:
+        logger.error(f"API error in get_valuation_metrics: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get valuation metrics: {str(e)}",
         )
