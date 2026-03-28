@@ -336,3 +336,155 @@ def _get_security_name(facts: Dict[str, Any]) -> str:
     if isinstance(sm, dict):
         return sm.get("name", "")
     return ""
+
+
+# ------------------------------------------------------------------
+# Generic fact pack Markdown builder
+# ------------------------------------------------------------------
+
+def _build_fact_markdown(
+    title: str,
+    fact_pack: Dict[str, Any],
+    category_titles: Dict[str, str],
+) -> str:
+    """Generic fact-only Markdown builder for any fact pack type."""
+    entity = fact_pack.get("entity", {})
+    facts = fact_pack.get("facts", {})
+    coverage = fact_pack.get("coverage", {})
+    missing = fact_pack.get("missing_fields", [])
+    fetched = fact_pack.get("categories_fetched", 0)
+    total = fact_pack.get("categories_total", 8)
+    elapsed = fact_pack.get("elapsed_seconds", 0)
+
+    symbol = entity.get("symbol") or entity.get("fund_code", "?")
+
+    parts: List[str] = []
+    parts.append(f"# {title} ({symbol}) 事实数据")
+    parts.append(f"覆盖: {fetched}/{total} | 耗时: {elapsed:.1f}s")
+
+    # Coverage summary
+    if coverage:
+        cov_items = []
+        for cat, status in coverage.items():
+            icon = {"complete": "✅", "partial": "⚠️", "missing": "❌"}.get(
+                status.split(":")[0] if ":" in status else status, "⏳"
+            )
+            cov_items.append(f"{icon} {cat}: {status}")
+        parts.append("## 覆盖状态\n" + "\n".join(cov_items))
+
+    # Render each fact category
+    for cat_key, cat_title in category_titles.items():
+        cat_data = facts.get(cat_key)
+        if not cat_data:
+            continue
+        if isinstance(cat_data, dict):
+            # Check for nested sub-sections
+            sub_sections = []
+            for sub_name, sub_data in cat_data.items():
+                if sub_data is None:
+                    continue
+                if isinstance(sub_data, list) and sub_data:
+                    if isinstance(sub_data[0], dict):
+                        headers = list(sub_data[0].keys())[:6]
+                        rows = []
+                        for item in sub_data[:10]:
+                            rows.append([_auto_format(item.get(h)) for h in headers])
+                        sub_sections.append(f"**{sub_name}**\n" + _table(headers, rows))
+                    else:
+                        sub_sections.append(f"**{sub_name}**: [{len(sub_data)}条]")
+                elif isinstance(sub_data, dict):
+                    rows = []
+                    for k, v in sub_data.items():
+                        rows.append([k, _auto_format(v)])
+                    sub_sections.append(f"**{sub_name}**\n" + _table(["指标", "值"], rows))
+                else:
+                    sub_sections.append(f"**{sub_name}**: {_auto_format(sub_data)}")
+            if sub_sections:
+                parts.append(f"## {cat_title}\n" + "\n\n".join(sub_sections))
+        elif isinstance(cat_data, list) and cat_data:
+            if isinstance(cat_data[0], dict):
+                headers = list(cat_data[0].keys())[:6]
+                rows = []
+                for item in cat_data[:10]:
+                    rows.append([_auto_format(item.get(h)) for h in headers])
+                parts.append(f"## {cat_title}\n" + _table(headers, rows))
+            else:
+                parts.append(f"## {cat_title}\n[{len(cat_data)}条记录]")
+        else:
+            parts.append(f"## {cat_title}\n" + _auto_format(cat_data))
+
+    # Missing fields
+    if missing:
+        parts.append(f"## 缺失类别\n" + ", ".join(missing))
+
+    return "\n\n".join(parts)
+
+
+# ------------------------------------------------------------------
+# Fund fact pack Markdown builder (COL-151)
+# ------------------------------------------------------------------
+
+_FUND_CATEGORY_TITLES = {
+    "master": "基金主档",
+    "nav": "净值与收益事实",
+    "holdings": "持仓与穿透事实",
+    "manager": "基金经理与治理事实",
+    "scale": "规模与份额事实",
+    "allocation": "资产配置与风格事实",
+    "fees": "费率与分红事实",
+    "peer": "同类比较事实",
+}
+
+
+def build_fund_fact_markdown(fact_pack: Dict[str, Any]) -> str:
+    """Build fact-only Markdown view from fund fact pack data.
+
+    Args:
+        fact_pack: Output of AkshareAdapter.get_fund_fact_pack()
+
+    Returns:
+        Markdown string with sections and tables for each fund fact category.
+    """
+    entity = fact_pack.get("entity", {})
+    fund_code = entity.get("fund_code", "?")
+    # Try to get fund name from master facts
+    master = fact_pack.get("facts", {}).get("master", {})
+    name = master.get("fund_name", "") if isinstance(master, dict) else ""
+
+    return _build_fact_markdown(
+        title=f"{name}" if name else fund_code,
+        fact_pack=fact_pack,
+        category_titles=_FUND_CATEGORY_TITLES,
+    )
+
+
+# ------------------------------------------------------------------
+# Market fact pack Markdown builder (COL-153)
+# ------------------------------------------------------------------
+
+_MARKET_CATEGORY_TITLES = {
+    "master": "标的估值指标",
+    "snapshot": "技术指标快照",
+    "kline": "K线与区间行情事实",
+    "money_flow": "资金流与成交结构",
+    "breadth": "市场广度与横截面",
+    "index": "指数/板块行情事实",
+    "derivative": "衍生行情与波动率",
+    "relative": "相对强弱与可比标的",
+}
+
+
+def build_market_fact_markdown(fact_pack: Dict[str, Any]) -> str:
+    """Build fact-only Markdown view from market fact pack data.
+
+    Args:
+        fact_pack: Output of AkshareAdapter.get_market_fact_pack()
+
+    Returns:
+        Markdown string with sections and tables for each market fact category.
+    """
+    return _build_fact_markdown(
+        title="行情",
+        fact_pack=fact_pack,
+        category_titles=_MARKET_CATEGORY_TITLES,
+    )
