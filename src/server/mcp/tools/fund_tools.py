@@ -524,47 +524,46 @@ def register_fund_tools(mcp: FastMCP):
             return create_artifact_response(summary=f"基金业绩分析失败: {e}", artifact=err_artifact)
 
     # ------------------------------------------------------------------
-    # get_fund_scale — 基金规模变动
+    # get_fund_scale — 全市场基金规模变动
     # ------------------------------------------------------------------
     @mcp.tool(tags={"fund", "scale"})
     async def get_fund_scale(
-        fund_code: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """基金规模变动：申购/赎回/份额/净资产的历史变化趋势。
+        """全市场基金规模变动：基金家数/申购/赎回/净资产的历史变化趋势。
 
         Typical use cases:
-        - "查看110011的规模变动"
-        - "分析005827的资金流入流出趋势"
+        - "查看全市场基金规模变化趋势"
+        - "分析最近几个季度基金申购赎回对比"
 
         Args:
-            fund_code: 基金代码 (如 110011, 005827)
             ctx: FastMCP Context.
 
         Returns:
-            Fund scale history with subscription, redemption, shares, NAV changes.
+            Market-wide fund scale history with subscription, redemption, NAV.
         """
         if ctx:
-            await ctx.info(f"获取基金规模变动: {fund_code}")
+            await ctx.info("获取全市场基金规模变动")
         try:
             t0 = time.perf_counter()
-            logger.info("MCP tool: get_fund_scale", fund_code=fund_code)
+            logger.info("MCP tool: get_fund_scale")
 
-            result = await Container.market_gateway().get_fund_scale(fund_code=fund_code)
+            result = await Container.market_gateway().get_fund_scale()
 
             elapsed = time.perf_counter() - t0
             results = result.get("results", [])
             total = result.get("total", 0)
 
-            summary = f"基金规模变动: {fund_code}, {total}期 (耗时 {elapsed:.1f}s)"
+            summary = f"全市场基金规模变动: {total}期 (耗时 {elapsed:.1f}s)"
 
-            md = f"## 基金规模变动: {fund_code}\n\n"
+            md = f"## 全市场基金规模变动\n\n"
             md += f"**期数**: {total}\n\n"
-            md += "| 截止日期 | 申购 | 赎回 | 期末份额 | 期末净资产 |\n"
-            md += "|--------|------|------|--------|--------|\n"
+            md += "| 截止日期 | 基金家数 | 期间申购 | 期间赎回 | 期末份额 | 期末净资产 |\n"
+            md += "|--------|--------|--------|--------|--------|--------|\n"
             for r in results:
                 md += (
                     f"| {r.get('date', '')} "
+                    f"| {r.get('fund_count', '-')} "
                     f"| {_safe_fmt(r.get('subscription'))} "
                     f"| {_safe_fmt(r.get('redemption'))} "
                     f"| {_safe_fmt(r.get('total_shares'))} "
@@ -573,7 +572,7 @@ def register_fund_tools(mcp: FastMCP):
 
             artifact = create_artifact_envelope(
                 component_type=ComponentType.FUND_SCALE,
-                name=f"基金规模变动: {fund_code}",
+                name="全市场基金规模变动",
                 content={"markdown": md, "data": results},
                 description=summary,
             )

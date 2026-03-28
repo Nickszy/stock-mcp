@@ -4511,19 +4511,20 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"get_fund_performance failed: {e}")
             return {"fund_code": fund_code, "source": "akshare", "error": str(e)}
 
-    async def get_fund_scale(self, fund_code: str) -> Dict[str, Any]:
-        """基金规模变动：申购/赎回/份额/净资产历史变化。"""
-        cache_key = f"akshare:fund_scale:{fund_code}"
+    async def get_fund_scale(self) -> Dict[str, Any]:
+        """全市场基金规模变动：基金家数/期间申购/赎回/期末净资产变化趋势。"""
+        cache_key = "akshare:fund_scale:market"
         cached = await self.cache.get(cache_key)
         if cached:
             return cached
         try:
-            df = await self._run(ak.fund_scale_change_em, symbol=fund_code)
+            # fund_scale_change_em takes NO params, returns market-wide data
+            df = await self._run(ak.fund_scale_change_em)
             if df is None or df.empty:
-                return {"results": [], "fund_code": fund_code, "source": "akshare"}
+                return {"results": [], "source": "akshare"}
 
             col_map = {
-                "截止日期": "date", "基金代码": "fund_code",
+                "截止日期": "date", "基金家数": "fund_count",
                 "期间申购": "subscription", "期间赎回": "redemption",
                 "期末总份额": "total_shares", "期末净资产": "total_nav",
             }
@@ -4533,12 +4534,11 @@ class AkshareAdapter(BaseDataAdapter):
                 ("subscription", "redemption", "total_shares", "total_nav"),
             )
             result = {
-                "results": records, "fund_code": fund_code,
-                "total": len(records), "source": "akshare",
+                "results": records, "total": len(records), "source": "akshare",
             }
             await self.cache.set(cache_key, result, ttl=3600)
             return result
         except Exception as e:
             self.logger.error(f"get_fund_scale failed: {e}")
-            return {"results": [], "fund_code": fund_code, "source": "akshare", "error": str(e)}
+            return {"results": [], "source": "akshare", "error": str(e)}
 
