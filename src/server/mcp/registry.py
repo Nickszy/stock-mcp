@@ -26,6 +26,7 @@ from src.server.mcp.tools.us_sector_tools import register_us_sector_tools
 from src.server.mcp.tools.us_macro_tools import register_us_macro_tools
 from src.server.mcp.tools.sector_research_tools import register_sector_research_tools
 from src.server.mcp.tools.quantitative_tools import register_quantitative_tools
+from src.server.mcp.tools.fund_tools import register_fund_tools
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="A股量化分析 (多条件选股/行业排名/概念排名)",
         count=3,
+    ),
+    ToolGroup(
+        name="fund",
+        register=register_fund_tools,
+        enabled=True,
+        description="基金数据 (搜索/详情/排行/经理/估值/业绩/规模)",
+        count=7,
     ),
 ]
 

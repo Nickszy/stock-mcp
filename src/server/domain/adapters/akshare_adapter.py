@@ -4143,27 +4143,13 @@ class AkshareAdapter(BaseDataAdapter):
     # ------------------------------------------------------------------
     # A-share concept board ranking
     # ------------------------------------------------------------------
-
     async def get_concept_ranking(
         self,
         sort_by: str = "change_pct",
         sort_order: str = "desc",
         limit: int = 30,
     ) -> Dict[str, Any]:
-        """Get real-time performance ranking of all A-share concept boards.
-
-        Uses stock_board_concept_name_em to fetch current snapshot of all
-        concept/theme sectors, then ranks them by the specified metric.
-
-        Args:
-            sort_by: Sort field. Options: change_pct, turnover_rate, volume,
-                turnover, amplitude, rise_count, fall_count
-            sort_order: "desc" or "asc"
-            limit: Max sectors to return (default 30, max 100)
-
-        Returns:
-            Dict with ranked concept list, total count, and metadata.
-        """
+        """Get real-time performance ranking of all A-share concept boards."""
         limit = min(max(limit, 1), 100)
 
         cache_key = "akshare:concept_ranking:snapshot"
@@ -4181,36 +4167,20 @@ class AkshareAdapter(BaseDataAdapter):
                 self.logger.error(f"get_concept_ranking: failed to fetch: {e}")
                 return {"results": [], "total": 0, "source": "akshare", "error": str(e)}
 
-        # Normalize columns (same as industry)
         col_map = {
-            "板块名称": "name",
-            "板块代码": "code",
-            "最新价": "price",
-            "涨跌幅": "change_pct",
-            "涨跌额": "change_amt",
-            "成交量": "volume",
-            "成交额": "turnover",
-            "振幅": "amplitude",
-            "最高": "high",
-            "最低": "low",
-            "今开": "open",
-            "昨收": "prev_close",
-            "换手率": "turnover_rate",
-            "上涨家数": "rise_count",
-            "下跌家数": "fall_count",
-            "领涨股票": "top_stock",
-            "领涨股票涨跌幅": "top_stock_change",
+            "板块名称": "name", "板块代码": "code", "最新价": "price",
+            "涨跌幅": "change_pct", "涨跌额": "change_amt", "成交量": "volume",
+            "成交额": "turnover", "振幅": "amplitude", "最高": "high", "最低": "low",
+            "今开": "open", "昨收": "prev_close", "换手率": "turnover_rate",
+            "上涨家数": "rise_count", "下跌家数": "fall_count",
+            "领涨股票": "top_stock", "领涨股票涨跌幅": "top_stock_change",
         }
         df = df.rename(columns=col_map)
 
         sort_col_map = {
-            "change_pct": "change_pct",
-            "turnover_rate": "turnover_rate",
-            "volume": "volume",
-            "turnover": "turnover",
-            "amplitude": "amplitude",
-            "rise_count": "rise_count",
-            "fall_count": "fall_count",
+            "change_pct": "change_pct", "turnover_rate": "turnover_rate",
+            "volume": "volume", "turnover": "turnover", "amplitude": "amplitude",
+            "rise_count": "rise_count", "fall_count": "fall_count",
         }
         actual_sort_col = sort_col_map.get(sort_by, "change_pct")
         ascending = sort_order.lower() == "asc"
@@ -4245,4 +4215,330 @@ class AkshareAdapter(BaseDataAdapter):
             "sort_order": sort_order,
             "source": "akshare",
         }
+
+    # ==================================================================
+    # 基金数据 (Fund Data)
+    # ==================================================================
+
+    @staticmethod
+    def _clean_records(records: list, float_fields: tuple = ()) -> list:
+        """Clean NaN/inf in record dicts, round float_fields to 2 decimals."""
+        clean = []
+        for item in records:
+            row = {}
+            for k, v in item.items():
+                if isinstance(v, float):
+                    if math.isnan(v) or math.isinf(v):
+                        row[k] = None
+                    elif k in float_fields:
+                        row[k] = round(v, 2)
+                    else:
+                        row[k] = v
+                elif hasattr(v, "item"):
+                    row[k] = v.item()
+                else:
+                    row[k] = v
+            clean.append(row)
+        return clean
+
+    async def search_funds(
+        self,
+        keyword: str = "",
+        fund_type: str = "",
+        sort_by: str = "近1年",
+        sort_order: str = "desc",
+        limit: int = 20,
+    ) -> Dict[str, Any]:
+        """搜索基金列表，支持按名称/代码模糊搜索和多维度排序。"""
+        cache_key = f"akshare:search_funds:{keyword}:{fund_type}:{sort_by}:{sort_order}:{limit}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.fund_open_fund_rank_em, symbol="全部")
+            if df is None or df.empty:
+                return {"results": [], "total": 0, "source": "akshare"}
+
+            col_map = {
+                "基金代码": "fund_code", "基金简称": "fund_name", "日期": "date",
+                "单位净值": "nav", "累计净值": "acc_nav",
+                "近1周": "return_1w", "近1月": "return_1m", "近3月": "return_3m",
+                "近6月": "return_6m", "近1年": "return_1y", "近2年": "return_2y",
+                "近3年": "return_3y", "今年来": "return_ytd",
+                "成立来": "return_since_inception", "手续费": "fee",
+            }
+            df = df.rename(columns=col_map)
+
+            if keyword:
+                mask = (
+                    df["fund_code"].astype(str).str.contains(keyword, case=False, na=False)
+                    | df["fund_name"].astype(str).str.contains(keyword, case=False, na=False)
+                )
+                df = df[mask]
+
+            sort_col = col_map.get(sort_by, "return_1y")
+            if sort_col in df.columns:
+                df[sort_col] = pd.to_numeric(df[sort_col], errors="coerce")
+                df = df.sort_values(by=sort_col, ascending=(sort_order.lower() == "asc"), na_position="last")
+
+            total = len(df)
+            df = df.head(min(limit, 50))
+            float_fields = (
+                "nav", "acc_nav", "return_1w", "return_1m", "return_3m",
+                "return_6m", "return_1y", "return_2y", "return_3y",
+                "return_ytd", "return_since_inception", "fee",
+            )
+            records = self._clean_records(df.to_dict(orient="records"), float_fields)
+            result = {
+                "results": records, "total": total, "returned": len(records),
+                "keyword": keyword, "sort_by": sort_by, "sort_order": sort_order,
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"search_funds failed: {e}")
+            return {"results": [], "total": 0, "source": "akshare", "error": str(e)}
+
+    async def get_fund_detail(self, fund_code: str) -> Dict[str, Any]:
+        """获取基金详情：基本信息 + 资产配置。"""
+        cache_key = f"akshare:fund_detail:{fund_code}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            detail = {"fund_code": fund_code, "source": "akshare"}
+
+            try:
+                df_info = await self._run(ak.fund_individual_basic_info_xq, symbol=fund_code)
+                if df_info is not None and not df_info.empty:
+                    for _, row in df_info.iterrows():
+                        key = str(row.iloc[0]).strip()
+                        val = row.iloc[1]
+                        if hasattr(val, "item"):
+                            val = val.item()
+                        if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+                            val = None
+                        detail[key] = val
+            except Exception:
+                pass
+
+            try:
+                df_hold = await self._run(ak.fund_individual_detail_hold_xq, symbol=fund_code)
+                if df_hold is not None and not df_hold.empty:
+                    detail["asset_allocation"] = self._clean_records(df_hold.to_dict(orient="records"))
+            except Exception:
+                pass
+
+            await self.cache.set(cache_key, detail, ttl=3600)
+            return detail
+        except Exception as e:
+            self.logger.error(f"get_fund_detail failed: {e}")
+            return {"fund_code": fund_code, "source": "akshare", "error": str(e)}
+
+    async def get_fund_ranking(
+        self, fund_type: str = "全部", sort_by: str = "近1年",
+        sort_order: str = "desc", limit: int = 30,
+    ) -> Dict[str, Any]:
+        """基金排行：按类型和业绩周期筛选排序。"""
+        cache_key = f"akshare:fund_ranking:{fund_type}:{sort_by}:{sort_order}:{limit}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.fund_open_fund_rank_em, symbol=fund_type)
+            if df is None or df.empty:
+                return {"results": [], "total": 0, "source": "akshare"}
+
+            col_map = {
+                "基金代码": "fund_code", "基金简称": "fund_name", "日期": "date",
+                "单位净值": "nav", "累计净值": "acc_nav",
+                "近1周": "return_1w", "近1月": "return_1m", "近3月": "return_3m",
+                "近6月": "return_6m", "近1年": "return_1y", "近2年": "return_2y",
+                "近3年": "return_3y", "今年来": "return_ytd",
+                "成立来": "return_since_inception", "手续费": "fee",
+            }
+            df = df.rename(columns=col_map)
+
+            sort_col = col_map.get(sort_by, "return_1y")
+            if sort_col in df.columns:
+                df[sort_col] = pd.to_numeric(df[sort_col], errors="coerce")
+                df = df.sort_values(by=sort_col, ascending=(sort_order.lower() == "asc"), na_position="last")
+
+            total = len(df)
+            df = df.head(min(limit, 100))
+            float_fields = (
+                "nav", "acc_nav", "return_1w", "return_1m", "return_3m",
+                "return_6m", "return_1y", "return_2y", "return_3y",
+                "return_ytd", "return_since_inception", "fee",
+            )
+            results = self._clean_records(df.to_dict(orient="records"), float_fields)
+            result = {
+                "results": results, "total": total, "returned": len(results),
+                "fund_type": fund_type, "sort_by": sort_by, "sort_order": sort_order,
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_fund_ranking failed: {e}")
+            return {"results": [], "total": 0, "source": "akshare", "error": str(e)}
+
+    async def get_fund_manager(
+        self, manager_name: str = "", fund_company: str = "", limit: int = 20,
+    ) -> Dict[str, Any]:
+        """基金经理信息：从业时间、管理规模、最佳回报。"""
+        cache_key = f"akshare:fund_manager:{manager_name}:{fund_company}:{limit}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.fund_manager_em)
+            if df is None or df.empty:
+                return {"results": [], "total": 0, "source": "akshare"}
+
+            col_map = {
+                "经理姓名": "manager_name", "基金公司": "fund_company",
+                "任职基金代码": "fund_code", "任职基金": "fund_name",
+                "累计从业时间": "tenure_days", "现任基金资产总规模": "aum",
+                "现任基金最佳回报": "best_return",
+            }
+            df = df.rename(columns=col_map)
+
+            if manager_name:
+                df = df[df["manager_name"].astype(str).str.contains(manager_name, case=False, na=False)]
+            if fund_company:
+                df = df[df["fund_company"].astype(str).str.contains(fund_company, case=False, na=False)]
+
+            total = len(df)
+            df = df.head(min(limit, 50))
+            results = self._clean_records(df.to_dict(orient="records"), ("aum", "best_return"))
+            result = {
+                "results": results, "total": total, "returned": len(results),
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_fund_manager failed: {e}")
+            return {"results": [], "total": 0, "source": "akshare", "error": str(e)}
+
+    async def get_fund_valuation(self, fund_code: str = "") -> Dict[str, Any]:
+        """基金实时估值：估算净值、估算涨跌幅、实际净值、偏差。"""
+        cache_key = f"akshare:fund_valuation:{fund_code}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.fund_value_estimation_em)
+            if df is None or df.empty:
+                return {"results": [], "total": 0, "source": "akshare"}
+
+            rename_map = {"序号": "rank", "基金代码": "fund_code", "基金名称": "fund_name"}
+            for c in df.columns:
+                if "估算值" in str(c):
+                    rename_map[c] = "estimated_nav"
+                elif "估算涨跌幅" in str(c):
+                    rename_map[c] = "estimated_change_pct"
+                elif "估算偏差" in str(c):
+                    rename_map[c] = "estimation_deviation"
+            for c in df.columns:
+                if c in rename_map:
+                    continue
+                if "前单位净值" in str(c) or ("前" in str(c) and "净值" in str(c)):
+                    rename_map[c] = "previous_nav"
+                elif "单位净值" in str(c):
+                    rename_map[c] = "actual_nav"
+                elif "涨跌幅" in str(c) and "估算" not in str(c):
+                    rename_map[c] = "actual_change_pct"
+            df = df.rename(columns=rename_map)
+
+            if fund_code and "fund_code" in df.columns:
+                df = df[df["fund_code"].astype(str) == str(fund_code)]
+
+            total = len(df)
+            if not fund_code:
+                df = df.head(20)
+
+            float_fields = (
+                "estimated_nav", "estimated_change_pct", "actual_nav",
+                "actual_change_pct", "estimation_deviation", "previous_nav",
+            )
+            results = self._clean_records(df.to_dict(orient="records"), float_fields)
+            result = {
+                "results": results, "total": total, "returned": len(results),
+                "fund_code": fund_code or "all", "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_fund_valuation failed: {e}")
+            return {"results": [], "total": 0, "source": "akshare", "error": str(e)}
+
+    async def get_fund_performance(self, fund_code: str) -> Dict[str, Any]:
+        """基金业绩分析：各周期排名、超额收益、最大回撤、盈利概率。"""
+        cache_key = f"akshare:fund_performance:{fund_code}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            perf = {"fund_code": fund_code, "source": "akshare"}
+
+            try:
+                df_ach = await self._run(ak.fund_individual_achievement_xq, symbol=fund_code)
+                if df_ach is not None and not df_ach.empty:
+                    perf["achievement"] = self._clean_records(df_ach.to_dict(orient="records"))
+            except Exception:
+                pass
+
+            try:
+                df_ana = await self._run(ak.fund_individual_analysis_xq, symbol=fund_code)
+                if df_ana is not None and not df_ana.empty:
+                    perf["analysis"] = self._clean_records(df_ana.to_dict(orient="records"))
+            except Exception:
+                pass
+
+            try:
+                df_prof = await self._run(ak.fund_individual_profit_probability_xq, symbol=fund_code)
+                if df_prof is not None and not df_prof.empty:
+                    perf["profit_probability"] = self._clean_records(df_prof.to_dict(orient="records"))
+            except Exception:
+                pass
+
+            await self.cache.set(cache_key, perf, ttl=3600)
+            return perf
+        except Exception as e:
+            self.logger.error(f"get_fund_performance failed: {e}")
+            return {"fund_code": fund_code, "source": "akshare", "error": str(e)}
+
+    async def get_fund_scale(self, fund_code: str) -> Dict[str, Any]:
+        """基金规模变动：申购/赎回/份额/净资产历史变化。"""
+        cache_key = f"akshare:fund_scale:{fund_code}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.fund_scale_change_em, symbol=fund_code)
+            if df is None or df.empty:
+                return {"results": [], "fund_code": fund_code, "source": "akshare"}
+
+            col_map = {
+                "截止日期": "date", "基金代码": "fund_code",
+                "期间申购": "subscription", "期间赎回": "redemption",
+                "期末总份额": "total_shares", "期末净资产": "total_nav",
+            }
+            df = df.rename(columns=col_map)
+            records = self._clean_records(
+                df.to_dict(orient="records"),
+                ("subscription", "redemption", "total_shares", "total_nav"),
+            )
+            result = {
+                "results": records, "fund_code": fund_code,
+                "total": len(records), "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_fund_scale failed: {e}")
+            return {"results": [], "fund_code": fund_code, "source": "akshare", "error": str(e)}
 

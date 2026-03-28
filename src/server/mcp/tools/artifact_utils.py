@@ -56,6 +56,14 @@ class ComponentType(str, Enum):
     US_SHARE_STATISTICS = "us_share_statistics"
     # Quantitative
     STOCK_SCREENER = "stock_screener"
+    # Fund data
+    FUND_SEARCH = "fund_search"
+    FUND_DETAIL = "fund_detail"
+    FUND_RANKING = "fund_ranking"
+    FUND_MANAGER = "fund_manager"
+    FUND_VALUATION = "fund_valuation"
+    FUND_PERFORMANCE = "fund_performance"
+    FUND_SCALE = "fund_scale"
     # 其他
     OTHER = "other"
 
