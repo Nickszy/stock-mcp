@@ -126,6 +126,8 @@ _MARKET_METHODS: Set[str] = {
     "screen_stocks",
     "get_industry_ranking",
     "get_concept_ranking",
+    # US market overview
+    "get_us_market_overview",
 }
 
 

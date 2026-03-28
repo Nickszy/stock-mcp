@@ -106,8 +106,8 @@ TOOL_GROUPS: List[ToolGroup] = [
         name="us-technical",
         register=register_us_technical_tools,
         enabled=True,
-        description="美股技术分析 (指标/量价/K线/综合摘要)",
-        count=4,
+        description="美股技术分析 (指标/量价/K线/综合摘要/市场概览)",
+        count=5,
     ),
     ToolGroup(
         name="us-sector",

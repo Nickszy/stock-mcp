@@ -2139,3 +2139,153 @@ class YahooAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.error(f"get_us_financial_health failed for {ticker}: {e}")
             raise ValueError(f"get_us_financial_health failed for {ticker}: {e}")
+
+    # ------------------------------------------------------------------
+    # US market overview / snapshot
+    # ------------------------------------------------------------------
+
+    async def get_us_market_overview(self) -> Dict[str, Any]:
+        """Get US market overview: major indices, VIX, sector performance.
+
+        Fetches data for key market proxies via yfinance:
+        - SPY (S&P 500), QQQ (Nasdaq 100), DIA (Dow 30), IWM (Russell 2000)
+        - VIX (volatility index)
+        - Sector ETFs (XLK, XLF, XLE, XLV, XLY, XLP, XLI, XLB, XLRE, XLU, XLC)
+
+        Returns a comprehensive market snapshot for AI analysis.
+        """
+        def _safe(val):
+            if val is None:
+                return None
+            try:
+                f = float(val)
+                return None if (math.isnan(f) or math.isinf(f)) else f
+            except Exception:
+                return None
+
+        cache_key = "yahoo:us_market_overview"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            # Major indices
+            index_tickers = {
+                "SPY": "S&P 500",
+                "QQQ": "Nasdaq 100",
+                "DIA": "Dow 30",
+                "IWM": "Russell 2000",
+            }
+            # Sector ETFs
+            sector_etfs = {
+                "XLK": "Technology",
+                "XLF": "Financials",
+                "XLE": "Energy",
+                "XLV": "Healthcare",
+                "XLY": "Consumer Disc.",
+                "XLP": "Consumer Staples",
+                "XLI": "Industrials",
+                "XLB": "Materials",
+                "XLRE": "Real Estate",
+                "XLU": "Utilities",
+                "XLC": "Communication",
+            }
+            vix_ticker = "^VIX"
+
+            all_symbols = list(index_tickers.keys()) + list(sector_etfs.keys()) + [vix_ticker]
+
+            def _fetch_all():
+                result = {}
+                for sym in all_symbols:
+                    try:
+                        t = yf.Ticker(sym)
+                        info = t.info
+                        result[sym] = {
+                            "price": info.get("currentPrice") or info.get("regularMarketPrice"),
+                            "change_pct": info.get("regularMarketChangePercent"),
+                            "change": info.get("regularMarketChange"),
+                            "volume": info.get("regularMarketVolume"),
+                        }
+                    except Exception:
+                        result[sym] = None
+                return result
+
+            raw_quotes = await self._run(_fetch_all)
+
+            # Build indices section
+            indices = []
+            for sym, name in index_tickers.items():
+                q = raw_quotes.get(sym) or {}
+                indices.append({
+                    "symbol": sym,
+                    "name": name,
+                    "price": round(_safe(q.get("price")) or 0, 2),
+                    "change_pct": round(_safe(q.get("change_pct")) or 0, 2),
+                    "change": round(_safe(q.get("change")) or 0, 2),
+                    "volume": q.get("volume"),
+                })
+
+            # Build sectors section
+            sectors = []
+            for sym, name in sector_etfs.items():
+                q = raw_quotes.get(sym) or {}
+                sectors.append({
+                    "symbol": sym,
+                    "name": name,
+                    "change_pct": round(_safe(q.get("change_pct")) or 0, 2),
+                    "price": round(_safe(q.get("price")) or 0, 2),
+                })
+            sectors.sort(key=lambda x: x.get("change_pct", 0), reverse=True)
+
+            # VIX
+            vix_q = raw_quotes.get(vix_ticker) or {}
+            vix_level = _safe(vix_q.get("price"))
+            if vix_level is not None and vix_level < 15:
+                vix_signal = "低波动"
+            elif vix_level is not None and vix_level < 20:
+                vix_signal = "正常"
+            elif vix_level is not None and vix_level < 30:
+                vix_signal = "偏高"
+            else:
+                vix_signal = "高波动/恐慌"
+
+            # Market sentiment summary
+            spy_change = 0
+            for idx in indices:
+                if idx["symbol"] == "SPY":
+                    spy_change = idx.get("change_pct", 0)
+                    break
+
+            up_sectors = sum(1 for s in sectors if s.get("change_pct", 0) > 0)
+            down_sectors = len(sectors) - up_sectors
+
+            if spy_change > 1.0:
+                sentiment = "强势上涨"
+            elif spy_change > 0:
+                sentiment = "温和上涨"
+            elif spy_change > -1.0:
+                sentiment = "温和下跌"
+            else:
+                sentiment = "显著下跌"
+
+            result = {
+                "indices": indices,
+                "sectors": sectors,
+                "vix": {
+                    "level": round(vix_level, 2) if vix_level else None,
+                    "signal": vix_signal,
+                },
+                "market_breadth": {
+                    "up_sectors": up_sectors,
+                    "down_sectors": down_sectors,
+                },
+                "sentiment": sentiment,
+                "source": "yahoo",
+            }
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"get_us_market_overview failed: {e}")
+            return {"error": str(e), "indices": [], "sectors": [], "source": "yahoo"}
+

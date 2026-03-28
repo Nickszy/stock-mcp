@@ -16,6 +16,7 @@ from fastmcp import FastMCP, Context
 
 from src.server.core.use_cases import technical as technical_use_cases
 from src.server.utils.logger import logger
+from src.server.core.dependencies import Container
 from src.server.mcp.tools.artifact_utils import (
     ComponentType,
     create_artifact_envelope,
@@ -466,6 +467,95 @@ def register_us_technical_tools(mcp: FastMCP):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+    # ------------------------------------------------------------------
+    # US Market Overview
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"us-market", "overview"})
+    async def get_us_market_overview(
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get US market overview: major indices, VIX, sector performance, and sentiment.
+
+        Provides a comprehensive snapshot of the US stock market including:
+        - Major index performance (SPY/QQQ/DIA/IWM)
+        - CBOE VIX volatility level and signal
+        - Sector ETF performance (11 GICS sectors ranked by change%)
+        - Market breadth and sentiment assessment
+
+        No arguments needed — always returns the full market snapshot.
+
+        Returns:
+            Market overview with indices, sector rankings, VIX, and sentiment.
+        """
+        if ctx:
+            await ctx.info("获取美股市场概览")
+
+        try:
+            logger.info("MCP tool: get_us_market_overview")
+            gateway = Container.market_gateway()
+            result = await gateway.get_us_market_overview()
+
+            indices = result.get("indices", [])
+            sectors = result.get("sectors", [])
+            vix = result.get("vix", {})
+            breadth = result.get("market_breadth", {})
+            sentiment = result.get("sentiment", "")
+
+            # Build summary
+            spy_info = next((i for i in indices if i["symbol"] == "SPY"), {})
+            spy_pct = spy_info.get("change_pct", 0) if spy_info else 0
+            vix_level = vix.get("level", "N/A")
+            vix_signal = vix.get("signal", "")
+
+            summary = (
+                f"美股市场概览: SPY {spy_pct:+.2f}%, "
+                f"VIX {vix_level}({vix_signal}), "
+                f"板块上涨{breadth.get('up_sectors', 0)}/下跌{breadth.get('down_sectors', 0)}, "
+                f"整体{sentiment}"
+            )
+
+            # Markdown output
+            md = "## 美股市场概览\n\n"
+            md += f"**整体情绪**: {sentiment} | **VIX**: {vix_level} ({vix_signal})\n\n"
+
+            md += "### 主要指数\n"
+            md += "| 指数 | 价格 | 涨跌幅% | 涨跌额 |\n"
+            md += "|------|------|---------|--------|\n"
+            for idx in indices:
+                md += (
+                    f"| {idx['name']} ({idx['symbol']}) "
+                    f"| {idx['price']:.2f} "
+                    f"| {idx['change_pct']:+.2f}% "
+                    f"| {idx['change']:+.2f} |\n"
+                )
+
+            md += "\n### 板块表现 (按涨跌幅排序)\n"
+            md += "| 板块 | ETF | 涨跌幅% |\n"
+            md += "|------|-----|--------|\n"
+            for s in sectors:
+                md += f"| {s['name']} | {s['symbol']} | {s['change_pct']:+.2f}% |\n"
+
+            md += f"\n### 市场广度\n"
+            md += f"- 上涨板块: {breadth.get('up_sectors', 0)} / {breadth.get('up_sectors', 0) + breadth.get('down_sectors', 0)}\n"
+
+            return create_artifact_response(
+                summary=summary,
+                artifact=create_artifact_envelope(
+                    component_type=ComponentType.US_SECTOR_ETF,
+                    name="美股市场概览",
+                    content=result,
+                    description=summary,
+                    markdown=md,
+                    visible_to_llm=True,
+                    display_in_report=True,
+                ),
+            )
+
+        except Exception as e:
+            logger.error(f"get_us_market_overview failed: {e}")
+            return {"error": str(e), "summary": f"美股市场概览获取失败: {e}"}
 
 
 def _fmt_vol(val) -> str:
