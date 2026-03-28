@@ -29,6 +29,7 @@ from src.server.api.routes import (
     news_router,
     fundamental_router,
     money_flow_router,
+    fact_pack_router,
 )
 from src.server.utils.logger import logger
 from src.server.middleware import JsonArgumentsFixMiddleware
@@ -179,6 +180,7 @@ def create_app():
     app.include_router(news_router, tags=["News"])
     app.include_router(fundamental_router, tags=["Fundamental"])
     app.include_router(money_flow_router, tags=["Money Flow"])
+    app.include_router(fact_pack_router, tags=["Fact Pack"])
 
     logger.info("✅ RESTful API routes registered")
     logger.info("   - Health check: /health")

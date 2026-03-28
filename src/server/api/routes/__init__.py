@@ -6,6 +6,7 @@ from .filings import router as filings_router
 from .news import router as news_router
 from .fundamental import router as fundamental_router
 from .money_flow import router as money_flow_router
+from .fact_pack import router as fact_pack_router
 
 __all__ = [
     "market_data_router",
@@ -13,4 +14,5 @@ __all__ = [
     "news_router",
     "fundamental_router",
     "money_flow_router",
+    "fact_pack_router",
 ]
