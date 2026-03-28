@@ -4847,3 +4847,263 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"get_etf_performance failed: {e}")
             return {"results": [], "symbol": symbol, "source": "akshare", "error": str(e)}
 
+    # ------------------------------------------------------------------
+    # COL-142: 量价因子 / 相关性 / 组合分析
+    # ------------------------------------------------------------------
+
+    async def get_stock_factors(self, symbol: str, days: int = 250) -> Dict[str, Any]:
+        """计算单只股票的量化因子 (动量/波动率/换手率/市值/流动性).
+
+        Args:
+            symbol: 股票代码 (如 '600519')
+            days: 计算窗口天数 (default 250 ≈ 1年交易日)
+        """
+        cache_key = f"stock_factors:{symbol}:{days}"
+        try:
+            cached = await self.cache.get(cache_key)
+            if cached:
+                return cached
+
+            import numpy as np
+
+            end_date = datetime.now().strftime("%Y%m%d")
+            start_date = (datetime.now() - timedelta(days=days * 2)).strftime("%Y%m%d")
+
+            prices = await self._run(
+                ak.stock_zh_a_hist, symbol=symbol,
+                period="daily", start_date=start_date, end_date=end_date,
+            )
+            if prices is None or prices.empty:
+                return {"symbol": symbol, "factors": {}, "source": "akshare", "error": "No price data"}
+
+            df = prices.copy()
+            df["收盘"] = df["收盘"].astype(float)
+            df["成交量"] = df["成交量"].astype(float)
+            df["成交额"] = df["成交额"].astype(float) if "成交额" in df.columns else 0.0
+
+            closes = df["收盘"].values
+            volumes = df["成交量"].values
+            amounts = df["成交额"].values
+
+            factors: Dict[str, Any] = {}
+
+            # --- Momentum factors ---
+            n = len(closes)
+            for period, label in [(22, "1M"), (66, "3M"), (132, "6M"), (264, "12M")]:
+                if n > period:
+                    ret = (closes[-1] / closes[-period - 1] - 1) * 100
+                    factors[f"momentum_{label}"] = round(float(ret), 2)
+                else:
+                    factors[f"momentum_{label}"] = None
+
+            # --- Volatility factor (annualized) ---
+            if n > 22:
+                daily_ret = np.diff(closes) / closes[:-1]
+                vol = float(np.std(daily_ret[-22:]) * np.sqrt(252) * 100)
+                factors["volatility_1M"] = round(vol, 2)
+                if n > 66:
+                    vol3 = float(np.std(daily_ret[-66:]) * np.sqrt(252) * 100)
+                    factors["volatility_3M"] = round(vol3, 2)
+
+            # --- Turnover factor (from amount/price data) ---
+            if n > 5:
+                avg_amount_5d = float(np.mean(amounts[-5:]))
+                avg_amount_20d = float(np.mean(amounts[-20:])) if n > 20 else None
+                factors["avg_amount_5d"] = round(avg_amount_5d, 0)
+                if avg_amount_20d:
+                    factors["avg_amount_20d"] = round(avg_amount_20d, 0)
+
+            # --- Liquidity factor (Amihud illiquidity) ---
+            if n > 22:
+                daily_ret_abs = np.abs(np.diff(closes[-23:]) / closes[-23:-1])
+                dollar_vol = amounts[-22:]
+                mask = dollar_vol > 0
+                if mask.any():
+                    illiq = float(np.mean(daily_ret_abs[mask] / dollar_vol[mask] * 1e8))
+                    factors["amihud_illiquidity"] = round(illiq, 6)
+
+            # --- Latest values ---
+            factors["latest_close"] = round(float(closes[-1]), 2)
+            factors["latest_volume"] = round(float(volumes[-1]), 0)
+            factors["latest_amount"] = round(float(amounts[-1]), 0)
+            factors["data_days"] = n
+
+            result = {
+                "symbol": symbol,
+                "factors": factors,
+                "calculation_date": end_date,
+                "window_days": days,
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_stock_factors failed: {e}")
+            return {"symbol": symbol, "factors": {}, "source": "akshare", "error": str(e)}
+
+    async def get_stock_correlation(
+        self, symbols: str, days: int = 60,
+    ) -> Dict[str, Any]:
+        """计算多只股票之间的相关系数矩阵.
+
+        Args:
+            symbols: 逗号分隔的股票代码 (如 '600519,000858,000333')
+            days: 计算窗口天数 (default 60)
+        """
+        cache_key = f"stock_corr:{symbols}:{days}"
+        try:
+            cached = await self.cache.get(cache_key)
+            if cached:
+                return cached
+
+            import numpy as np
+
+            code_list = [s.strip() for s in symbols.split(",") if s.strip()]
+            if len(code_list) < 2:
+                return {"error": "Need at least 2 symbols", "source": "akshare"}
+
+            end_date = datetime.now().strftime("%Y%m%d")
+            start_date = (datetime.now() - timedelta(days=days * 2)).strftime("%Y%m%d")
+
+            price_series: Dict[str, list] = {}
+            for code in code_list:
+                df = await self._run(
+                    ak.stock_zh_a_hist, symbol=code,
+                    period="daily", start_date=start_date, end_date=end_date,
+                )
+                if df is not None and not df.empty:
+                    closes = df["收盘"].astype(float).values
+                    if len(closes) > 1:
+                        rets = np.diff(closes) / closes[:-1]
+                        price_series[code] = rets.tolist()
+
+            if len(price_series) < 2:
+                return {"error": "Not enough price data", "symbols": code_list, "source": "akshare"}
+
+            min_len = min(len(v) for v in price_series.values())
+            aligned: Dict[str, np.ndarray] = {}
+            for code, rets in price_series.items():
+                aligned[code] = np.array(rets[-min_len:])
+
+            codes = list(aligned.keys())
+            n_codes = len(codes)
+            corr_matrix = np.zeros((n_codes, n_codes))
+
+            for i in range(n_codes):
+                for j in range(n_codes):
+                    if i == j:
+                        corr_matrix[i][j] = 1.0
+                    else:
+                        corr = float(np.corrcoef(aligned[codes[i]], aligned[codes[j]])[0, 1])
+                        corr_matrix[i][j] = round(corr, 4)
+
+            matrix_rows = []
+            for i, code in enumerate(codes):
+                row = {"symbol": code}
+                for j, code2 in enumerate(codes):
+                    row[f"corr_{code2}"] = corr_matrix[i][j]
+                matrix_rows.append(row)
+
+            upper_tri = []
+            for i in range(n_codes):
+                for j in range(i + 1, n_codes):
+                    upper_tri.append(corr_matrix[i][j])
+            avg_corr = round(float(np.mean(upper_tri)), 4) if upper_tri else None
+
+            result = {
+                "symbols": codes,
+                "days": days,
+                "data_points": min_len,
+                "avg_correlation": avg_corr,
+                "correlation_matrix": matrix_rows,
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_stock_correlation failed: {e}")
+            return {"symbols": symbols.split(","), "source": "akshare", "error": str(e)}
+
+    async def get_factor_ranking(
+        self,
+        factor: str = "change_pct",
+        direction: str = "desc",
+        limit: int = 30,
+        exchange: str = "",
+    ) -> Dict[str, Any]:
+        """全市场因子排名.
+
+        Args:
+            factor: 因子名称 (change_pct/turnover_rate/volume_ratio/amplitude)
+            direction: 'desc' 或 'asc'
+            limit: 返回数量 (default 30, max 100)
+            exchange: 交易所筛选 (SSE/SZSE/BSE, 空=全部)
+        """
+        cache_key = f"factor_rank:{factor}:{direction}:{limit}:{exchange}"
+        try:
+            cached = await self.cache.get(cache_key)
+            if cached:
+                return cached
+
+            df = await self._run(ak.stock_zh_a_spot_em)
+            if df is None or df.empty:
+                return {"results": [], "factor": factor, "source": "akshare", "error": "No spot data"}
+
+            factor_col_map = {
+                "change_pct": "涨跌幅",
+                "turnover_rate": "换手率",
+                "volume_ratio": "量比",
+                "amplitude": "振幅",
+            }
+
+            col = factor_col_map.get(factor, "涨跌幅")
+            if col not in df.columns:
+                return {"results": [], "factor": factor, "source": "akshare", "error": f"Column {col} not found"}
+
+            if exchange and "代码" in df.columns:
+                exchange_map = {"SSE": "6", "SZSE": ("0", "3"), "BSE": "8"}
+                prefix = exchange_map.get(exchange)
+                if prefix:
+                    if isinstance(prefix, tuple):
+                        mask = df["代码"].astype(str).str[0].isin(prefix)
+                    else:
+                        mask = df["代码"].astype(str).str[0] == prefix
+                    df = df[mask]
+
+            df[factor] = pd.to_numeric(df[col], errors="coerce")
+            df = df.dropna(subset=[factor])
+
+            ascending = direction == "asc"
+            df = df.sort_values(by=factor, ascending=ascending)
+
+            total = len(df)
+            df = df.head(min(limit, 100))
+
+            records = []
+            for _, row in df.iterrows():
+                r = {
+                    "symbol": str(row.get("代码", "")),
+                    "name": str(row.get("名称", "")),
+                    "factor_value": round(float(row[factor]), 4) if pd.notna(row[factor]) else None,
+                    "factor_name": factor,
+                }
+                for extra in ["涨跌幅", "换手率", "量比", "最新价", "总市值"]:
+                    if extra in df.columns:
+                        val = row.get(extra)
+                        r[extra] = round(float(val), 2) if pd.notna(val) else None
+                records.append(r)
+
+            result = {
+                "results": records,
+                "total": total,
+                "returned": len(records),
+                "factor": factor,
+                "direction": direction,
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_factor_ranking failed: {e}")
+            return {"results": [], "factor": factor, "source": "akshare", "error": str(e)}
+

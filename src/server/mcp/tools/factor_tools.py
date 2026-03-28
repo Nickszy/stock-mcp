@@ -1,0 +1,250 @@
+# src/server/mcp/tools/factor_tools.py
+"""MCP tools for quantitative factor analysis.
+
+Tools:
+  - get_stock_factors: Calculate momentum/volatility/turnover/liquidity factors
+  - get_stock_correlation: Correlation matrix between stocks
+  - get_factor_ranking: Market-wide factor ranking
+"""
+
+import math
+from typing import Any, Dict, List, Optional
+import time
+
+from fastmcp import FastMCP, Context
+
+from src.server.core.dependencies import Container
+from src.server.utils.logger import logger
+from src.server.mcp.tools.artifact_utils import (
+    ComponentType,
+    create_artifact_envelope,
+    create_artifact_response,
+)
+
+
+def _safe_fmt(value: Any, fmt: str = ".2f") -> str:
+    if value is None:
+        return "-"
+    try:
+        f = float(value)
+        if math.isnan(f) or math.isinf(f):
+            return "-"
+        return format(f, fmt)
+    except (TypeError, ValueError):
+        return "-"
+
+
+def register_factor_tools(mcp: FastMCP):
+    """Register factor analysis MCP tools."""
+
+    # ------------------------------------------------------------------
+    # get_stock_factors — 单股因子计算
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"factor", "quant"})
+    async def get_stock_factors(
+        symbol: str = "600519",
+        days: int = 250,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """计算单只股票的量化因子：动量/波动率/换手率/流动性/Amihud非流动性。
+
+        Typical use cases:
+        - "贵州茅台的动量和波动率因子"
+        - "600519的1月/3月/6月/12月动量"
+        - "比较宁德时代和比亚迪的因子"
+
+        Args:
+            symbol: 股票代码 (如 '600519'=贵州茅台, '000858'=五粮液)
+            days: 计算窗口天数 (default 250 ≈ 1年)
+            ctx: FastMCP Context.
+
+        Returns:
+            Factor values including momentum, volatility, turnover, liquidity.
+        """
+        if ctx:
+            await ctx.info(f"计算因子: {symbol}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_stock_factors", symbol=symbol)
+
+            result = await Container.market_gateway().get_stock_factors(
+                symbol=symbol, days=days,
+            )
+
+            elapsed = time.perf_counter() - t0
+            factors = result.get("factors", {})
+            summary = f"因子计算({symbol}): {len(factors)}个因子 ({elapsed:.1f}s)"
+
+            md = f"## 量化因子: {symbol}\n\n"
+            md += f"**窗口**: {days}天 | **数据天数**: {factors.get('data_days', '-')} | **耗时**: {elapsed:.1f}s\n\n"
+            md += "| 因子 | 值 |\n|------|----|\n"
+            for k, v in factors.items():
+                md += f"| {k} | {v if v is not None else '-'} |\n"
+
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.STOCK_SCREENER,
+                name=f"量化因子: {symbol}",
+                content={"markdown": md, "data": result},
+                description=summary,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except Exception as e:
+            logger.error(f"get_stock_factors failed: {e}")
+            err = create_artifact_envelope(
+                component_type=ComponentType.TABLE, name="因子计算错误",
+                content={"error": str(e)}, description=f"因子计算失败: {e}",
+            )
+            return create_artifact_response(summary=f"因子计算失败: {e}", artifact=err)
+
+    # ------------------------------------------------------------------
+    # get_stock_correlation — 多股相关性矩阵
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"factor", "correlation"})
+    async def get_stock_correlation(
+        symbols: str = "600519,000858,000333",
+        days: int = 60,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """计算多只股票之间的相关系数矩阵。
+
+        Typical use cases:
+        - "茅台、五粮液、美的之间的相关性"
+        - "白酒板块股票的相关系数"
+        - "组合内股票的分散化程度"
+
+        Args:
+            symbols: 逗号分隔的股票代码 (如 '600519,000858,000333')
+            days: 计算窗口天数 (default 60)
+            ctx: FastMCP Context.
+
+        Returns:
+            Correlation matrix with average correlation.
+        """
+        if ctx:
+            await ctx.info(f"计算相关性: {symbols}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_stock_correlation", symbols=symbols)
+
+            result = await Container.market_gateway().get_stock_correlation(
+                symbols=symbols, days=days,
+            )
+
+            elapsed = time.perf_counter() - t0
+            codes = result.get("symbols", [])
+            avg_corr = result.get("avg_correlation")
+            matrix = result.get("correlation_matrix", [])
+
+            summary = f"相关性矩阵({len(codes)}只, {days}天): 平均相关={avg_corr} ({elapsed:.1f}s)"
+
+            md = f"## 股票相关性矩阵\n\n"
+            md += f"**标的**: {', '.join(codes)} | **窗口**: {days}天 | **平均相关**: {avg_corr or '-'}\n\n"
+
+            # Table header
+            header = "| 代码 |"
+            sep = "|------|"
+            for code in codes:
+                header += f" {code} |"
+                sep += "------|"
+            md += header + "\n" + sep + "\n"
+
+            for row in matrix:
+                line = f"| {row['symbol']} |"
+                for code in codes:
+                    val = row.get(f"corr_{code}")
+                    line += f" {_safe_fmt(val)} |"
+                md += line + "\n"
+
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.TABLE,
+                name="股票相关性矩阵",
+                content={"markdown": md, "data": result},
+                description=summary,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except Exception as e:
+            logger.error(f"get_stock_correlation failed: {e}")
+            err = create_artifact_envelope(
+                component_type=ComponentType.TABLE, name="相关性错误",
+                content={"error": str(e)}, description=f"相关性计算失败: {e}",
+            )
+            return create_artifact_response(summary=f"相关性计算失败: {e}", artifact=err)
+
+    # ------------------------------------------------------------------
+    # get_factor_ranking — 全市场因子排名
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"factor", "ranking"})
+    async def get_factor_ranking(
+        factor: str = "change_pct",
+        direction: str = "desc",
+        limit: int = 30,
+        exchange: str = "",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取A股全市场因子排名。
+
+        Typical use cases:
+        - "今日涨幅最大的30只股票"
+        - "换手率最低的大盘股"
+        - "量比最高的股票排名"
+        - "振幅最大的股票"
+
+        Args:
+            factor: 因子名称 (change_pct=涨跌幅/turnover_rate=换手率/volume_ratio=量比/amplitude=振幅)
+            direction: 排序方向 (desc=从高到低, asc=从低到高)
+            limit: 返回数量 (default 30, max 100)
+            exchange: 交易所 (SSE/SZSE/BSE, 空=全部)
+            ctx: FastMCP Context.
+
+        Returns:
+            Ranked stock list by factor value.
+        """
+        if ctx:
+            await ctx.info(f"因子排名: {factor} {direction}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_factor_ranking", factor=factor, direction=direction)
+
+            result = await Container.market_gateway().get_factor_ranking(
+                factor=factor, direction=direction, limit=limit, exchange=exchange,
+            )
+
+            elapsed = time.perf_counter() - t0
+            results = result.get("results", [])
+            total = result.get("total", 0)
+
+            summary = f"因子排名({factor}): 全市场{total}只, 返回{len(results)}只 ({elapsed:.1f}s)"
+
+            md = f"## 因子排名: {factor} ({direction})\n\n"
+            md += f"**全市场总数**: {total} | **返回**: {len(results)} | **耗时**: {elapsed:.1f}s\n\n"
+            md += "| 排名 | 代码 | 名称 | 因子值 | 涨跌幅% | 换手率% | 量比 | 最新价 |\n"
+            md += "|------|------|------|--------|---------|---------|------|--------|\n"
+            for i, r in enumerate(results):
+                md += (
+                    f"| {i + 1} "
+                    f"| {r.get('symbol', '')} "
+                    f"| {r.get('name', '')} "
+                    f"| {_safe_fmt(r.get('factor_value'))} "
+                    f"| {_safe_fmt(r.get('涨跌幅'))} "
+                    f"| {_safe_fmt(r.get('换手率'))} "
+                    f"| {_safe_fmt(r.get('量比'))} "
+                    f"| {_safe_fmt(r.get('最新价'))} |\n"
+                )
+
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.STOCK_SCREENER,
+                name=f"因子排名: {factor}",
+                content={"markdown": md, "data": results},
+                description=summary,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except Exception as e:
+            logger.error(f"get_factor_ranking failed: {e}")
+            err = create_artifact_envelope(
+                component_type=ComponentType.TABLE, name="因子排名错误",
+                content={"error": str(e)}, description=f"因子排名失败: {e}",
+            )
+            return create_artifact_response(summary=f"因子排名失败: {e}", artifact=err)

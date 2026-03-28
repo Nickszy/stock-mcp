@@ -144,6 +144,10 @@ _MARKET_METHODS: Set[str] = {
     "get_etf_list",
     "get_etf_detail",
     "get_etf_performance",
+    # Factor / correlation / ranking (COL-142)
+    "get_stock_factors",
+    "get_stock_correlation",
+    "get_factor_ranking",
 }
 
 
