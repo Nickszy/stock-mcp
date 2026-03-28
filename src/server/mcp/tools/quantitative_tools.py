@@ -7,7 +7,8 @@ Tools:
   - get_concept_ranking: Real-time concept/theme board performance ranking
 """
 
-from typing import Any, Dict, Optional
+import math
+from typing import Any, Dict, List, Optional
 import time
 
 from fastmcp import FastMCP, Context
@@ -20,21 +21,60 @@ from src.server.mcp.tools.artifact_utils import (
     create_artifact_response,
     create_table_artifact,
 )
-from src.server.mcp.tools.output_format_utils import (
-    _format_table_markdown,
-    OutputFormat,
-)
+
+
+def _safe_fmt(value: Any, fmt: str = ".2f") -> str:
+    """Format a numeric value safely, handling NaN/inf/None."""
+    if value is None:
+        return "-"
+    try:
+        f = float(value)
+        if math.isnan(f) or math.isinf(f):
+            return "-"
+        return format(f, fmt)
+    except (TypeError, ValueError):
+        return "-"
 
 
 def _fmt_cap(b: Optional[float]) -> str:
     """Format market cap in billions to readable string."""
     if b is None:
         return "-"
-    if b >= 10000:
-        return f"{b/10000:.1f}万亿"
-    if b >= 100:
-        return f"{b/100:.1f}千亿"
-    return f"{b:.1f}亿"
+    try:
+        f = float(b)
+        if math.isnan(f) or math.isinf(f):
+            return "-"
+    except (TypeError, ValueError):
+        return "-"
+    if f >= 10000:
+        return f"{f/10000:.1f}万亿"
+    if f >= 100:
+        return f"{f/100:.1f}千亿"
+    return f"{f:.1f}亿"
+
+
+_SCREENER_COLUMNS: List[Dict[str, str]] = [
+    {"key": "ticker", "label": "代码"},
+    {"key": "name", "label": "名称"},
+    {"key": "price", "label": "价格"},
+    {"key": "change_pct", "label": "涨跌幅%"},
+    {"key": "pe", "label": "PE(TTM)"},
+    {"key": "pb", "label": "PB"},
+    {"key": "market_cap_b", "label": "市值"},
+    {"key": "turnover_rate", "label": "换手率%"},
+    {"key": "volume_ratio", "label": "量比"},
+]
+
+_BOARD_COLUMNS: List[Dict[str, str]] = [
+    {"key": "name", "label": "板块"},
+    {"key": "change_pct", "label": "涨跌幅%"},
+    {"key": "rise_count", "label": "上涨"},
+    {"key": "fall_count", "label": "下跌"},
+    {"key": "turnover_rate", "label": "换手率%"},
+    {"key": "amplitude", "label": "振幅"},
+    {"key": "top_stock", "label": "领涨股"},
+    {"key": "top_stock_change", "label": "领涨涨幅"},
+]
 
 
 def register_quantitative_tools(mcp: FastMCP):
@@ -69,7 +109,6 @@ def register_quantitative_tools(mcp: FastMCP):
         sort_by: str = "market_cap",
         sort_order: str = "desc",
         limit: int = 50,
-        output_format: OutputFormat = "markdown",
         ctx: Context = None,
     ) -> Dict[str, Any]:
         """Quantitative stock screener for all A-share stocks.
@@ -110,7 +149,6 @@ def register_quantitative_tools(mcp: FastMCP):
                 volume_ratio, change_pct, ytd_change, change_60d, amplitude.
             sort_order: "desc" (default) or "asc".
             limit: Max results to return (default 50, max 200).
-            output_format: "markdown" (default, human-readable) or "json".
             ctx: FastMCP Context.
 
         Returns:
@@ -159,49 +197,57 @@ def register_quantitative_tools(mcp: FastMCP):
             else:
                 summary = f"筛选结果: 共 {total} 只符合条件, 返回前 {len(results)} 只 (耗时 {elapsed:.1f}s)"
 
-            if output_format == "json":
-                return create_artifact_response(
-                    summary=summary,
-                    artifact=create_table_artifact(
-                        component=ComponentType.STOCK_SCREENER,
-                        data=results,
-                        columns=["ticker", "name", "price", "change_pct", "pe", "pb",
-                                 "market_cap_b", "turnover_rate", "volume_ratio"],
-                    ),
-                )
+            # Sanitize results for table display (handle NaN/inf)
+            clean_rows = []
+            for s in results:
+                row = {}
+                for k, v in s.items():
+                    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                        row[k] = None
+                    else:
+                        row[k] = v
+                clean_rows.append(row)
 
             # Markdown output
             md = f"## A股量化选股筛选结果\n\n"
             md += f"**筛选条件**: {filters or '无 (全市场)'}\n"
             md += f"**排序**: {sort_by} ({sort_order}) | **符合条件**: {total} 只 | **返回**: {len(results)} 只\n\n"
-
             md += "| 代码 | 名称 | 价格 | 涨跌幅% | PE(TTM) | PB | 市值 | 换手率% | 量比 |\n"
             md += "|------|------|------|---------|---------|-----|------|---------|------|\n"
-            for s in results:
+            for s in clean_rows:
                 cap_str = _fmt_cap(s.get("market_cap_b"))
                 md += (
-                    f"| {s.get('ticker', '')} | {s.get('name', '')} "
-                    f"| {s.get('price', '-') or '-'} "
-                    f"| {s.get('change_pct', 0):+.2f} "
-                    f"| {s.get('pe', '-') or '-'} "
-                    f"| {s.get('pb', '-') or '-'} "
+                    f"| {s.get('ticker', '')} "
+                    f"| {s.get('name', '')} "
+                    f"| {_safe_fmt(s.get('price'))} "
+                    f"| {_safe_fmt(s.get('change_pct'), '+.2f')} "
+                    f"| {_safe_fmt(s.get('pe'))} "
+                    f"| {_safe_fmt(s.get('pb'))} "
                     f"| {cap_str} "
-                    f"| {s.get('turnover_rate', 0):.2f} "
-                    f"| {s.get('volume_ratio', 0):.2f} |\n"
+                    f"| {_safe_fmt(s.get('turnover_rate'))} "
+                    f"| {_safe_fmt(s.get('volume_ratio'))} |\n"
                 )
 
-            return create_artifact_response(
-                summary=summary,
-                artifact=create_artifact_envelope(
-                    component=ComponentType.STOCK_SCREENER,
-                    markdown=md,
-                    data=results,
-                ),
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.STOCK_SCREENER,
+                name="A股量化选股",
+                content={"markdown": md, "data": clean_rows},
+                description=summary,
             )
+            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"screen_stocks failed: {e}")
-            return {"error": str(e), "results": []}
+            error_artifact = create_artifact_envelope(
+                component_type=ComponentType.STOCK_SCREENER,
+                name="选股错误",
+                content={"error": str(e)},
+                description=f"选股筛选失败: {e}",
+            )
+            return create_artifact_response(
+                summary=f"选股筛选失败: {e}",
+                artifact=error_artifact,
+            )
 
     # ------------------------------------------------------------------
     # get_industry_ranking — A-share industry board ranking
@@ -211,7 +257,6 @@ def register_quantitative_tools(mcp: FastMCP):
         sort_by: str = "change_pct",
         sort_order: str = "desc",
         limit: int = 30,
-        output_format: OutputFormat = "markdown",
         ctx: Context = None,
     ) -> Dict[str, Any]:
         """Get real-time performance ranking of all A-share industry boards.
@@ -230,7 +275,6 @@ def register_quantitative_tools(mcp: FastMCP):
                 volume, turnover, amplitude, rise_count, fall_count.
             sort_order: "desc" (default, best first) or "asc".
             limit: Max sectors to return (default 30, max 100).
-            output_format: "markdown" (default) or "json".
             ctx: FastMCP Context.
 
         Returns:
@@ -252,46 +296,54 @@ def register_quantitative_tools(mcp: FastMCP):
 
             summary = f"行业板块排名: 共 {total} 个行业, 返回前 {len(results)} 个 (耗时 {elapsed:.1f}s)"
 
-            if output_format == "json":
-                return create_artifact_response(
-                    summary=summary,
-                    artifact=create_table_artifact(
-                        component=ComponentType.STOCK_SCREENER,
-                        data=results,
-                        columns=["name", "change_pct", "rise_count", "fall_count",
-                                 "turnover_rate", "amplitude", "top_stock"],
-                    ),
-                )
+            # Sanitize results
+            clean_rows = []
+            for r in results:
+                row = {}
+                for k, v in r.items():
+                    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                        row[k] = None
+                    else:
+                        row[k] = v
+                clean_rows.append(row)
 
             # Markdown output
             md = f"## A股行业板块排名 (按 {sort_by} {sort_order})\n\n"
             md += f"**行业总数**: {total} | **返回**: {len(results)} 个 | **耗时**: {elapsed:.1f}s\n\n"
             md += "| 行业 | 涨跌幅% | 上涨 | 下跌 | 换手率% | 振幅 | 领涨股 | 领涨涨幅 |\n"
             md += "|------|---------|------|------|---------|------|--------|----------|\n"
-            for r in results:
+            for r in clean_rows:
                 md += (
                     f"| {r.get('name', '')} "
-                    f"| {r.get('change_pct', 0):+.2f} "
+                    f"| {_safe_fmt(r.get('change_pct'), '+.2f')} "
                     f"| {r.get('rise_count', 0)} "
                     f"| {r.get('fall_count', 0)} "
-                    f"| {r.get('turnover_rate', 0):.2f} "
-                    f"| {r.get('amplitude', 0):.2f} "
+                    f"| {_safe_fmt(r.get('turnover_rate'))} "
+                    f"| {_safe_fmt(r.get('amplitude'))} "
                     f"| {r.get('top_stock', '')} "
-                    f"| {r.get('top_stock_change', 0):+.2f} |\n"
+                    f"| {_safe_fmt(r.get('top_stock_change'), '+.2f')} |\n"
                 )
 
-            return create_artifact_response(
-                summary=summary,
-                artifact=create_artifact_envelope(
-                    component=ComponentType.STOCK_SCREENER,
-                    markdown=md,
-                    data=results,
-                ),
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.STOCK_SCREENER,
+                name="A股行业板块排名",
+                content={"markdown": md, "data": clean_rows},
+                description=summary,
             )
+            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_industry_ranking failed: {e}")
-            return {"error": str(e), "results": []}
+            error_artifact = create_artifact_envelope(
+                component_type=ComponentType.STOCK_SCREENER,
+                name="行业排名错误",
+                content={"error": str(e)},
+                description=f"行业板块排名查询失败: {e}",
+            )
+            return create_artifact_response(
+                summary=f"行业板块排名查询失败: {e}",
+                artifact=error_artifact,
+            )
 
     # ------------------------------------------------------------------
     # get_concept_ranking — A-share concept board ranking
@@ -301,7 +353,6 @@ def register_quantitative_tools(mcp: FastMCP):
         sort_by: str = "change_pct",
         sort_order: str = "desc",
         limit: int = 30,
-        output_format: OutputFormat = "markdown",
         ctx: Context = None,
     ) -> Dict[str, Any]:
         """Get real-time performance ranking of all A-share concept/theme boards.
@@ -319,7 +370,6 @@ def register_quantitative_tools(mcp: FastMCP):
                 volume, turnover, amplitude, rise_count, fall_count.
             sort_order: "desc" (default) or "asc".
             limit: Max sectors to return (default 30, max 100).
-            output_format: "markdown" (default) or "json".
             ctx: FastMCP Context.
 
         Returns:
@@ -341,43 +391,51 @@ def register_quantitative_tools(mcp: FastMCP):
 
             summary = f"概念板块排名: 共 {total} 个概念, 返回前 {len(results)} 个 (耗时 {elapsed:.1f}s)"
 
-            if output_format == "json":
-                return create_artifact_response(
-                    summary=summary,
-                    artifact=create_table_artifact(
-                        component=ComponentType.STOCK_SCREENER,
-                        data=results,
-                        columns=["name", "change_pct", "rise_count", "fall_count",
-                                 "turnover_rate", "amplitude", "top_stock"],
-                    ),
-                )
+            # Sanitize results
+            clean_rows = []
+            for r in results:
+                row = {}
+                for k, v in r.items():
+                    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                        row[k] = None
+                    else:
+                        row[k] = v
+                clean_rows.append(row)
 
             # Markdown output
             md = f"## A股概念板块排名 (按 {sort_by} {sort_order})\n\n"
             md += f"**概念总数**: {total} | **返回**: {len(results)} 个 | **耗时**: {elapsed:.1f}s\n\n"
             md += "| 概念 | 涨跌幅% | 上涨 | 下跌 | 换手率% | 振幅 | 领涨股 | 领涨涨幅 |\n"
             md += "|------|---------|------|------|---------|------|--------|----------|\n"
-            for r in results:
+            for r in clean_rows:
                 md += (
                     f"| {r.get('name', '')} "
-                    f"| {r.get('change_pct', 0):+.2f} "
+                    f"| {_safe_fmt(r.get('change_pct'), '+.2f')} "
                     f"| {r.get('rise_count', 0)} "
                     f"| {r.get('fall_count', 0)} "
-                    f"| {r.get('turnover_rate', 0):.2f} "
-                    f"| {r.get('amplitude', 0):.2f} "
+                    f"| {_safe_fmt(r.get('turnover_rate'))} "
+                    f"| {_safe_fmt(r.get('amplitude'))} "
                     f"| {r.get('top_stock', '')} "
-                    f"| {r.get('top_stock_change', 0):+.2f} |\n"
+                    f"| {_safe_fmt(r.get('top_stock_change'), '+.2f')} |\n"
                 )
 
-            return create_artifact_response(
-                summary=summary,
-                artifact=create_artifact_envelope(
-                    component=ComponentType.STOCK_SCREENER,
-                    markdown=md,
-                    data=results,
-                ),
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.STOCK_SCREENER,
+                name="A股概念板块排名",
+                content={"markdown": md, "data": clean_rows},
+                description=summary,
             )
+            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_concept_ranking failed: {e}")
-            return {"error": str(e), "results": []}
+            error_artifact = create_artifact_envelope(
+                component_type=ComponentType.STOCK_SCREENER,
+                name="概念排名错误",
+                content={"error": str(e)},
+                description=f"概念板块排名查询失败: {e}",
+            )
+            return create_artifact_response(
+                summary=f"概念板块排名查询失败: {e}",
+                artifact=error_artifact,
+            )

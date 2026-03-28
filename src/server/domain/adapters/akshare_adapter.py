@@ -7,6 +7,7 @@ the event loop.
 
 import asyncio
 import logging
+import math
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
@@ -88,13 +89,20 @@ class AkshareAdapter(BaseDataAdapter):
     def _safe_float(value: Any) -> Optional[float]:
         if value is None:
             return None
-        if isinstance(value, (int, float)):
+        if isinstance(value, float):
+            if math.isnan(value) or math.isinf(value):
+                return None
+            return value
+        if isinstance(value, int):
             return float(value)
         text = str(value).strip().replace(",", "")
         if not text:
             return None
         try:
-            return float(text)
+            f = float(text)
+            if math.isnan(f) or math.isinf(f):
+                return None
+            return f
         except Exception:
             return None
 
@@ -3906,17 +3914,21 @@ class AkshareAdapter(BaseDataAdapter):
         filters_applied: Dict[str, Any] = {}
 
         def _apply_range(df_in, col: str, lo, hi):
-            """Filter df_in by [lo, hi] on numeric col."""
+            """Filter df_in by [lo, hi] on numeric col. Skips if col missing."""
+            if col not in df_in.columns:
+                return df_in
+            series = pd.to_numeric(df_in[col], errors="coerce")
             if lo is not None:
-                df_in = df_in[pd.to_numeric(df_in.get(col), errors="coerce") >= lo]
+                df_in = df_in[series >= lo]
             if hi is not None:
-                df_in = df_in[pd.to_numeric(df_in.get(col), errors="coerce") <= hi]
+                df_in = df_in[series <= hi]
             return df_in
 
         if min_pe is not None or max_pe is not None:
             filters_applied["pe"] = {"min": min_pe, "max": max_pe}
             # Only keep rows with positive PE (exclude loss-makers)
-            df = df[pd.to_numeric(df.get("pe"), errors="coerce") > 0]
+            if "pe" in df.columns:
+                df = df[pd.to_numeric(df["pe"], errors="coerce") > 0]
             df = _apply_range(df, "pe", min_pe, max_pe)
 
         if min_pb is not None or max_pb is not None:
