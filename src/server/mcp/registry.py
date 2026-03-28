@@ -42,28 +42,28 @@ TOOL_GROUPS: List[ToolGroup] = [
         register=register_fundamental_tools,
         enabled=True,
         description="基本面分析",
-        count=6,
+        count=7,
     ),
     ToolGroup(
         name="asset",
         register=register_asset_tools,
         enabled=True,
         description="资产搜索与管理",
-        count=5,
+        count=4,
     ),
     ToolGroup(
         name="technical",
         register=register_technical_tools,
         enabled=True,
         description="技术分析",
-        count=4,
+        count=1,
     ),
     ToolGroup(
         name="money-flow",
         register=register_money_flow_tools,
         enabled=True,
         description="资金流向",
-        count=37,
+        count=42,
     ),
     ToolGroup(
         name="filings",
@@ -91,7 +91,7 @@ TOOL_GROUPS: List[ToolGroup] = [
         register=register_news_tools,
         enabled=False,
         description="新闻与检索",
-        count=2,
+        count=1,
     ),
     # ---- 美股工具集 (ValueCell 竞品对齐) ----
     ToolGroup(
