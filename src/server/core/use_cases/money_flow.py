@@ -417,3 +417,51 @@ async def get_commodity_inventory(symbol: str = "螺纹钢") -> Dict[str, Any]:
     manager = Container.market_gateway()
     logger.info("UseCase: get_commodity_inventory", symbol=symbol)
     return await manager.get_commodity_inventory(symbol=symbol)
+
+
+# ---- Stock Participant Data (COL-144) ----
+
+
+async def get_stock_northbound_holdings(
+    symbol: str, days: int = 30,
+) -> Dict[str, Any]:
+    """Get individual stock northbound holding details."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_stock_northbound_holdings", symbol=symbol, days=days)
+    return await manager.get_stock_northbound_holdings(symbol=symbol, days=days)
+
+
+async def get_stock_northbound_ranking(
+    market: str = "北向", indicator: str = "今日排行",
+) -> Dict[str, Any]:
+    """Get northbound holding ranking across market."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_stock_northbound_ranking", market=market, indicator=indicator)
+    return await manager.get_stock_northbound_ranking(market=market, indicator=indicator)
+
+
+async def get_stock_top10_shareholders(
+    symbol: str, date: str = "",
+) -> Dict[str, Any]:
+    """Get top 10 free float shareholders for a stock."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_stock_top10_shareholders", symbol=symbol, date=date)
+    return await manager.get_stock_top10_shareholders(symbol=symbol, date=date)
+
+
+async def get_stock_shareholder_changes(
+    date: str = "",
+) -> Dict[str, Any]:
+    """Get shareholder holding change statistics."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_stock_shareholder_changes", date=date)
+    return await manager.get_stock_shareholder_changes(date=date)
+
+
+async def get_stock_institutional_research(
+    date: str = "",
+) -> Dict[str, Any]:
+    """Get institutional research statistics."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_stock_institutional_research", date=date)
+    return await manager.get_stock_institutional_research(date=date)

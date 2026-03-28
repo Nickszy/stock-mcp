@@ -678,3 +678,64 @@ class TestAdditionalDataDomains:
         assert "data" in result
         data = result.get("data", [])
         assert isinstance(data, list)
+
+
+# ---- 12. 股票参与者数据 (COL-144) ----
+
+class TestStockParticipantData:
+    """股票参与者数据质量测试."""
+
+    @pytest.mark.asyncio
+    async def test_stock_northbound_holdings(self, adapter):
+        """个股北向持股明细."""
+        result = await _retry(adapter.get_stock_northbound_holdings, symbol="600519", days=15)
+        assert "source" in result
+        assert result["source"] == "akshare"
+        assert "snapshot" in result
+        assert isinstance(result["snapshot"], dict)
+        assert "history" in result
+
+    @pytest.mark.asyncio
+    async def test_stock_northbound_ranking(self, adapter):
+        """北向持股排行."""
+        result = await _retry(adapter.get_stock_northbound_ranking)
+        assert "data" in result
+        assert result["source"] == "akshare"
+        data = result.get("data", [])
+        assert isinstance(data, list)
+        if data:
+            item = data[0]
+            assert isinstance(item, dict)
+
+    @pytest.mark.asyncio
+    async def test_stock_top10_shareholders(self, adapter):
+        """十大流通股东."""
+        result = await _retry(adapter.get_stock_top10_shareholders, symbol="sh688686")
+        assert "data" in result
+        assert result["source"] == "akshare"
+        data = result.get("data", [])
+        assert isinstance(data, list)
+        if data:
+            item = data[0]
+            assert isinstance(item, dict)
+
+    @pytest.mark.asyncio
+    async def test_stock_shareholder_changes(self, adapter):
+        """股东持股变化."""
+        result = await _retry(adapter.get_stock_shareholder_changes)
+        assert "data" in result
+        assert result["source"] == "akshare"
+        data = result.get("data", [])
+        assert isinstance(data, list)
+
+    @pytest.mark.asyncio
+    async def test_stock_institutional_research(self, adapter):
+        """机构调研统计."""
+        result = await _retry(adapter.get_stock_institutional_research)
+        assert "data" in result
+        assert result["source"] == "akshare"
+        data = result.get("data", [])
+        assert isinstance(data, list)
+        if data:
+            item = data[0]
+            assert isinstance(item, dict)

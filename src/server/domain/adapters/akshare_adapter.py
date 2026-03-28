@@ -3298,3 +3298,478 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.error(f"Failed to calculate risk metrics: {e}")
             return {"data": {}, "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # 龙虎榜数据
+    # ------------------------------------------------------------------
+
+    async def get_dragon_tiger_list(
+        self, start_date: str = "", end_date: str = "", days: int = 10,
+    ) -> Dict[str, Any]:
+        """获取龙虎榜每日明细.
+
+        Args:
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+            days: 最近N天 (当start_date为空时使用)
+        """
+        if not start_date or not end_date:
+            end_dt = datetime.now()
+            start_dt = end_dt - timedelta(days=days)
+            start_date = start_dt.strftime("%Y%m%d")
+            end_date = end_dt.strftime("%Y%m%d")
+
+        cache_key = f"akshare:lhb:{start_date}:{end_date}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_lhb_detail_em, start_date=start_date, end_date=end_date)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare", "start_date": start_date, "end_date": end_date}
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "start_date": start_date,
+                "end_date": end_date,
+                "total": len(records),
+                "data": records[:200],
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get dragon tiger list: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # 大宗交易数据
+    # ------------------------------------------------------------------
+
+    async def get_block_trade(
+        self, start_date: str = "", end_date: str = "", days: int = 10,
+    ) -> Dict[str, Any]:
+        """获取大宗交易每日明细.
+
+        Args:
+            start_date: 开始日期 YYYYMMDD
+            end_date: 结束日期 YYYYMMDD
+            days: 最近N天 (当start_date为空时使用)
+        """
+        if not start_date or not end_date:
+            end_dt = datetime.now()
+            start_dt = end_dt - timedelta(days=days)
+            start_date = start_dt.strftime("%Y%m%d")
+            end_date = end_dt.strftime("%Y%m%d")
+
+        cache_key = f"akshare:block_trade:{start_date}:{end_date}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_dzjy_mrmx, start_date=start_date, end_date=end_date)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare", "start_date": start_date, "end_date": end_date}
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "start_date": start_date,
+                "end_date": end_date,
+                "total": len(records),
+                "data": records[:200],
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get block trade: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # 可转债数据
+    # ------------------------------------------------------------------
+
+    async def get_convertible_bond(
+        self, bond_code: str = "",
+    ) -> Dict[str, Any]:
+        """获取可转债实时行情数据."""
+        cache_key = f"akshare:convertible_bond:{bond_code}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.bond_zh_hs_cov_spot)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            if bond_code and "代码" in df.columns:
+                df = df[df["代码"].astype(str) == bond_code]
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "total": len(records),
+                "data": records[:100],
+            }
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get convertible bond: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # 基金持仓数据
+    # ------------------------------------------------------------------
+
+    async def get_fund_holdings(
+        self, fund_code: str = "", quarter: str = "",
+    ) -> Dict[str, Any]:
+        """获取基金重仓股数据.
+
+        Args:
+            fund_code: 基金代码 (如 110011)
+            quarter: 季度 (如 20244)
+        """
+        cache_key = f"akshare:fund_holdings:{fund_code}:{quarter}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            kwargs = {}
+            if fund_code:
+                kwargs["symbol"] = fund_code
+            if quarter:
+                kwargs["date"] = quarter
+
+            df = await self._run(ak.fund_portfolio_hold_em, **kwargs)
+            if df is None or df.empty:
+                return {"data": [], "fund_code": fund_code, "source": "akshare"}
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "fund_code": fund_code,
+                "total": len(records),
+                "data": records[:50],
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get fund holdings: {e}")
+            return {"data": [], "fund_code": fund_code, "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # 商品期货持仓数据
+    # ------------------------------------------------------------------
+
+    async def get_commodity_inventory(
+        self, symbol: str = "螺纹钢",
+    ) -> Dict[str, Any]:
+        """获取商品期货仓单/库存数据.
+
+        Args:
+            symbol: 商品名称 (如 螺纹钢, 铁矿石, 原油)
+        """
+        cache_key = f"akshare:commodity_inventory:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.futures_inventory_em, symbol=symbol)
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "source": "akshare"}
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "symbol": symbol,
+                "total": len(records),
+                "data": records[-60:],
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get commodity inventory: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # 股票参与者数据 (COL-144)
+    # ------------------------------------------------------------------
+
+    async def get_stock_northbound_holdings(
+        self, symbol: str, days: int = 30,
+    ) -> Dict[str, Any]:
+        """获取个股北向持股明细.
+
+        使用 stock_hsgt_hold_stock_em 获取当前快照, 再用
+        stock_hsgt_stock_statistics_em 获取历史统计.
+
+        Args:
+            symbol: 股票代码 (如 600519)
+            days: 回溯天数 (用于历史统计)
+        """
+        cache_key = f"akshare:stock_northbound_holdings:{symbol}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            # 1. Get current snapshot from ranking
+            snapshot_df = await self._run(
+                ak.stock_hsgt_hold_stock_em,
+                market="北向",
+                indicator="今日排行",
+            )
+            stock_snapshot = {}
+            if snapshot_df is not None and not snapshot_df.empty:
+                # Find the stock
+                code_col = None
+                for col in snapshot_df.columns:
+                    if "代码" in str(col):
+                        code_col = col
+                        break
+                if code_col:
+                    match = snapshot_df[snapshot_df[code_col].astype(str) == symbol]
+                    if not match.empty:
+                        row = match.iloc[0]
+                        for k, v in row.items():
+                            if hasattr(v, "item"):
+                                v = v.item()
+                            stock_snapshot[str(k)] = v
+
+            # 2. Try historical statistics
+            history = []
+            try:
+                end_date = datetime.now().strftime("%Y%m%d")
+                start_date = (datetime.now() - timedelta(days=days * 2)).strftime("%Y%m%d")
+                hist_df = await self._run(
+                    ak.stock_hsgt_stock_statistics_em,
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+                if hist_df is not None and not hist_df.empty:
+                    records = hist_df.to_dict(orient="records")
+                    for item in records:
+                        for k, v in item.items():
+                            if hasattr(v, "item"):
+                                item[k] = v.item()
+                    history = records[-days:]
+            except Exception:
+                pass  # Historical API may not have data
+
+            result = {
+                "source": "akshare",
+                "symbol": symbol,
+                "snapshot": stock_snapshot,
+                "history": history,
+                "total_history": len(history),
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get stock northbound holdings: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    async def get_stock_northbound_ranking(
+        self, market: str = "北向", indicator: str = "今日排行",
+    ) -> Dict[str, Any]:
+        """获取北向持股排行.
+
+        Args:
+            market: 市场类型 (北向/沪股通/深股通)
+            indicator: 指标 (今日排行/5日排行/10日排行/1月排行...)
+        """
+        cache_key = f"akshare:stock_northbound_ranking:{market}:{indicator}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(
+                ak.stock_hsgt_hold_stock_em,
+                market=market,
+                indicator=indicator,
+            )
+            if df is None or df.empty:
+                return {"data": [], "market": market, "indicator": indicator, "source": "akshare"}
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "market": market,
+                "indicator": indicator,
+                "total": len(records),
+                "data": records[:100],
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get stock northbound ranking: {e}")
+            return {"data": [], "market": market, "indicator": indicator, "source": "akshare", "error": str(e)}
+
+    async def get_stock_top10_shareholders(
+        self, symbol: str, date: str = "",
+    ) -> Dict[str, Any]:
+        """获取十大流通股东.
+
+        Args:
+            symbol: 股票代码 (如 sh688686)
+            date: 季度日期 (如 20240930)
+        """
+        cache_key = f"akshare:stock_top10_shareholders:{symbol}:{date}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            kwargs = {"symbol": symbol}
+            if date:
+                kwargs["date"] = date
+
+            df = await self._run(ak.stock_gdfx_free_top_10_em, **kwargs)
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "source": "akshare"}
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "symbol": symbol,
+                "total": len(records),
+                "data": records[:50],
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get stock top10 shareholders: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    async def get_stock_shareholder_changes(
+        self, date: str = "",
+    ) -> Dict[str, Any]:
+        """获取股东持股变化统计.
+
+        Args:
+            date: 日期 (如 20240930)
+        """
+        cache_key = f"akshare:stock_shareholder_changes:{date}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            kwargs = {}
+            if date:
+                kwargs["date"] = date
+
+            df = await self._run(ak.stock_gdfx_holding_change_em, **kwargs)
+            if df is None or df.empty:
+                return {"data": [], "date": date, "source": "akshare"}
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "date": date,
+                "total": len(records),
+                "data": records[:100],
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get stock shareholder changes: {e}")
+            return {"data": [], "date": date, "source": "akshare", "error": str(e)}
+
+    async def get_stock_institutional_research(
+        self, date: str = "",
+    ) -> Dict[str, Any]:
+        """获取机构调研统计.
+
+        Args:
+            date: 日期 (如 20240630)
+        """
+        cache_key = f"akshare:stock_institutional_research:{date}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            kwargs = {}
+            if date:
+                kwargs["date"] = date
+
+            df = await self._run(ak.stock_jgdy_tj_em, **kwargs)
+            if df is None or df.empty:
+                return {"data": [], "date": date, "source": "akshare"}
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "date": date,
+                "total": len(records),
+                "data": records[:100],
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get stock institutional research: {e}")
+            return {"data": [], "date": date, "source": "akshare", "error": str(e)}

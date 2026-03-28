@@ -63,7 +63,7 @@ TOOL_GROUPS: List[ToolGroup] = [
         register=register_money_flow_tools,
         enabled=True,
         description="资金流向",
-        count=15,
+        count=37,
     ),
     ToolGroup(
         name="filings",

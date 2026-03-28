@@ -2883,3 +2883,228 @@ def register_money_flow_tools(mcp: FastMCP):
         except Exception as e:
             logger.error(f"Get commodity inventory failed: {e}", exc_info=True)
             return {"error": str(e), "component_type": "commodity_inventory"}
+
+    # ------------------------------------------------------------------
+    # 股票参与者数据 (COL-144)
+    # ------------------------------------------------------------------
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_stock_northbound_holdings(
+        symbol: str,
+        days: int = 30,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取个股北向持股明细
+
+        查询个股被北向资金(沪深港通)持有的详细历史数据，包括持股数量、持股市值、
+        占流通股比例等。是判断外资对个股态度的重要指标。
+
+        用途:
+        - 外资对个股的增减持趋势
+        - 北向持股占比变化
+        - 外资偏好分析
+
+        Args:
+            symbol: 股票代码 (如 "600519", "000858")
+            days: 回溯天数 (默认30天)
+            ctx: FastMCP Context
+
+        Returns:
+            个股北向持股历史明细
+        """
+        if ctx:
+            await ctx.info("🔧 获取个股北向持股明细", extra={"symbol": symbol, "days": days})
+        try:
+            logger.info("MCP tool called: get_stock_northbound_holdings", symbol=symbol, days=days)
+            result = await money_flow_use_cases.get_stock_northbound_holdings(symbol=symbol, days=days)
+
+            snapshot = result.get("snapshot", {})
+            history_count = result.get("total_history", 0)
+            has_snap = bool(snapshot)
+            summary_text = f"北向持股{symbol}: 快照{'有' if has_snap else '无'}数据, 历史{history_count}条"
+
+            artifact = create_artifact_envelope(
+                component_type="stock_northbound_holdings",
+                name=f"北向持股: {symbol}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "stock_northbound_holdings", "symbol": symbol, "days": days},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get stock northbound holdings failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "stock_northbound_holdings"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_stock_northbound_ranking(
+        market: str = "北向",
+        indicator: str = "今日排行",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取北向持股排行榜
+
+        查询北向资金持股排名，支持按不同时间维度排行（今日/5日/10日/1月等）。
+
+        用途:
+        - 发现外资重仓股
+        - 北向资金流入/流出Top股
+        - 外资调仓方向判断
+
+        Args:
+            market: 市场类型 ("北向"/"沪股通"/"深股通")
+            indicator: 排行指标 ("今日排行"/"5日排行"/"10日排行"/"1月排行")
+            ctx: FastMCP Context
+
+        Returns:
+            北向持股排行数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取北向持股排行", extra={"market": market, "indicator": indicator})
+        try:
+            logger.info("MCP tool called: get_stock_northbound_ranking", market=market, indicator=indicator)
+            result = await money_flow_use_cases.get_stock_northbound_ranking(market=market, indicator=indicator)
+
+            data = result.get("data", [])
+            summary_text = f"北向排行({indicator}): {len(data)}只股票"
+
+            artifact = create_artifact_envelope(
+                component_type="stock_northbound_ranking",
+                name=f"北向排行: {indicator}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "stock_northbound_ranking", "market": market, "indicator": indicator},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get stock northbound ranking failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "stock_northbound_ranking"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_stock_top10_shareholders(
+        symbol: str,
+        date: str = "",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取十大流通股东
+
+        查询个股的十大流通股东信息，包括股东名称、持股数量、持股比例、变化情况等。
+        是判断个股筹码集中度和主力动向的重要参考。
+
+        用途:
+        - 筹码集中度分析
+        - 主力持仓变化
+        - 机构/外资进出判断
+
+        Args:
+            symbol: 股票代码 (如 "sh688686", "600519")
+            date: 季度日期 (如 "20240930"，留空取最近)
+            ctx: FastMCP Context
+
+        Returns:
+            十大流通股东数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取十大流通股东", extra={"symbol": symbol, "date": date})
+        try:
+            logger.info("MCP tool called: get_stock_top10_shareholders", symbol=symbol, date=date)
+            result = await money_flow_use_cases.get_stock_top10_shareholders(symbol=symbol, date=date)
+
+            data = result.get("data", [])
+            summary_text = f"十大流通股东{symbol}: {len(data)}条记录"
+
+            artifact = create_artifact_envelope(
+                component_type="stock_top10_shareholders",
+                name=f"十大股东: {symbol}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "stock_top10_shareholders", "symbol": symbol},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get stock top10 shareholders failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "stock_top10_shareholders"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_stock_shareholder_changes(
+        date: str = "",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取股东持股变化统计
+
+        查询全市场股东持股变化统计，包括增持、减持、不变等情况汇总。
+
+        用途:
+        - 市场整体股东增减持趋势
+        - 产业资本动向判断
+        - 重要股东行为分析
+
+        Args:
+            date: 日期 (如 "20240930"，留空取最近)
+            ctx: FastMCP Context
+
+        Returns:
+            股东持股变化统计数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取股东持股变化", extra={"date": date})
+        try:
+            logger.info("MCP tool called: get_stock_shareholder_changes", date=date)
+            result = await money_flow_use_cases.get_stock_shareholder_changes(date=date)
+
+            data = result.get("data", [])
+            summary_text = f"股东持股变化: {len(data)}条记录"
+
+            artifact = create_artifact_envelope(
+                component_type="stock_shareholder_changes",
+                name="股东持股变化",
+                content=result,
+                description=summary_text,
+                metadata={"type": "stock_shareholder_changes", "date": date},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get stock shareholder changes failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "stock_shareholder_changes"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_stock_institutional_research(
+        date: str = "",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取机构调研统计
+
+        查询机构对上市公司的调研统计，包括调研机构数量、调研次数等。
+        机构调研热度是判断个股关注度的重要指标。
+
+        用途:
+        - 发现机构关注的热门股
+        - 判断个股基本面关注度
+        - 机构调研密集度分析
+
+        Args:
+            date: 日期 (如 "20240630"，留空取最近)
+            ctx: FastMCP Context
+
+        Returns:
+            机构调研统计数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取机构调研统计", extra={"date": date})
+        try:
+            logger.info("MCP tool called: get_stock_institutional_research", date=date)
+            result = await money_flow_use_cases.get_stock_institutional_research(date=date)
+
+            data = result.get("data", [])
+            summary_text = f"机构调研统计: {len(data)}条记录"
+
+            artifact = create_artifact_envelope(
+                component_type="stock_institutional_research",
+                name="机构调研统计",
+                content=result,
+                description=summary_text,
+                metadata={"type": "stock_institutional_research", "date": date},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get stock institutional research failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "stock_institutional_research"}

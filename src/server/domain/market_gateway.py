@@ -60,6 +60,9 @@ _TICKER_METHODS: Set[str] = {
     # US technical
     "get_us_price_history",
     "get_us_volume_analysis",
+    # Stock participant data (COL-144)
+    "get_stock_northbound_holdings",
+    "get_stock_top10_shareholders",
 }
 
 # market-wide: no symbol resolution, forward kwargs as-is
@@ -103,6 +106,16 @@ _MARKET_METHODS: Set[str] = {
     "get_style_rotation",
     "get_futures_basis",
     "calculate_risk_metrics",
+    # New: additional data domains
+    "get_dragon_tiger_list",
+    "get_block_trade",
+    "get_convertible_bond",
+    "get_fund_holdings",
+    "get_commodity_inventory",
+    # Stock participant data (COL-144)
+    "get_stock_northbound_ranking",
+    "get_stock_shareholder_changes",
+    "get_stock_institutional_research",
 }
 
 
