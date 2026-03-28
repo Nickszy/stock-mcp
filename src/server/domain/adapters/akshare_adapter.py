@@ -5709,12 +5709,99 @@ class AkshareAdapter(BaseDataAdapter):
             coverage["scale"] = f"error: {e}"
 
         # --- 6. Fees & Dividend (费率与分红事实) ---
-        coverage["fees"] = "not_implemented"
-        missing_fields.append("fees")
+        try:
+            # Extract fees from fund detail (already fetched in category 1)
+            detail_raw = facts.get("master", {})
+            if not detail_raw:
+                # Try fetching detail directly
+                detail_raw = await self.get_fund_detail(fund_code)
+                if detail_raw and "error" not in detail_raw:
+                    detail_raw = {k: v for k, v in detail_raw.items()
+                                  if k not in ("fund_code", "source", "asset_allocation")}
+
+            fees_data: Dict[str, Any] = {}
+            fee_fields = {
+                "管理费率": "management_fee",
+                "托管费率": "custody_fee",
+                "申购费率": "subscription_fee",
+                "赎回费率": "redemption_fee",
+                "销售服务费率": "sales_service_fee",
+                "最高申购费": "max_subscription_fee",
+                "最低申购额": "min_subscription_amount",
+            }
+            for cn_key, en_key in fee_fields.items():
+                val = detail_raw.get(cn_key)
+                if val is not None:
+                    fees_data[en_key] = self._safe_float(val)
+
+            # Also try akshare fund_purchase_fee for more fee details
+            try:
+                fee_df = await self._run(ak.fund_purchase_fee, fund=fund_code)
+                if fee_df is not None and not fee_df.empty:
+                    for _, row in fee_df.iterrows():
+                        fees_data["purchase_fee_detail"] = self._clean_records(
+                            fee_df.to_dict(orient="records")
+                        )
+            except Exception:
+                pass
+
+            if fees_data:
+                facts["fees"] = fees_data
+                coverage["fees"] = "complete"
+                source_trace["fees"] = {"provider": "akshare", "api": "fund_individual_basic_info_xq"}
+            else:
+                coverage["fees"] = "missing"
+                missing_fields.append("fees")
+        except Exception as e:
+            coverage["fees"] = f"error: {e}"
+            source_trace["fees"] = {"error": str(e)}
+            missing_fields.append("fees")
 
         # --- 7. Peer Comparison (同类比较事实) ---
-        coverage["peer"] = "not_implemented"
-        missing_fields.append("peer")
+        try:
+            # Determine fund type from master data
+            fund_type = None
+            master_data = facts.get("master", {})
+            if isinstance(master_data, dict):
+                # Try common type field names
+                for tf in ("基金类型", "fund_type", "类型"):
+                    ft = master_data.get(tf)
+                    if ft:
+                        fund_type = str(ft)
+                        break
+
+            if fund_type:
+                ranking = await self.get_fund_ranking(fund_type=fund_type, limit=20)
+                if ranking and "error" not in ranking and ranking.get("results"):
+                    peers_list = []
+                    for item in ranking.get("results", [])[:10]:
+                        # Exclude the target fund itself
+                        if str(item.get("fund_code", "")) == str(fund_code):
+                            continue
+                        peers_list.append({
+                            "fund_code": item.get("fund_code"),
+                            "fund_name": item.get("fund_name"),
+                            "nav": item.get("nav"),
+                            "return_1y": item.get("return_1y"),
+                            "return_ytd": item.get("return_ytd"),
+                        })
+                    facts["peer"] = {
+                        "fund_type": fund_type,
+                        "peers": peers_list,
+                        "count": len(peers_list),
+                    }
+                    coverage["peer"] = "complete"
+                    source_trace["peer"] = {"provider": "akshare", "api": "fund_open_fund_rank_em"}
+                else:
+                    coverage["peer"] = "missing"
+                    missing_fields.append("peer")
+            else:
+                coverage["peer"] = "missing: no fund type info"
+                missing_fields.append("peer")
+        except Exception as e:
+            coverage["peer"] = f"error: {e}"
+            source_trace["peer"] = {"error": str(e)}
+            missing_fields.append("peer")
 
         elapsed = _time.perf_counter() - t0
 
