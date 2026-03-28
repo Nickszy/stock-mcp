@@ -2083,3 +2083,572 @@ def register_money_flow_tools(mcp: FastMCP):
             if ctx:
                 await ctx.error("获取相对强弱失败", extra={"error": str(e)})
             return {"error": str(e), "component_type": "relative_strength"}
+
+    # ==================================================================
+    # Extended data tools (COL-137/138)
+    # ==================================================================
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_margin_trading(
+        symbol: str,
+        days: int = 30,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取个股融资融券数据
+
+        查询指定股票的融资融券余额、买入偿还等数据，用于判断杠杆资金动向。
+
+        Args:
+            symbol: 股票代码 (如 SSE:600519, SZSE:000001)
+            days: 获取最近 N 天数据 (默认 30)
+            ctx: FastMCP Context
+
+        Returns:
+            融资融券数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取融资融券数据", extra={"symbol": symbol, "days": days})
+        try:
+            logger.info("MCP tool called: get_margin_trading", symbol=symbol, days=days)
+            gateway = Container.market_gateway()
+            resolved = await gateway.resolve_ticker(symbol)
+            result = await gateway.get_margin_trading(ticker=resolved, days=days)
+
+            data = result.get("data", [])
+            summary_text = f"{symbol}融资融券({len(data)}条记录)"
+
+            artifact = create_artifact_envelope(
+                component_type="margin_trading",
+                name=f"融资融券: {symbol}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "margin_trading", "symbol": symbol, "days": days},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get margin trading failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "margin_trading"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_restricted_release(
+        days: int = 90,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取限售解禁数据
+
+        查询近期限售股解禁计划，包括解禁日期、解禁数量、占总股本比例等。
+
+        Args:
+            days: 未来 N 天内的解禁计划 (默认 90)
+            ctx: FastMCP Context
+
+        Returns:
+            限售解禁数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取限售解禁数据", extra={"days": days})
+        try:
+            logger.info("MCP tool called: get_restricted_release", days=days)
+            gateway = Container.market_gateway()
+            result = await gateway.get_restricted_release(days=days)
+
+            summary_text = f"限售解禁(未来{days}天)"
+            artifact = create_artifact_envelope(
+                component_type="restricted_release",
+                name="限售解禁",
+                content=result,
+                description=summary_text,
+                metadata={"type": "restricted_release", "days": days},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get restricted release failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "restricted_release"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_repurchase_info(
+        symbol: str = "",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取股票回购数据
+
+        查询上市公司回购计划及实施进度，包括回购金额、回购数量、回购目的等。
+
+        Args:
+            symbol: 股票代码 (如 600519, 000001), 为空则返回全市场
+            ctx: FastMCP Context
+
+        Returns:
+            回购数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取回购数据", extra={"symbol": symbol})
+        try:
+            logger.info("MCP tool called: get_repurchase_info", symbol=symbol)
+            gateway = Container.market_gateway()
+            result = await gateway.get_repurchase_info(symbol=symbol)
+
+            summary_text = f"股票回购{' - ' + symbol if symbol else '全市场'}"
+            artifact = create_artifact_envelope(
+                component_type="repurchase",
+                name=f"回购: {symbol or '全市场'}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "repurchase", "symbol": symbol},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get repurchase info failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "repurchase"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_index_constituents(
+        index_code: str = "000300",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取指数成分股列表
+
+        查询指定指数的成分股列表，包括股票代码、名称、权重等信息。
+
+        Args:
+            index_code: 指数代码 (如 000300=沪深300, 000905=中证500,
+                000016=上证50, 399006=创业板指)
+            ctx: FastMCP Context
+
+        Returns:
+            指数成分股数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取指数成分股", extra={"index_code": index_code})
+        try:
+            logger.info("MCP tool called: get_index_constituents", index_code=index_code)
+            gateway = Container.market_gateway()
+            result = await gateway.get_index_constituents(index_code=index_code)
+
+            data = result.get("data", [])
+            summary_text = f"指数{index_code}成分股({len(data)}只)"
+
+            artifact = create_artifact_envelope(
+                component_type="index_constituents",
+                name=f"成分股: {index_code}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "index_constituents", "index_code": index_code},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get index constituents failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "index_constituents"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_index_constituent_weights(
+        index_code: str = "000300",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取指数成分股权重
+
+        查询指定指数的成分股权重分布，用于判断指数的行业和个股集中度。
+
+        Args:
+            index_code: 指数代码 (如 000300=沪深300)
+            ctx: FastMCP Context
+
+        Returns:
+            成分股权重数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取成分股权重", extra={"index_code": index_code})
+        try:
+            logger.info("MCP tool called: get_index_constituent_weights", index_code=index_code)
+            gateway = Container.market_gateway()
+            result = await gateway.get_index_constituent_weights(index_code=index_code)
+
+            data = result.get("data", [])
+            summary_text = f"指数{index_code}权重({len(data)}只)"
+
+            artifact = create_artifact_envelope(
+                component_type="index_weights",
+                name=f"权重: {index_code}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "index_weights", "index_code": index_code},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get index weights failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "index_weights"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_fund_nav(
+        fund_code: str = "",
+        days: int = 30,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取基金净值数据
+
+        查询场内基金(ETF/LOF)的最新净值及历史净值走势。
+
+        Args:
+            fund_code: 基金代码 (如 510300=沪深300ETF), 为空返回全市场
+            days: 获取最近 N 天数据 (默认 30)
+            ctx: FastMCP Context
+
+        Returns:
+            基金净值数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取基金净值", extra={"fund_code": fund_code, "days": days})
+        try:
+            logger.info("MCP tool called: get_fund_nav", fund_code=fund_code, days=days)
+            gateway = Container.market_gateway()
+            result = await gateway.get_fund_nav(fund_code=fund_code, days=days)
+
+            data = result.get("data", [])
+            summary_text = f"基金净值({len(data)}条记录)"
+
+            artifact = create_artifact_envelope(
+                component_type="fund_nav",
+                name=f"基金净值: {fund_code or '全市场'}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "fund_nav", "fund_code": fund_code, "days": days},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get fund nav failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "fund_nav"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_bond_yield(ctx: Context = None) -> Dict[str, Any]:
+        """获取国债收益率曲线数据
+
+        查询中国国债到期收益率曲线，覆盖短、中、长各期限。
+        用于判断利率水平、期限结构及宏观流动性环境。
+
+        Args:
+            ctx: FastMCP Context
+
+        Returns:
+            国债收益率曲线数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取国债收益率曲线")
+        try:
+            logger.info("MCP tool called: get_bond_yield")
+            gateway = Container.market_gateway()
+            result = await gateway.get_bond_yield()
+
+            summary_text = "国债收益率曲线"
+            artifact = create_artifact_envelope(
+                component_type="bond_yield",
+                name="国债收益率",
+                content=result,
+                description=summary_text,
+                metadata={"type": "bond_yield"},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get bond yield failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "bond_yield"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_futures_main(
+        symbol: str = "IF0",
+        days: int = 60,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取期货主力合约行情数据
+
+        查询股指期货/商品期货主力合约的日级行情数据。
+
+        Args:
+            symbol: 期货代码 (IF0=沪深300, IC0=中证500, IH0=上证50)
+            days: 获取最近 N 天数据 (默认 60)
+            ctx: FastMCP Context
+
+        Returns:
+            期货主力合约行情
+        """
+        if ctx:
+            await ctx.info("🔧 获取期货主力合约", extra={"symbol": symbol, "days": days})
+        try:
+            logger.info("MCP tool called: get_futures_main", symbol=symbol, days=days)
+            gateway = Container.market_gateway()
+            result = await gateway.get_futures_main(symbol=symbol, days=days)
+
+            data = result.get("data", [])
+            summary_text = f"期货{symbol}({len(data)}条)"
+
+            artifact = create_artifact_envelope(
+                component_type="futures_main",
+                name=f"期货: {symbol}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "futures_main", "symbol": symbol, "days": days},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get futures main failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "futures_main"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_option_summary(ctx: Context = None) -> Dict[str, Any]:
+        """获取期权市场概览
+
+        查询ETF期权市场概览数据，包括总成交量和持仓量等统计信息。
+
+        Args:
+            ctx: FastMCP Context
+
+        Returns:
+            期权市场概览数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取期权市场概览")
+        try:
+            logger.info("MCP tool called: get_option_summary")
+            gateway = Container.market_gateway()
+            result = await gateway.get_option_summary()
+
+            summary_text = "期权市场概览"
+            artifact = create_artifact_envelope(
+                component_type="option_summary",
+                name="期权概览",
+                content=result,
+                description=summary_text,
+                metadata={"type": "option_summary"},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get option summary failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "option_summary"}
+
+    # ==================================================================
+    # Quantitative analysis tools (COL-127/129/130/131/135)
+    # ==================================================================
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_sector_pe_pb_historical(
+        sector_name: str = "银行",
+        days: int = 250,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取行业PE/PB历史分位数据
+
+        计算指定行业的市盈率(PE)和市净率(PB)在历史数据中的分位数，
+        用于判断行业估值水平。
+
+        Args:
+            sector_name: 行业名称 (如 "银行", "白酒", "半导体", "医药")
+            days: 历史回溯天数 (默认 250)
+            ctx: FastMCP Context
+
+        Returns:
+            行业PE/PB历史分位数据，包含当前估值、历史分位、估值水平判定
+        """
+        if ctx:
+            await ctx.info("🔧 获取行业估值分位", extra={"sector_name": sector_name, "days": days})
+        try:
+            logger.info("MCP tool called: get_sector_pe_pb_historical", sector_name=sector_name, days=days)
+            gateway = Container.market_gateway()
+            result = await gateway.get_sector_pe_pb_historical(
+                sector_name=sector_name, days=days
+            )
+
+            current = result.get("current", {})
+            pe = current.get("pe", "N/A")
+            pe_pct = current.get("pe_percentile", "N/A")
+            level = current.get("valuation_level", "N/A")
+
+            summary_text = (
+                f"{sector_name}估值分位: PE={pe}, 分位={pe_pct}%, 水平={level}"
+            )
+
+            artifact = create_artifact_envelope(
+                component_type="sector_valuation",
+                name=f"行业估值: {sector_name}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "sector_valuation", "sector_name": sector_name, "days": days},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get sector PE/PB failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "sector_valuation"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_etf_flow(
+        symbol: str = "510300",
+        days: int = 30,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取ETF资金流向数据
+
+        查询指定ETF的资金流向数据，包括实时净值、涨跌幅等信息。
+
+        Args:
+            symbol: ETF代码 (如 510300=沪深300ETF, 510050=上证50ETF)
+            days: 获取最近 N 天数据 (默认 30)
+            ctx: FastMCP Context
+
+        Returns:
+            ETF资金流向数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取ETF资金流向", extra={"symbol": symbol, "days": days})
+        try:
+            logger.info("MCP tool called: get_etf_flow", symbol=symbol, days=days)
+            gateway = Container.market_gateway()
+            result = await gateway.get_etf_flow(symbol=symbol, days=days)
+
+            summary_text = f"ETF {symbol}资金流向"
+            artifact = create_artifact_envelope(
+                component_type="etf_flow",
+                name=f"ETF资金: {symbol}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "etf_flow", "symbol": symbol, "days": days},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get ETF flow failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "etf_flow"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_style_rotation(ctx: Context = None) -> Dict[str, Any]:
+        """获取风格轮动指标
+
+        比较大盘股(上证50) vs 小盘股(中证1000) 和 成长股(创业板指) vs 价值股(沪深300) 的近期涨跌幅，
+        用于判断市场风格切换方向。
+
+        Args:
+            ctx: FastMCP Context
+
+        Returns:
+            风格轮动指标数据，包含大小盘和成长价值维度的对比信号
+        """
+        if ctx:
+            await ctx.info("🔧 获取风格轮动指标")
+        try:
+            logger.info("MCP tool called: get_style_rotation")
+            gateway = Container.market_gateway()
+            result = await gateway.get_style_rotation()
+
+            signal = result.get("style_signal", {})
+            ls = signal.get("large_vs_small", "N/A")
+            gv = signal.get("growth_vs_value", "N/A")
+            summary_text = f"风格轮动: {ls}, {gv}"
+
+            artifact = create_artifact_envelope(
+                component_type="style_rotation",
+                name="风格轮动",
+                content=result,
+                description=summary_text,
+                metadata={"type": "style_rotation"},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get style rotation failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "style_rotation"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_futures_basis(
+        index_code: str = "IF0",
+        days: int = 60,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取期货基差数据
+
+        计算股指期货与现货指数的基差(期货价格-现货价格)，
+        用于判断市场情绪：正基差=升水(看多), 负基差=贴水(看空)。
+
+        Args:
+            index_code: 期货代码 (IF0=沪深300, IC0=中证500, IH0=上证50)
+            days: 获取最近 N 天数据 (默认 60)
+            ctx: FastMCP Context
+
+        Returns:
+            期货基差数据，包含基差值、基差率
+        """
+        if ctx:
+            await ctx.info("🔧 获取期货基差", extra={"index_code": index_code, "days": days})
+        try:
+            logger.info("MCP tool called: get_futures_basis", index_code=index_code, days=days)
+            gateway = Container.market_gateway()
+            result = await gateway.get_futures_basis(index_code=index_code, days=days)
+
+            basis = result.get("latest_basis")
+            basis_pct = result.get("latest_basis_pct")
+            summary_text = (
+                f"期货基差{index_code}: "
+                f"基差={f'{basis:.2f}' if isinstance(basis, (int, float)) else 'N/A'}, "
+                f"基差率={f'{basis_pct:+.2f}%' if isinstance(basis_pct, (int, float)) else 'N/A'}"
+            )
+
+            artifact = create_artifact_envelope(
+                component_type="futures_basis",
+                name=f"基差: {index_code}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "futures_basis", "index_code": index_code, "days": days},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get futures basis failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "futures_basis"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def calculate_risk_metrics(
+        symbol: str,
+        days: int = 120,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """计算量化风险指标
+
+        基于历史行情计算个股的风险指标，包括：
+        - Beta: 相对沪深300的系统性风险
+        - Sharpe Ratio: 风险调整后收益
+        - Max Drawdown: 最大回撤
+        - VaR (95%): 95%置信度下的在险价值
+        - CVaR (95%): 条件在险价值(尾部风险)
+        - Volatility: 年化波动率
+        - Calmar Ratio: 收益/最大回撤比
+
+        Args:
+            symbol: 股票代码 (如 600519, 000001)
+            days: 回溯天数 (默认 120)
+            ctx: FastMCP Context
+
+        Returns:
+            风险指标汇总
+        """
+        if ctx:
+            await ctx.info("🔧 计算风险指标", extra={"symbol": symbol, "days": days})
+        try:
+            logger.info("MCP tool called: calculate_risk_metrics", symbol=symbol, days=days)
+            gateway = Container.market_gateway()
+            result = await gateway.calculate_risk_metrics(symbol=symbol, days=days)
+
+            metrics = result.get("risk_metrics", {})
+            vol = metrics.get("volatility_annual", "N/A")
+            mdd = metrics.get("max_drawdown_pct", "N/A")
+            sharpe = metrics.get("sharpe_ratio", "N/A")
+            beta = metrics.get("beta", "N/A")
+
+            summary_text = (
+                f"{symbol}风险指标: "
+                f"波动率={vol}%, 最大回撤={mdd}%, "
+                f"Sharpe={sharpe}, Beta={beta}"
+            )
+
+            artifact = create_artifact_envelope(
+                component_type="risk_metrics",
+                name=f"风险指标: {symbol}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "risk_metrics", "symbol": symbol, "days": days},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Calculate risk metrics failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "risk_metrics"}
