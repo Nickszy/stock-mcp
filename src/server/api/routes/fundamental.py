@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, status, Query
 from typing import Dict, Any
 from src.server.utils.logger import logger
 from src.server.core.use_cases import fundamental as fundamental_use_cases
+from src.server.domain.response_contract import rest_response
 
 router = APIRouter(prefix="/api/v1/fundamental", tags=["Fundamental Analysis"])
 
@@ -23,23 +24,27 @@ router = APIRouter(prefix="/api/v1/fundamental", tags=["Fundamental Analysis"])
     - 美股: `AAPL` 或 `NASDAQ:AAPL`
 
     **返回数据:**
-    - 利润表 (income_statement): 营收、净利润等
-    - 资产负债表 (balance_sheet): 资产、负债等
-    - 现金流量表 (cash_flow): 经营/投资/筹资现金流
-    - 财务指标 (financial_indicators): EPS、ROE、ROA等
-    - 市场指标 (market_metrics): PE、PB、市值等
+    - 利润表 (income_statement): 季度/年度含同比/环比
+    - 资产负债表 (balance_sheet): 季度/年度含同比/环比
+    - 现金流量表 (cash_flow): 季度/年度含同比/环比
     """,
 )
 async def get_financials(
-    symbol: str = Query(..., description="股票代码 (格式: EXCHANGE:SYMBOL)")
+    symbol: str = Query(..., description="股票代码 (格式: EXCHANGE:SYMBOL)"),
+    period: str = Query("all", description="报告类型: quarterly | annual | all"),
+    periods: int | None = Query(None, description="返回期数, None=全部"),
 ) -> Dict[str, Any]:
     """获取财务报表数据（利润表、资产负债表、现金流量表等）"""
     try:
         logger.info("API: get_financials called", symbol=symbol)
 
-        result = await fundamental_use_cases.get_financials(symbol)
+        result = await fundamental_use_cases.get_stock_financial_statements(
+            symbol, period=period, periods=periods
+        )
 
-        return result
+        return rest_response(data=result["data"], symbol=result.get("symbol"),
+                             source=result.get("source", {}).get("provider"),
+                             period=period, limit=periods)
 
     except Exception as e:
         logger.error(f"API error in get_financials: {e}", exc_info=True)
@@ -69,16 +74,12 @@ async def get_financial_report(
 ) -> Dict[str, Any]:
     """获取财务报告分析"""
     try:
-        # 标准化 ticker
-        logger.info(
-            "API: get_financial_report called",
-            symbol=symbol
-        )
-        
+        logger.info("API: get_financial_report called", symbol=symbol)
+
         result = await fundamental_use_cases.get_fundamental_analysis(symbol)
-        
-        return result
-        
+
+        return rest_response(data=result, symbol=symbol)
+
     except Exception as e:
         logger.error(f"API error in get_financial_report: {e}", exc_info=True)
         raise HTTPException(
@@ -98,19 +99,13 @@ async def get_financial_ratios(
     """获取财务比率"""
     try:
         logger.info("API: get_financial_ratios called", symbol=symbol)
-        
-        # 获取完整分析并提取比率部分
+
         result = await fundamental_use_cases.get_fundamental_analysis(symbol)
-        
-        # 如果有比率数据，返回它；否则返回整体结果
-        if "ratios" in result:
-            return {
-                "symbol": result.get("ticker", symbol),
-                "ratios": result["ratios"]
-            }
-        
-        return result
-        
+
+        ratios_data = result.get("ratios", result)
+
+        return rest_response(data=ratios_data, symbol=symbol)
+
     except Exception as e:
         logger.error(f"API error in get_financial_ratios: {e}", exc_info=True)
         raise HTTPException(
@@ -133,7 +128,7 @@ async def get_profit_forecast(
 
         result = await fundamental_use_cases.get_profit_forecast(symbol)
 
-        return result
+        return rest_response(data=result, symbol=symbol)
 
     except Exception as e:
         logger.error(f"API error in get_profit_forecast: {e}", exc_info=True)

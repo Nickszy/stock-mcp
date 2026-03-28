@@ -17,9 +17,10 @@ Adding a new gateway-delegating use case:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 from src.server.core.dependencies import Container
+from src.server.domain.response_contract import create_data_response
 from src.server.utils.logger import logger
 
 
@@ -85,3 +86,60 @@ async def get_fundamental_analysis(ticker: str) -> Dict[str, Any]:
         resolved_ticker=resolved,
     )
     return await service.get_fundamental_analysis(resolved)
+
+
+# ---------------------------------------------------------------------------
+# Unified financial statements entry point (response-contract aware)
+# ---------------------------------------------------------------------------
+
+
+async def get_stock_financial_statements(
+    symbol: str,
+    period: str = "all",
+    periods: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Unified financial statements with standardised response contract.
+
+    Wraps the gateway-level ``get_financial_statements`` call so that both
+    REST and MCP consumers receive a consistent payload.
+
+    Parameters
+    ----------
+    symbol:
+        Ticker in any accepted format (``600519``, ``SSE:600519``, etc.).
+    period:
+        ``"quarterly"`` | ``"annual"`` | ``"all"``.
+    periods:
+        Max number of periods to return. ``None`` = all available.
+
+    Returns
+    -------
+    dict
+        Standard data-response contract with ``source``, ``data``, etc.
+    """
+    gateway = Container.market_gateway()
+    logger.info(
+        "UseCase: get_stock_financial_statements",
+        symbol=symbol,
+        period=period,
+        periods=periods,
+    )
+    raw = await gateway.get_financial_statements(
+        symbol, report_type=period, periods=periods
+    )
+
+    source = raw.get("source", "unknown")
+    if isinstance(source, dict):
+        source = source.get("provider", "unknown")
+
+    return create_data_response(
+        data={
+            "income_statement": raw.get("income_statement", {}),
+            "balance_sheet": raw.get("balance_sheet", {}),
+            "cash_flow": raw.get("cash_flow", {}),
+        },
+        symbol=raw.get("ts_code") or raw.get("ticker") or symbol,
+        source=source,
+        period=period,
+        limit=periods,
+    )

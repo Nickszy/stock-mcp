@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, status, Query
 from typing import Dict, Any, List
 from src.server.utils.logger import logger
 from src.server.core.dependencies import Container
+from src.server.domain.response_contract import rest_response
 
 router = APIRouter(prefix="/api/v1/news", tags=["News"])
 
@@ -40,8 +41,8 @@ async def get_stock_news(
         
         service = Container.news_service()
         result = await service.fetch_latest_news(symbol, days_back)
-        
-        return result
+
+        return rest_response(data=result, symbol=symbol, limit=days_back)
         
     except Exception as e:
         logger.error(f"API error in get_stock_news: {e}", exc_info=True)
@@ -59,7 +60,7 @@ async def get_stock_news(
 async def get_market_news(
     category: str = Query("general", description="新闻类别 (general, breaking, financial)"),
     limit: int = Query(20, ge=1, le=50, description="返回数量")
-) -> List[Dict[str, Any]]:
+) -> Dict[str, Any]:
     """获取市场新闻"""
     try:
         logger.info(
@@ -67,21 +68,19 @@ async def get_market_news(
             category=category,
             limit=limit
         )
-        
+
         service = Container.news_service()
-        
+
         if category == "breaking":
             result = await service.get_breaking_news()
         elif category == "financial":
             result = await service.get_financial_news(None, None)
         else:
-            # 默认通用新闻
             result = await service.web_search("stock market news today")
-        
-        # 限制返回数量
-        if isinstance(result, list):
-            return result[:limit]
-        return result
+
+        items = result[:limit] if isinstance(result, list) else result
+
+        return rest_response(data=items, limit=limit, category=category)
         
     except Exception as e:
         logger.error(f"API error in get_market_news: {e}", exc_info=True)

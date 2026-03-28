@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, status, Query
 from typing import Dict, Any, List, Optional
 from src.server.utils.logger import logger
 from src.server.core.use_cases import money_flow as money_flow_use_cases
+from src.server.domain.response_contract import rest_response
 
 router = APIRouter(prefix="/api/v1/money-flow", tags=["Money Flow Analysis"])
 
@@ -19,11 +20,11 @@ router = APIRouter(prefix="/api/v1/money-flow", tags=["Money Flow Analysis"])
     summary="获取个股资金流向",
     description="""
     获取个股主力资金和散户资金的流入流出情况
-    
+
     **支持的代码格式:**
     - A股: `600519`, `600519.SH`, `SSE:600519`
     - A股: `000001`, `000001.SZ`, `SZSE:000001`
-    
+
     **返回数据:**
     - 主力资金净流入/流出
     - 散户资金净流入/流出
@@ -43,7 +44,7 @@ async def get_stock_money_flow(
 
         result = await money_flow_use_cases.get_money_flow(symbol, days)
 
-        return {"code": 0, "message": "success", "data": result}
+        return rest_response(data=result, symbol=symbol, limit=days)
 
     except Exception as e:
         logger.error(f"API error in get_stock_money_flow: {e}", exc_info=True)
@@ -58,12 +59,12 @@ async def get_stock_money_flow(
     summary="获取北向资金流向",
     description="""
     获取北向资金(沪深港通)流入A股市场的情况
-    
+
     **数据说明:**
     - 沪股通: 香港投资者买卖上交所股票
     - 深股通: 香港投资者买卖深交所股票
     - 北向资金被称为"聪明钱"，对市场有重要参考价值
-    
+
     **返回数据:**
     - 每日沪股通/深股通净流入
     - 北向资金合计
@@ -79,7 +80,7 @@ async def get_north_bound_flow(
 
         result = await money_flow_use_cases.get_north_bound_flow(days)
 
-        return {"code": 0, "message": "success", "data": result}
+        return rest_response(data=result, limit=days)
 
     except Exception as e:
         logger.error(f"API error in get_north_bound_flow: {e}", exc_info=True)
@@ -94,12 +95,12 @@ async def get_north_bound_flow(
     summary="获取筹码分布数据",
     description="""
     获取个股的筹码分布和成本分析数据
-    
+
     **数据说明:**
     - 筹码分布反映投资者持仓成本分布
     - 获利比例显示当前价格下的盈利投资者占比
     - 成本集中度反映主力筹码的集中程度
-    
+
     **返回数据:**
     - 筹码分布历史
     - 获利比例
@@ -119,7 +120,7 @@ async def get_chip_distribution(
 
         result = await money_flow_use_cases.get_chip_distribution(symbol, days)
 
-        return {"code": 0, "message": "success", "data": result}
+        return rest_response(data=result, symbol=symbol, limit=days)
 
     except Exception as e:
         logger.error(f"API error in get_chip_distribution: {e}", exc_info=True)

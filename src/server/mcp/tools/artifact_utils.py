@@ -5,7 +5,7 @@ Artifact 工具函数
 MCP 工具返回结构化数据，前端渲染可视化组件
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union, TypedDict
 from uuid import uuid4
@@ -111,7 +111,7 @@ def create_artifact_envelope(
         "component_type": comp_type,
         "description": description,
         "metadata": metadata or {},
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "visible_to_llm": visible_to_llm,
         "display_in_report": display_in_report,
     }
@@ -235,6 +235,65 @@ def create_market_liquidity_artifact(
         content={"north_flow": north_flow, "margin": margin},
         description=description or "A-share market liquidity indicators",
     )
+
+
+def create_standard_artifact_response(
+    summary: str,
+    component_type: Union[str, ComponentType],
+    name: str,
+    data: Any,
+    *,
+    symbol: Optional[str] = None,
+    source: Optional[str] = None,
+    description: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
+    display_in_report: bool = True,
+    **contract_kwargs: Any,
+) -> ArtifactResponse:
+    """Create an MCP response that embeds the unified data contract.
+
+    This is the recommended way for MCP tools to return data: the payload
+    follows the standard contract (``source``, ``data``, optional metadata)
+    while still wrapped in the artifact envelope for front-end rendering.
+
+    Parameters
+    ----------
+    summary:
+        Text summary shown to the LLM.
+    component_type:
+        Visualisation component type (string or ComponentType enum).
+    name:
+        Display title for the artifact.
+    data:
+        Core data payload.
+    symbol:
+        Ticker the data refers to (optional).
+    source:
+        Data provider name (optional).
+    description:
+        Artifact description.
+    metadata:
+        Extra artifact-level metadata.
+    display_in_report:
+        Whether to show in generated reports.
+    **contract_kwargs:
+        Extra fields forwarded to ``create_data_response`` (e.g. ``period``,
+        ``start_date``, ``end_date``, ``interval``, ``limit``, ``date``).
+    """
+    from src.server.domain.response_contract import create_data_response
+
+    contract_data = create_data_response(
+        data, symbol=symbol, source=source, **contract_kwargs
+    )
+    artifact = create_artifact_envelope(
+        component_type=component_type,
+        name=name,
+        content=contract_data,
+        description=description,
+        metadata=metadata,
+        display_in_report=display_in_report,
+    )
+    return create_artifact_response(summary=summary, artifact=artifact)
 
 
 def create_news_citations_artifact(

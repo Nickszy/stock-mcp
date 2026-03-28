@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from src.server.core.use_cases import filings as filings_use_cases
+from src.server.domain.response_contract import rest_response
 
 
 router = APIRouter(prefix="/filings", tags=["filings"])
@@ -27,13 +28,14 @@ async def get_periodic_sec_filings(
 ):
     """Fetch SEC periodic filings (10-K/10-Q)."""
     try:
-        return await filings_use_cases.fetch_periodic_sec_filings(
+        result = await filings_use_cases.fetch_periodic_sec_filings(
             ticker=ticker,
             forms=forms,
             year=year,
             quarter=quarter,
             limit=limit
         )
+        return rest_response(data=result, symbol=ticker, limit=limit)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -47,13 +49,15 @@ async def get_event_sec_filings(
 ):
     """Fetch SEC event-driven filings (8-K, etc.)."""
     try:
-        return await filings_use_cases.fetch_event_sec_filings(
+        result = await filings_use_cases.fetch_event_sec_filings(
             ticker=ticker,
             forms=forms,
             start_date=start_date,
             end_date=end_date,
             limit=limit
         )
+        return rest_response(data=result, symbol=ticker, limit=limit,
+                             start_date=start_date, end_date=end_date)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -67,13 +71,15 @@ async def get_ashare_filings(
 ):
     """Fetch A-share announcements."""
     try:
-        return await filings_use_cases.fetch_ashare_filings(
+        result = await filings_use_cases.fetch_ashare_filings(
             symbol=symbol,
             filing_types=filing_types,
             start_date=start_date,
             end_date=end_date,
             limit=limit
         )
+        return rest_response(data=result, symbol=symbol, limit=limit,
+                             start_date=start_date, end_date=end_date)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from src.server.utils.logger import logger
 from src.server.core.use_cases import market as market_use_cases
 from src.server.core.use_cases import technical as technical_use_cases
+from src.server.domain.response_contract import rest_response
 
 # 导入请求模型
 from src.server.api.models.requests import (
@@ -121,8 +122,8 @@ async def get_multiple_prices(
             total=len(request.tickers)
         )
         
-        return result
-        
+        return rest_response(data=result)
+
     except Exception as e:
         logger.error(f"API error in get_multiple_prices: {e}", exc_info=True)
         raise HTTPException(
@@ -239,8 +240,8 @@ async def calculate_technical_indicators(
             has_indicators=("indicators" in result)
         )
         
-        return result
-        
+        return rest_response(data=result, symbol=request.symbol)
+
     except Exception as e:
         logger.error(f"API error in calculate_technical_indicators: {e}", exc_info=True)
         raise HTTPException(
@@ -293,20 +294,24 @@ async def get_historical_prices(
         )
         
         result = {
-            "symbol": request.symbol,
-            "period": request.period,
-            "interval": request.interval,
             "count": len(prices),
             "data": prices
         }
-        
+
         logger.info(
             "API: get_historical_prices completed",
             symbol=request.symbol,
             count=len(prices)
         )
-        
-        return result
+
+        return rest_response(
+            data=prices,
+            symbol=request.symbol,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+            interval=request.interval,
+            limit=len(prices),
+        )
         
     except Exception as e:
         logger.error(f"API error in get_historical_prices: {e}", exc_info=True)
@@ -329,10 +334,10 @@ async def get_asset_info(
         logger.info("API: get_asset_info called", symbol=symbol)
         
         asset = await market_use_cases.get_asset_info(symbol)
-        
+
         if asset:
-            return asset  # already a dict from use_case
-        return {"error": f"Asset not found: {symbol}"}
+            return rest_response(data=asset, symbol=symbol)
+        return rest_response(data={"error": f"Asset not found: {symbol}"}, symbol=symbol)
         
     except Exception as e:
         logger.error(f"API error in get_asset_info: {e}", exc_info=True)
@@ -364,8 +369,8 @@ async def generate_trading_signal(
             period=request.period,
             interval=request.interval
         )
-        
-        return result
+
+        return rest_response(data=result, symbol=request.symbol)
         
     except Exception as e:
         logger.error(f"API error in generate_trading_signal: {e}", exc_info=True)
@@ -395,8 +400,8 @@ async def calculate_support_resistance(
             symbol=request.symbol,
             period=request.period
         )
-        
-        return result
+
+        return rest_response(data=result, symbol=request.symbol)
         
     except Exception as e:
         logger.error(f"API error in calculate_support_resistance: {e}", exc_info=True)
@@ -425,12 +430,10 @@ async def get_market_report(
             market_use_cases.get_real_time_price(symbol),
         )
         
-        return {
-            "symbol": symbol,
-            "info": info,
-            "price": price,
-            "timestamp": datetime.now().isoformat(),
-        }
+        return rest_response(
+            data={"info": info, "price": price},
+            symbol=symbol,
+        )
         
     except Exception as e:
         logger.error(f"API error in get_market_report: {e}", exc_info=True)
