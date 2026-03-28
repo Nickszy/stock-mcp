@@ -266,8 +266,8 @@ class TestRegistryAfterMerge:
     def test_total_tool_count(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        # Was 108, removed get_financial_reports → 107
-        assert total == 107, f"Expected 107, got {total}"
+        # Was 108, removed get_financial_reports → 107, added corporate-action 3 → 110
+        assert total == 110, f"Expected 110, got {total}"
 
     def test_fundamental_count(self):
         from src.server.mcp.registry import TOOL_GROUPS

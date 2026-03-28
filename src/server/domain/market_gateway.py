@@ -122,6 +122,10 @@ _MARKET_METHODS: Set[str] = {
     "get_stock_northbound_ranking",
     "get_stock_shareholder_changes",
     "get_stock_institutional_research",
+    # Corporate action data (COL-147)
+    "get_shareholder_holding_detail",
+    "get_ipo_calendar",
+    "get_ipo_info",
     # Quantitative screener
     "screen_stocks",
     "get_industry_ranking",

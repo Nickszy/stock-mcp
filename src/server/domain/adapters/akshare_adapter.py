@@ -3783,6 +3783,168 @@ class AkshareAdapter(BaseDataAdapter):
             return {"data": [], "date": date, "source": "akshare", "error": str(e)}
 
     # ------------------------------------------------------------------
+    # A-share corporate action data (COL-147)
+    # ------------------------------------------------------------------
+
+    async def get_shareholder_holding_detail(
+        self, symbol: str = "", date: str = "",
+    ) -> Dict[str, Any]:
+        """获取股东增减持明细（十大流通股东维度）.
+
+        Args:
+            symbol: 股票代码 (如 688235), 为空返回全市场
+            date: 季度日期 (如 20240930)
+        """
+        cache_key = f"akshare:shareholder_holding_detail:{symbol}:{date}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            kwargs: Dict[str, Any] = {}
+            if date:
+                kwargs["date"] = date
+            if symbol:
+                kwargs["symbol"] = symbol
+
+            df = await self._run(ak.stock_gdfx_free_holding_detail_em, **kwargs)
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "date": date, "source": "akshare"}
+
+            # Normalize column names
+            col_map = {
+                "序号": "seq",
+                "股东名称": "holder_name",
+                "股东类型": "holder_type",
+                "股票代码": "stock_code",
+                "股票简称": "stock_name",
+                "变动日期": "change_date",
+                "期末持有-数量": "hold_qty",
+                "期末持有-数量变化": "hold_change",
+                "期末持有-数量变化比例": "hold_change_pct",
+                "期末持有-持股变动": "hold_direction",
+                "期末持有-流通市值": "hold_market_value",
+                "公告日期": "announce_date",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "symbol": symbol,
+                "date": date,
+                "total": len(records),
+                "data": records[:100],
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get shareholder holding detail: {e}")
+            return {"data": [], "symbol": symbol, "date": date, "source": "akshare", "error": str(e)}
+
+    async def get_ipo_calendar(self) -> Dict[str, Any]:
+        """获取新股IPO日历（近期IPO/申购/上市计划）.
+
+        Uses stock_new_ipo_cninfo for IPO calendar data.
+        """
+        cache_key = "akshare:ipo_calendar"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_new_ipo_cninfo)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            # Normalize column names
+            col_map = {
+                "证券代码": "stock_code",
+                "证券简称": "stock_name",
+                "申购日期": "subscribe_date",
+                "发行价格": "issue_price",
+                "总发行数量(万股)": "total_issue_qty",
+                "发行市盈率": "issue_pe",
+                "网上发行中签率(%)": "online_win_rate",
+                "摇号结果公告日": "lottery_announce_date",
+                "中签号公布日": "winning_date",
+                "中签缴费日": "payment_date",
+                "上市日期": "listing_date",
+                "发行总数(万股)": "total_issue_volume",
+                "上网定价发行数量(万股)": "online_issue_volume",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+                    # Convert NaT/Timestamp to string
+                    if str(type(v)) == "<class 'pandas._libs.tslibs.nattype.NaTType'>":
+                        item[k] = None
+                    elif hasattr(v, "strftime"):
+                        item[k] = v.strftime("%Y-%m-%d")
+
+            result = {
+                "source": "akshare",
+                "total": len(records),
+                "data": records[:50],
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get IPO calendar: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_ipo_info(self, stock: str = "") -> Dict[str, Any]:
+        """获取个股IPO详情.
+
+        Args:
+            stock: 股票代码 (如 600519)
+        """
+        if not stock:
+            return {"data": {}, "source": "akshare", "error": "stock parameter required"}
+
+        cache_key = f"akshare:ipo_info:{stock}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_ipo_info, stock=stock)
+            if df is None or df.empty:
+                return {"data": {}, "stock": stock, "source": "akshare"}
+
+            # Convert key-value pairs to dict
+            info = {}
+            for _, row in df.iterrows():
+                key = str(row.iloc[0]).strip()
+                value = row.iloc[1]
+                if hasattr(value, "item"):
+                    value = value.item()
+                info[key] = value
+
+            result = {
+                "source": "akshare",
+                "stock": stock,
+                "data": info,
+            }
+            await self.cache.set(cache_key, result, ttl=86400)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get IPO info: {e}")
+            return {"data": {}, "stock": stock, "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
     # A-share quantitative stock screener
     # ------------------------------------------------------------------
 
