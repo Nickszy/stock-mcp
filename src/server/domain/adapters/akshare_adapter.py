@@ -3945,6 +3945,202 @@ class AkshareAdapter(BaseDataAdapter):
             return {"data": {}, "stock": stock, "source": "akshare", "error": str(e)}
 
     # ------------------------------------------------------------------
+    # Stock Fact Pack: aggregate facts by category (COL-148)
+    # ------------------------------------------------------------------
+
+    async def get_stock_fact_pack(self, symbol: str) -> Dict[str, Any]:
+        """Aggregate stock facts across all categories into a single pack.
+
+        Calls existing adapter methods and organizes results into 8 fact
+        categories: security_master, company_master, business_structure,
+        governance, financial, market, events, peers.
+
+        Each category includes: data, source_trace, coverage status.
+        The pack also includes top-level missing_fields.
+
+        Args:
+            symbol: Stock code (e.g. 600519, 000001)
+        """
+        cache_key = f"akshare:stock_fact_pack:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        import time as _time
+        t0 = _time.perf_counter()
+
+        entity = {"symbol": symbol, "type": "stock"}
+        facts: Dict[str, Any] = {}
+        source_trace: Dict[str, Any] = {}
+        coverage: Dict[str, str] = {}
+        missing_fields: List[str] = []
+
+        # --- 1. Security Master (证券主档) ---
+        try:
+            info = await self.get_asset_info(f"SSE:{symbol}")
+            if info is None:
+                info = await self.get_asset_info(f"SZSE:{symbol}")
+            if info and hasattr(info, "to_dict"):
+                d = info.to_dict()
+                facts["security_master"] = {
+                    "code": d.get("symbol", symbol),
+                    "name": d.get("name", ""),
+                    "exchange": d.get("exchange", ""),
+                    "asset_type": d.get("asset_type", ""),
+                }
+                coverage["security_master"] = "complete"
+            else:
+                coverage["security_master"] = "missing"
+                missing_fields.append("security_master")
+        except Exception as e:
+            coverage["security_master"] = f"error: {e}"
+            source_trace["security_master"] = {"error": str(e)}
+
+        # --- 2. Financial Facts (财务事实) ---
+        try:
+            fin = await self.get_financials(f"SSE:{symbol}")
+            if not fin or "error" in fin:
+                fin = await self.get_financials(f"SZSE:{symbol}")
+            if fin and "error" not in fin:
+                facts["financial"] = fin
+                coverage["financial"] = "complete"
+            else:
+                coverage["financial"] = "missing"
+                missing_fields.append("financial")
+        except Exception as e:
+            coverage["financial"] = f"error: {e}"
+
+        # --- 3. Market Facts (市场事实) ---
+        market_data: Dict[str, Any] = {}
+        try:
+            val = await self._get_valuation_raw(symbol)
+            if val:
+                market_data["valuation"] = val
+                source_trace["valuation"] = {"provider": "akshare"}
+        except Exception:
+            pass
+        try:
+            flow = await self.get_money_flow(f"SSE:{symbol}")
+            if not flow or "error" in flow:
+                flow = await self.get_money_flow(f"SZSE:{symbol}")
+            if flow and "error" not in flow:
+                market_data["money_flow"] = flow
+        except Exception:
+            pass
+        if market_data:
+            facts["market"] = market_data
+            coverage["market"] = "partial" if len(market_data) < 3 else "complete"
+        else:
+            coverage["market"] = "missing"
+            missing_fields.append("market")
+
+        # --- 4. Governance Facts (治理与股权) ---
+        gov_data: Dict[str, Any] = {}
+        try:
+            holders = await self.get_stock_top10_shareholders(symbol)
+            if holders and "error" not in holders:
+                gov_data["top10_shareholders"] = holders.get("data", [])[:10]
+        except Exception:
+            pass
+        try:
+            changes = await self.get_stock_shareholder_changes()
+            if changes and "error" not in changes:
+                gov_data["shareholder_changes"] = changes.get("data", [])[:5]
+        except Exception:
+            pass
+        if gov_data:
+            facts["governance"] = gov_data
+            coverage["governance"] = "partial"
+        else:
+            coverage["governance"] = "missing"
+            missing_fields.append("governance")
+
+        # --- 5. Event Facts (事件事实) ---
+        event_data: Dict[str, Any] = {}
+        try:
+            div = await self.get_dividend_info(f"SSE:{symbol}")
+            if not div or "error" in div:
+                div = await self.get_dividend_info(f"SZSE:{symbol}")
+            if div and "error" not in div:
+                event_data["dividends"] = div
+        except Exception:
+            pass
+        try:
+            repo = await self.get_repurchase_info(symbol=symbol)
+            if repo and "error" not in repo:
+                event_data["repurchase"] = repo
+        except Exception:
+            pass
+        try:
+            restricted = await self.get_restricted_release(symbol=symbol, days=90)
+            if restricted and "error" not in restricted:
+                event_data["restricted_release"] = restricted
+        except Exception:
+            pass
+        if event_data:
+            facts["events"] = event_data
+            coverage["events"] = "partial"
+        else:
+            coverage["events"] = "missing"
+            missing_fields.append("events")
+
+        # --- 6. Business Structure (业务结构) ---
+        try:
+            biz = await self.get_mainbz_info(f"SSE:{symbol}")
+            if not biz or "error" in biz:
+                biz = await self.get_mainbz_info(f"SZSE:{symbol}")
+            if biz and "error" not in biz:
+                facts["business_structure"] = biz
+                coverage["business_structure"] = "complete"
+            else:
+                coverage["business_structure"] = "missing"
+                missing_fields.append("business_structure")
+        except Exception as e:
+            coverage["business_structure"] = f"error: {e}"
+
+        # --- Categories not yet aggregated ---
+        for cat in ["company_master", "peers"]:
+            if cat not in facts:
+                coverage[cat] = "not_implemented"
+                missing_fields.append(cat)
+
+        elapsed = _time.perf_counter() - t0
+
+        result = {
+            "source": "akshare",
+            "entity": entity,
+            "facts": facts,
+            "source_trace": source_trace,
+            "coverage": coverage,
+            "missing_fields": missing_fields,
+            "categories_fetched": len([v for v in coverage.values() if v == "complete" or v == "partial"]),
+            "categories_total": 8,
+            "elapsed_seconds": round(elapsed, 2),
+        }
+        await self.cache.set(cache_key, result, ttl=600)
+        return result
+
+    async def _get_valuation_raw(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get valuation data for a raw stock code (no ticker prefix)."""
+        cache_key = f"akshare:valuation_raw:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.stock_a_indicator_lg, symbol=symbol)
+            if df is None or df.empty:
+                return None
+            latest = df.iloc[-1].to_dict()
+            for k, v in latest.items():
+                if hasattr(v, "item"):
+                    latest[k] = v.item()
+            await self.cache.set(cache_key, latest, ttl=600)
+            return latest
+        except Exception as e:
+            self.logger.error(f"Failed to get valuation raw: {e}")
+            return None
+
+    # ------------------------------------------------------------------
     # A-share quantitative stock screener
     # ------------------------------------------------------------------
 

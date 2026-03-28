@@ -31,6 +31,7 @@ from src.server.mcp.tools.index_tools import register_index_tools
 from src.server.mcp.tools.etf_tools import register_etf_tools
 from src.server.mcp.tools.factor_tools import register_factor_tools
 from src.server.mcp.tools.corporate_action_tools import register_corporate_action_tools
+from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
 
 
 @dataclass(frozen=True)
@@ -176,6 +177,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="A股企业行为数据 (股东增减持明细/IPO日历/IPO详情)",
         count=3,
+    ),
+    ToolGroup(
+        name="fact-pack",
+        register=register_fact_pack_tools,
+        enabled=True,
+        description="股票事实包 (聚合全维度结构化事实数据)",
+        count=1,
     ),
 ]
 
