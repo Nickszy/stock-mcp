@@ -4398,9 +4398,12 @@ class AkshareAdapter(BaseDataAdapter):
                 return {"results": [], "total": 0, "source": "akshare"}
 
             col_map = {
-                "经理姓名": "manager_name", "基金公司": "fund_company",
-                "任职基金代码": "fund_code", "任职基金": "fund_name",
-                "累计从业时间": "tenure_days", "现任基金资产总规模": "aum",
+                "姓名": "manager_name",
+                "所属公司": "fund_company",
+                "现任基金代码": "fund_code",
+                "现任基金": "fund_name",
+                "累计从业时间": "tenure_days",
+                "现任基金资产总规模": "aum",
                 "现任基金最佳回报": "best_return",
             }
             df = df.rename(columns=col_map)
