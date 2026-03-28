@@ -124,6 +124,8 @@ _MARKET_METHODS: Set[str] = {
     "get_stock_institutional_research",
     # Quantitative screener
     "screen_stocks",
+    "get_industry_ranking",
+    "get_concept_ranking",
 }
 
 

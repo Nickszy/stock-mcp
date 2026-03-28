@@ -134,8 +134,8 @@ TOOL_GROUPS: List[ToolGroup] = [
         name="quantitative",
         register=register_quantitative_tools,
         enabled=True,
-        description="A股量化分析 (多条件选股/筛选)",
-        count=1,
+        description="A股量化分析 (多条件选股/行业排名/概念排名)",
+        count=3,
     ),
 ]
 

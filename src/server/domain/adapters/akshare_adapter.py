@@ -4015,3 +4015,222 @@ class AkshareAdapter(BaseDataAdapter):
             "source": "akshare",
         }
 
+    # ------------------------------------------------------------------
+    # A-share industry performance ranking
+    # ------------------------------------------------------------------
+
+    async def get_industry_ranking(
+        self,
+        sort_by: str = "change_pct",
+        sort_order: str = "desc",
+        limit: int = 30,
+    ) -> Dict[str, Any]:
+        """Get real-time performance ranking of all A-share industry boards.
+
+        Uses stock_board_industry_name_em to fetch current snapshot of all
+        industry sectors, then ranks them by the specified metric.
+
+        Args:
+            sort_by: Sort field. Options:
+                - change_pct (涨跌幅, default)
+                - turnover_rate (换手率)
+                - volume (成交量)
+                - turnover (成交额)
+                - amplitude (振幅)
+                - rise_count (上涨家数)
+                - fall_count (下跌家数)
+            sort_order: "desc" or "asc"
+            limit: Max sectors to return (default 30, max 100)
+
+        Returns:
+            Dict with ranked industry list, total count, and metadata.
+        """
+        limit = min(max(limit, 1), 100)
+
+        cache_key = "akshare:industry_ranking:snapshot"
+        cached_df = await self.cache.get(cache_key)
+
+        if cached_df is not None:
+            df = pd.DataFrame(cached_df)
+        else:
+            try:
+                df = await self._run(ak.stock_board_industry_name_em)
+                if df is None or df.empty:
+                    return {"results": [], "total": 0, "source": "akshare"}
+                await self.cache.set(cache_key, df.to_dict(orient="records"), ttl=300)
+            except Exception as e:
+                self.logger.error(f"get_industry_ranking: failed to fetch: {e}")
+                return {"results": [], "total": 0, "source": "akshare", "error": str(e)}
+
+        # Normalize columns
+        col_map = {
+            "板块名称": "name",
+            "板块代码": "code",
+            "最新价": "price",
+            "涨跌幅": "change_pct",
+            "涨跌额": "change_amt",
+            "成交量": "volume",
+            "成交额": "turnover",
+            "振幅": "amplitude",
+            "最高": "high",
+            "最低": "low",
+            "今开": "open",
+            "昨收": "prev_close",
+            "换手率": "turnover_rate",
+            "上涨家数": "rise_count",
+            "下跌家数": "fall_count",
+            "领涨股票": "top_stock",
+            "领涨股票涨跌幅": "top_stock_change",
+        }
+        df = df.rename(columns=col_map)
+
+        # Sort
+        sort_col_map = {
+            "change_pct": "change_pct",
+            "turnover_rate": "turnover_rate",
+            "volume": "volume",
+            "turnover": "turnover",
+            "amplitude": "amplitude",
+            "rise_count": "rise_count",
+            "fall_count": "fall_count",
+        }
+        actual_sort_col = sort_col_map.get(sort_by, "change_pct")
+        ascending = sort_order.lower() == "asc"
+
+        if actual_sort_col in df.columns:
+            df[actual_sort_col] = pd.to_numeric(df[actual_sort_col], errors="coerce")
+            df = df.sort_values(by=actual_sort_col, ascending=ascending, na_position="last")
+
+        total = len(df)
+        df = df.head(limit)
+
+        results = []
+        for _, row in df.iterrows():
+            results.append({
+                "name": str(row.get("name", "")),
+                "code": str(row.get("code", "")),
+                "price": round(self._safe_float(row.get("price")) or 0, 2),
+                "change_pct": round(self._safe_float(row.get("change_pct")) or 0, 2),
+                "amplitude": round(self._safe_float(row.get("amplitude")) or 0, 2),
+                "turnover_rate": round(self._safe_float(row.get("turnover_rate")) or 0, 2),
+                "rise_count": int(self._safe_float(row.get("rise_count")) or 0),
+                "fall_count": int(self._safe_float(row.get("fall_count")) or 0),
+                "top_stock": str(row.get("top_stock", "")),
+                "top_stock_change": round(self._safe_float(row.get("top_stock_change")) or 0, 2),
+            })
+
+        return {
+            "results": results,
+            "total": total,
+            "returned": len(results),
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "source": "akshare",
+        }
+
+    # ------------------------------------------------------------------
+    # A-share concept board ranking
+    # ------------------------------------------------------------------
+
+    async def get_concept_ranking(
+        self,
+        sort_by: str = "change_pct",
+        sort_order: str = "desc",
+        limit: int = 30,
+    ) -> Dict[str, Any]:
+        """Get real-time performance ranking of all A-share concept boards.
+
+        Uses stock_board_concept_name_em to fetch current snapshot of all
+        concept/theme sectors, then ranks them by the specified metric.
+
+        Args:
+            sort_by: Sort field. Options: change_pct, turnover_rate, volume,
+                turnover, amplitude, rise_count, fall_count
+            sort_order: "desc" or "asc"
+            limit: Max sectors to return (default 30, max 100)
+
+        Returns:
+            Dict with ranked concept list, total count, and metadata.
+        """
+        limit = min(max(limit, 1), 100)
+
+        cache_key = "akshare:concept_ranking:snapshot"
+        cached_df = await self.cache.get(cache_key)
+
+        if cached_df is not None:
+            df = pd.DataFrame(cached_df)
+        else:
+            try:
+                df = await self._run(ak.stock_board_concept_name_em)
+                if df is None or df.empty:
+                    return {"results": [], "total": 0, "source": "akshare"}
+                await self.cache.set(cache_key, df.to_dict(orient="records"), ttl=300)
+            except Exception as e:
+                self.logger.error(f"get_concept_ranking: failed to fetch: {e}")
+                return {"results": [], "total": 0, "source": "akshare", "error": str(e)}
+
+        # Normalize columns (same as industry)
+        col_map = {
+            "板块名称": "name",
+            "板块代码": "code",
+            "最新价": "price",
+            "涨跌幅": "change_pct",
+            "涨跌额": "change_amt",
+            "成交量": "volume",
+            "成交额": "turnover",
+            "振幅": "amplitude",
+            "最高": "high",
+            "最低": "low",
+            "今开": "open",
+            "昨收": "prev_close",
+            "换手率": "turnover_rate",
+            "上涨家数": "rise_count",
+            "下跌家数": "fall_count",
+            "领涨股票": "top_stock",
+            "领涨股票涨跌幅": "top_stock_change",
+        }
+        df = df.rename(columns=col_map)
+
+        sort_col_map = {
+            "change_pct": "change_pct",
+            "turnover_rate": "turnover_rate",
+            "volume": "volume",
+            "turnover": "turnover",
+            "amplitude": "amplitude",
+            "rise_count": "rise_count",
+            "fall_count": "fall_count",
+        }
+        actual_sort_col = sort_col_map.get(sort_by, "change_pct")
+        ascending = sort_order.lower() == "asc"
+
+        if actual_sort_col in df.columns:
+            df[actual_sort_col] = pd.to_numeric(df[actual_sort_col], errors="coerce")
+            df = df.sort_values(by=actual_sort_col, ascending=ascending, na_position="last")
+
+        total = len(df)
+        df = df.head(limit)
+
+        results = []
+        for _, row in df.iterrows():
+            results.append({
+                "name": str(row.get("name", "")),
+                "code": str(row.get("code", "")),
+                "price": round(self._safe_float(row.get("price")) or 0, 2),
+                "change_pct": round(self._safe_float(row.get("change_pct")) or 0, 2),
+                "amplitude": round(self._safe_float(row.get("amplitude")) or 0, 2),
+                "turnover_rate": round(self._safe_float(row.get("turnover_rate")) or 0, 2),
+                "rise_count": int(self._safe_float(row.get("rise_count")) or 0),
+                "fall_count": int(self._safe_float(row.get("fall_count")) or 0),
+                "top_stock": str(row.get("top_stock", "")),
+                "top_stock_change": round(self._safe_float(row.get("top_stock_change")) or 0, 2),
+            })
+
+        return {
+            "results": results,
+            "total": total,
+            "returned": len(results),
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "source": "akshare",
+        }
+

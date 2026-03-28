@@ -3,6 +3,8 @@
 
 Tools:
   - screen_stocks: Quantitative stock screener with multi-criteria filtering
+  - get_industry_ranking: Real-time industry board performance ranking
+  - get_concept_ranking: Real-time concept/theme board performance ranking
 """
 
 from typing import Any, Dict, Optional
@@ -199,4 +201,183 @@ def register_quantitative_tools(mcp: FastMCP):
 
         except Exception as e:
             logger.error(f"screen_stocks failed: {e}")
+            return {"error": str(e), "results": []}
+
+    # ------------------------------------------------------------------
+    # get_industry_ranking — A-share industry board ranking
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"quantitative", "sector", "industry"})
+    async def get_industry_ranking(
+        sort_by: str = "change_pct",
+        sort_order: str = "desc",
+        limit: int = 30,
+        output_format: OutputFormat = "markdown",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get real-time performance ranking of all A-share industry boards.
+
+        Ranks ~100 industry sectors by daily change %, turnover rate, volume,
+        amplitude, or rise/fall stock count. Essential for identifying hot/cold
+        sectors and sector rotation trends.
+
+        Typical use cases:
+        - "Which industry sectors are leading today?"
+        - "Show me the top 10 sectors by turnover rate"
+        - "Which sectors have the most falling stocks?"
+
+        Args:
+            sort_by: Sort field. Options: change_pct (default), turnover_rate,
+                volume, turnover, amplitude, rise_count, fall_count.
+            sort_order: "desc" (default, best first) or "asc".
+            limit: Max sectors to return (default 30, max 100).
+            output_format: "markdown" (default) or "json".
+            ctx: FastMCP Context.
+
+        Returns:
+            Ranked list of industry sectors with performance metrics.
+        """
+        if ctx:
+            await ctx.info(f"获取行业板块排名: sort_by={sort_by}, limit={limit}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_industry_ranking", sort_by=sort_by, limit=limit)
+
+            result = await Container.market_gateway().get_industry_ranking(
+                sort_by=sort_by, sort_order=sort_order, limit=limit,
+            )
+
+            elapsed = time.perf_counter() - t0
+            results = result.get("results", [])
+            total = result.get("total", 0)
+
+            summary = f"行业板块排名: 共 {total} 个行业, 返回前 {len(results)} 个 (耗时 {elapsed:.1f}s)"
+
+            if output_format == "json":
+                return create_artifact_response(
+                    summary=summary,
+                    artifact=create_table_artifact(
+                        component=ComponentType.STOCK_SCREENER,
+                        data=results,
+                        columns=["name", "change_pct", "rise_count", "fall_count",
+                                 "turnover_rate", "amplitude", "top_stock"],
+                    ),
+                )
+
+            # Markdown output
+            md = f"## A股行业板块排名 (按 {sort_by} {sort_order})\n\n"
+            md += f"**行业总数**: {total} | **返回**: {len(results)} 个 | **耗时**: {elapsed:.1f}s\n\n"
+            md += "| 行业 | 涨跌幅% | 上涨 | 下跌 | 换手率% | 振幅 | 领涨股 | 领涨涨幅 |\n"
+            md += "|------|---------|------|------|---------|------|--------|----------|\n"
+            for r in results:
+                md += (
+                    f"| {r.get('name', '')} "
+                    f"| {r.get('change_pct', 0):+.2f} "
+                    f"| {r.get('rise_count', 0)} "
+                    f"| {r.get('fall_count', 0)} "
+                    f"| {r.get('turnover_rate', 0):.2f} "
+                    f"| {r.get('amplitude', 0):.2f} "
+                    f"| {r.get('top_stock', '')} "
+                    f"| {r.get('top_stock_change', 0):+.2f} |\n"
+                )
+
+            return create_artifact_response(
+                summary=summary,
+                artifact=create_artifact_envelope(
+                    component=ComponentType.STOCK_SCREENER,
+                    markdown=md,
+                    data=results,
+                ),
+            )
+
+        except Exception as e:
+            logger.error(f"get_industry_ranking failed: {e}")
+            return {"error": str(e), "results": []}
+
+    # ------------------------------------------------------------------
+    # get_concept_ranking — A-share concept board ranking
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"quantitative", "sector", "concept"})
+    async def get_concept_ranking(
+        sort_by: str = "change_pct",
+        sort_order: str = "desc",
+        limit: int = 30,
+        output_format: OutputFormat = "markdown",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get real-time performance ranking of all A-share concept/theme boards.
+
+        Ranks ~400 concept sectors (AI, 新能源, 半导体, etc.) by daily change %,
+        turnover rate, or other metrics. Key for tracking market themes and narratives.
+
+        Typical use cases:
+        - "What are the hottest concept themes today?"
+        - "Show top 20 concept sectors by money flow (turnover)"
+        - "Which concepts have the most stocks rising?"
+
+        Args:
+            sort_by: Sort field. Options: change_pct (default), turnover_rate,
+                volume, turnover, amplitude, rise_count, fall_count.
+            sort_order: "desc" (default) or "asc".
+            limit: Max sectors to return (default 30, max 100).
+            output_format: "markdown" (default) or "json".
+            ctx: FastMCP Context.
+
+        Returns:
+            Ranked list of concept sectors with performance metrics.
+        """
+        if ctx:
+            await ctx.info(f"获取概念板块排名: sort_by={sort_by}, limit={limit}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_concept_ranking", sort_by=sort_by, limit=limit)
+
+            result = await Container.market_gateway().get_concept_ranking(
+                sort_by=sort_by, sort_order=sort_order, limit=limit,
+            )
+
+            elapsed = time.perf_counter() - t0
+            results = result.get("results", [])
+            total = result.get("total", 0)
+
+            summary = f"概念板块排名: 共 {total} 个概念, 返回前 {len(results)} 个 (耗时 {elapsed:.1f}s)"
+
+            if output_format == "json":
+                return create_artifact_response(
+                    summary=summary,
+                    artifact=create_table_artifact(
+                        component=ComponentType.STOCK_SCREENER,
+                        data=results,
+                        columns=["name", "change_pct", "rise_count", "fall_count",
+                                 "turnover_rate", "amplitude", "top_stock"],
+                    ),
+                )
+
+            # Markdown output
+            md = f"## A股概念板块排名 (按 {sort_by} {sort_order})\n\n"
+            md += f"**概念总数**: {total} | **返回**: {len(results)} 个 | **耗时**: {elapsed:.1f}s\n\n"
+            md += "| 概念 | 涨跌幅% | 上涨 | 下跌 | 换手率% | 振幅 | 领涨股 | 领涨涨幅 |\n"
+            md += "|------|---------|------|------|---------|------|--------|----------|\n"
+            for r in results:
+                md += (
+                    f"| {r.get('name', '')} "
+                    f"| {r.get('change_pct', 0):+.2f} "
+                    f"| {r.get('rise_count', 0)} "
+                    f"| {r.get('fall_count', 0)} "
+                    f"| {r.get('turnover_rate', 0):.2f} "
+                    f"| {r.get('amplitude', 0):.2f} "
+                    f"| {r.get('top_stock', '')} "
+                    f"| {r.get('top_stock_change', 0):+.2f} |\n"
+                )
+
+            return create_artifact_response(
+                summary=summary,
+                artifact=create_artifact_envelope(
+                    component=ComponentType.STOCK_SCREENER,
+                    markdown=md,
+                    data=results,
+                ),
+            )
+
+        except Exception as e:
+            logger.error(f"get_concept_ranking failed: {e}")
             return {"error": str(e), "results": []}
