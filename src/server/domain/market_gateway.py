@@ -154,6 +154,8 @@ _MARKET_METHODS: Set[str] = {
     "get_factor_ranking",
     # Fact pack (COL-148)
     "get_stock_fact_pack",
+    # Fund fact pack (COL-150)
+    "get_fund_fact_pack",
 }
 
 

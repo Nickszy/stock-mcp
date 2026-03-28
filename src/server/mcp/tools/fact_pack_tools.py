@@ -201,3 +201,172 @@ def register_fact_pack_tools(mcp: FastMCP):
                 source="akshare",
                 description=f"获取股票事实包失败: {e}",
             )
+
+    # ------------------------------------------------------------------
+    # get_fund_fact_pack — 基金事实包
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"fact-pack", "fund"})
+    async def get_fund_fact_pack(
+        fund_code: str,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取基金事实包(Fact Pack)：一次调用聚合全维度基金结构化事实数据。
+
+        聚合 8 大事实类别: 基金主档、净值与收益、持仓穿透、基金经理、
+        规模份额、资产配置、费率分红、同类比较。
+        返回统一结构: entity + facts + source_trace + coverage。
+
+        Typical use cases:
+        - "给我 110011 的完整基金事实包"
+        - "易方达中小盘的最新全维度数据"
+        - "查一下华夏沪深300的持仓+业绩+规模数据"
+
+        Args:
+            fund_code: 基金代码 (如 110011, 005827)
+            ctx: FastMCP Context.
+
+        Returns:
+            基金事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        """
+        if ctx:
+            await ctx.info(f"获取基金事实包: {fund_code}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_fund_fact_pack", fund_code=fund_code)
+
+            gateway = Container.market_gateway()
+            result = await gateway.get_fund_fact_pack(fund_code=fund_code)
+
+            elapsed = time.perf_counter() - t0
+            categories_fetched = result.get("categories_fetched", 0)
+            categories_total = result.get("categories_total", 8)
+            coverage = result.get("coverage", {})
+            missing = result.get("missing_fields", [])
+
+            # Get name from master facts if available
+            master = result.get("facts", {}).get("master", {})
+            name = master.get("基金简称", master.get("fund_name", fund_code))
+
+            summary = (
+                f"基金事实包: {name}({fund_code}) "
+                f"[{categories_fetched}/{categories_total}类] "
+                f"(耗时 {elapsed:.1f}s)"
+            )
+
+            # Build structured Markdown fact view
+            md = f"# 基金事实包: {name}({fund_code})\n\n"
+            md += f"**已获取**: {categories_fetched}/{categories_total} 类"
+            md += f" | **耗时**: {elapsed:.1f}s\n\n"
+
+            if coverage:
+                complete = sum(1 for v in coverage.values() if v == "complete")
+                partial = sum(1 for v in coverage.values() if v == "partial")
+                md += f"**覆盖率**: {complete}完整 + {partial}部分 / {categories_total}类\n\n"
+
+            facts = result.get("facts", {})
+
+            # Master
+            mst = facts.get("master", {})
+            if mst:
+                md += "## 基金主档\n\n"
+                for k, v in mst.items():
+                    md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # NAV & Performance
+            nav_facts = facts.get("nav", {})
+            if nav_facts:
+                md += "## 净值与收益\n\n"
+                for k, v in nav_facts.items():
+                    if isinstance(v, (dict, list)):
+                        md += f"- **{k}**: {v}\n"
+                    else:
+                        md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Holdings
+            hld = facts.get("holdings", {})
+            if hld:
+                md += "## 持仓穿透\n\n"
+                hld_data = hld.get("data", [])
+                if hld_data:
+                    md += f"**重仓股数**: {hld.get('total', 0)}\n\n"
+                    md += "| 股票代码 | 股票名称 | 持仓占比 |\n"
+                    md += "|---------|---------|----------|\n"
+                    for s in hld_data[:10]:
+                        if isinstance(s, dict):
+                            md += (
+                                f"| {s.get('股票代码', '')} "
+                                f"| {s.get('股票名称', '')} "
+                                f"| {s.get('占净值比例', '-')} |\n"
+                            )
+                        else:
+                            md += f"| {s} |\n"
+                md += "\n"
+
+            # Manager
+            mgr = facts.get("manager", [])
+            if mgr:
+                md += "## 基金经理\n\n"
+                for m in mgr[:5]:
+                    if isinstance(m, dict):
+                        md += f"- {m.get('姓名', m.get('基金经理', ''))}"
+                        md += f" (任职: {m.get('任职日期', '-')})"
+                        md += f" 管理规模: {m.get('管理规模', '-')}\n"
+                    else:
+                        md += f"- {m}\n"
+                md += "\n"
+
+            # Scale
+            scl = facts.get("scale", {})
+            if scl:
+                md += "## 规模份额\n\n"
+                for k, v in scl.items():
+                    md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Allocation
+            alloc = facts.get("allocation", {})
+            if alloc:
+                md += "## 资产配置\n\n"
+                if isinstance(alloc, list):
+                    for a in alloc[:10]:
+                        md += f"- {a}\n"
+                else:
+                    md += f"{alloc}\n"
+                md += "\n"
+
+            # Source trace
+            trace = result.get("source_trace", {})
+            if trace:
+                md += "## 数据溯源\n\n"
+                md += "| 类别 | 详情 |\n"
+                md += "|------|------|\n"
+                for cat, info in trace.items():
+                    md += f"| {cat} | {info} |\n"
+                md += "\n"
+
+            if missing:
+                md += f"## 缺失字段\n\n> {', '.join(missing)}\n"
+
+            return create_standard_artifact_response(
+                summary=summary,
+                component_type=ComponentType.TABLE,
+                name=f"基金事实包: {name}({fund_code})",
+                data=result,
+                source="akshare",
+                description=summary,
+                markdown=md,
+                symbol=fund_code,
+            )
+
+        except Exception as e:
+            logger.error(f"get_fund_fact_pack failed: {e}")
+            return create_standard_artifact_response(
+                summary=f"获取基金事实包失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="基金事实包错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取基金事实包失败: {e}",
+            )

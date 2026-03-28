@@ -5465,3 +5465,177 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"get_factor_ranking failed: {e}")
             return {"results": [], "factor": factor, "source": "akshare", "error": str(e)}
 
+    # ------------------------------------------------------------------
+    # Fund Fact Pack (COL-150)
+    # ------------------------------------------------------------------
+
+    async def get_fund_fact_pack(self, fund_code: str) -> Dict[str, Any]:
+        """Aggregate fund facts across all categories into a single pack.
+
+        Calls existing fund adapter methods and organizes results into 8 fact
+        categories: master, nav, holdings, manager, scale, allocation, fees, peer.
+
+        Args:
+            fund_code: Fund code (e.g. 110011, 005827)
+        """
+        cache_key = f"akshare:fund_fact_pack:{fund_code}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        import time as _time
+        t0 = _time.perf_counter()
+
+        entity = {"fund_code": fund_code, "type": "fund"}
+        facts: Dict[str, Any] = {}
+        source_trace: Dict[str, Any] = {}
+        coverage: Dict[str, str] = {}
+        missing_fields: List[str] = []
+
+        # --- 1. Fund Master (基金主档) ---
+        try:
+            detail = await self.get_fund_detail(fund_code)
+            if detail and "error" not in detail:
+                master: Dict[str, Any] = {
+                    "fund_code": fund_code,
+                    "source": "akshare",
+                }
+                # Copy useful fields from detail (skip asset_allocation, raw data)
+                skip_keys = {"fund_code", "source", "asset_allocation"}
+                for k, v in detail.items():
+                    if k not in skip_keys and not isinstance(v, (list, dict)):
+                        master[k] = v
+                facts["master"] = master
+                # Extract allocation separately
+                alloc = detail.get("asset_allocation")
+                if alloc:
+                    facts["allocation"] = alloc
+                    coverage["allocation"] = "complete"
+                    source_trace["allocation"] = {"provider": "akshare"}
+                else:
+                    coverage["allocation"] = "missing"
+                coverage["master"] = "complete"
+            else:
+                coverage["master"] = "missing"
+                coverage["allocation"] = "missing"
+                missing_fields.extend(["master", "allocation"])
+        except Exception as e:
+            coverage["master"] = f"error: {e}"
+            coverage["allocation"] = "missing"
+            source_trace["master"] = {"error": str(e)}
+
+        # --- 2. NAV & Performance (净值与收益事实) ---
+        nav_data: Dict[str, Any] = {}
+        try:
+            nav = await self.get_fund_nav(fund_code=fund_code)
+            if nav and "error" not in nav:
+                nav_data["nav_history"] = nav.get("data", [])[:10]
+                coverage["nav"] = "complete" if nav_data["nav_history"] else "partial"
+        except Exception:
+            pass
+        try:
+            perf = await self.get_fund_performance(fund_code)
+            if perf and "error" not in perf:
+                nav_data["performance"] = {
+                    k: v for k, v in perf.items()
+                    if k not in ("fund_code", "source", "error")
+                }
+        except Exception:
+            pass
+        try:
+            val = await self.get_fund_valuation(fund_code=fund_code)
+            if val and "error" not in val:
+                nav_data["valuation"] = {
+                    k: v for k, v in val.items()
+                    if k not in ("fund_code", "source", "error")
+                }
+        except Exception:
+            pass
+        if nav_data:
+            facts["nav"] = nav_data
+            if "nav" not in coverage:
+                coverage["nav"] = "partial"
+            source_trace["nav"] = {"provider": "akshare"}
+        else:
+            coverage["nav"] = "missing"
+            missing_fields.append("nav")
+
+        # --- 3. Holdings (持仓与穿透事实) ---
+        try:
+            holdings = await self.get_fund_holdings(fund_code=fund_code)
+            if holdings and "error" not in holdings:
+                facts["holdings"] = {
+                    "data": holdings.get("data", [])[:20],
+                    "total": holdings.get("total", 0),
+                }
+                coverage["holdings"] = "complete"
+                source_trace["holdings"] = {"provider": "akshare"}
+            else:
+                coverage["holdings"] = "missing"
+                missing_fields.append("holdings")
+        except Exception as e:
+            coverage["holdings"] = f"error: {e}"
+
+        # --- 4. Manager (基金经理与治理事实) ---
+        try:
+            mgr = await self.get_fund_manager()
+            if mgr and "error" not in mgr and "data" in mgr:
+                # Filter to the specific fund's manager
+                mgr_data = mgr.get("data", [])
+                filtered = [
+                    m for m in mgr_data
+                    if isinstance(m, dict) and str(m.get("基金代码", "")) == fund_code
+                ][:5]
+                if filtered:
+                    facts["manager"] = filtered
+                    coverage["manager"] = "complete"
+                else:
+                    facts["manager"] = mgr_data[:3]  # top managers as reference
+                    coverage["manager"] = "partial"
+                source_trace["manager"] = {"provider": "akshare"}
+            else:
+                coverage["manager"] = "missing"
+                missing_fields.append("manager")
+        except Exception as e:
+            coverage["manager"] = f"error: {e}"
+
+        # --- 5. Scale (规模与份额事实) ---
+        try:
+            scale = await self.get_fund_scale()
+            if scale and "error" not in scale:
+                facts["scale"] = {
+                    k: v for k, v in scale.items()
+                    if k not in ("source", "error")
+                }
+                coverage["scale"] = "partial"  # market-wide, not fund-specific
+                source_trace["scale"] = {"provider": "akshare"}
+            else:
+                coverage["scale"] = "missing"
+                missing_fields.append("scale")
+        except Exception as e:
+            coverage["scale"] = f"error: {e}"
+
+        # --- 6. Fees & Dividend (费率与分红事实) ---
+        coverage["fees"] = "not_implemented"
+        missing_fields.append("fees")
+
+        # --- 7. Peer Comparison (同类比较事实) ---
+        coverage["peer"] = "not_implemented"
+        missing_fields.append("peer")
+
+        elapsed = _time.perf_counter() - t0
+
+        result = {
+            "source": "akshare",
+            "entity": entity,
+            "facts": facts,
+            "source_trace": source_trace,
+            "coverage": coverage,
+            "missing_fields": missing_fields,
+            "categories_fetched": len([v for v in coverage.values() if v in ("complete", "partial")]),
+            "categories_total": 8,
+            "elapsed_seconds": round(elapsed, 2),
+        }
+        await self.cache.set(cache_key, result, ttl=600)
+        return result
+

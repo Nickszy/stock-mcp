@@ -277,8 +277,8 @@ class TestFactPackRegistry:
     def test_total_tool_count(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        # 110 (COL-147) + 1 (fact-pack) = 111
-        assert total == 111, f"Expected 111, got {total}"
+        # 110 + 1(stock fact-pack) + 1(fund fact-pack) = 112
+        assert total == 112, f"Expected 112, got {total}"
 
     def test_fact_pack_group_present(self):
         from src.server.mcp.registry import TOOL_GROUPS
@@ -289,5 +289,176 @@ class TestFactPackRegistry:
         from src.server.mcp.registry import TOOL_GROUPS
         fp = [g for g in TOOL_GROUPS if g.name == "fact-pack"]
         assert len(fp) == 1
-        assert fp[0].count == 1
+        assert fp[0].count == 2  # stock + fund
         assert fp[0].enabled is True
+
+
+# =====================================================================
+# Fund Fact Pack Tests (COL-150)
+# =====================================================================
+
+
+class TestFundFactPackAdapter:
+    """Verify get_fund_fact_pack adapter method."""
+
+    def test_returns_correct_structure(self, mock_cache):
+        from src.server.domain.adapters.akshare_adapter import AkshareAdapter
+
+        adapter = AkshareAdapter(mock_cache)
+
+        with patch.object(adapter, "get_fund_detail", new_callable=AsyncMock) as m_detail, \
+             patch.object(adapter, "get_fund_nav", new_callable=AsyncMock) as m_nav, \
+             patch.object(adapter, "get_fund_performance", new_callable=AsyncMock) as m_perf, \
+             patch.object(adapter, "get_fund_valuation", new_callable=AsyncMock) as m_val, \
+             patch.object(adapter, "get_fund_holdings", new_callable=AsyncMock) as m_hold, \
+             patch.object(adapter, "get_fund_manager", new_callable=AsyncMock) as m_mgr, \
+             patch.object(adapter, "get_fund_scale", new_callable=AsyncMock) as m_scale:
+
+            m_detail.return_value = {
+                "fund_code": "110011", "source": "akshare",
+                "基金简称": "易方达中小盘混合",
+                "基金类型": "混合型",
+                "asset_allocation": [{"type": "股票", "ratio": "85%"}],
+            }
+            m_nav.return_value = {"data": [{"date": "2025-01-01", "nav": 3.5}]}
+            m_perf.return_value = {"achievement": [{"period": "1年", "return": 0.15}]}
+            m_val.return_value = {"估值": 3.6}
+            m_hold.return_value = {"data": [{"股票代码": "600519", "股票名称": "贵州茅台"}], "total": 10}
+            m_mgr.return_value = {"data": [{"姓名": "张坤", "基金代码": "110011"}]}
+            m_scale.return_value = {"基金家数": 10000}
+
+            result = _run(adapter.get_fund_fact_pack(fund_code="110011"))
+
+        # Top-level structure
+        assert "entity" in result
+        assert "facts" in result
+        assert "source_trace" in result
+        assert "coverage" in result
+        assert "missing_fields" in result
+        assert "categories_fetched" in result
+        assert "categories_total" in result
+
+        # Entity
+        assert result["entity"]["fund_code"] == "110011"
+        assert result["entity"]["type"] == "fund"
+
+        # Facts categories
+        facts = result["facts"]
+        assert "master" in facts
+        assert "nav" in facts
+        assert "holdings" in facts
+        assert "manager" in facts
+        assert "allocation" in facts
+
+        # Master has name
+        assert facts["master"]["基金简称"] == "易方达中小盘混合"
+
+        # Coverage is a dict
+        assert isinstance(result["coverage"], dict)
+        assert result["categories_total"] == 8
+
+        # fees and peer should be not_implemented
+        assert result["coverage"]["fees"] == "not_implemented"
+        assert result["coverage"]["peer"] == "not_implemented"
+
+    def test_handles_sub_method_failure(self, mock_cache):
+        """When a sub-method fails, fund fact pack returns partial data."""
+        from src.server.domain.adapters.akshare_adapter import AkshareAdapter
+
+        adapter = AkshareAdapter(mock_cache)
+
+        with patch.object(adapter, "get_fund_detail", new_callable=AsyncMock, side_effect=Exception("API error")), \
+             patch.object(adapter, "get_fund_nav", new_callable=AsyncMock) as m_nav, \
+             patch.object(adapter, "get_fund_performance", new_callable=AsyncMock) as m_perf, \
+             patch.object(adapter, "get_fund_valuation", new_callable=AsyncMock) as m_val, \
+             patch.object(adapter, "get_fund_holdings", new_callable=AsyncMock) as m_hold, \
+             patch.object(adapter, "get_fund_manager", new_callable=AsyncMock) as m_mgr, \
+             patch.object(adapter, "get_fund_scale", new_callable=AsyncMock) as m_scale:
+
+            m_nav.return_value = {"data": []}
+            m_perf.return_value = {"fund_code": "110011"}
+            m_val.return_value = {}
+            m_hold.return_value = {"data": [], "total": 0}
+            m_mgr.return_value = {"data": []}
+            m_scale.return_value = {"基金家数": 10000}
+
+            result = _run(adapter.get_fund_fact_pack(fund_code="110011"))
+
+        # Should still succeed with partial data
+        assert "facts" in result
+        # master should have error in coverage
+        assert "error" in result["coverage"].get("master", "")
+        # company_master not in missing because allocation missing depends on master
+        assert "fees" in result["missing_fields"]
+        assert "peer" in result["missing_fields"]
+
+
+class TestFundFactPackMCPTool:
+    """Verify fund fact pack MCP tool produces unified contract."""
+
+    def test_tool_contract_structure(self, mock_cache):
+        from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
+        from src.server.core.dependencies import Container
+
+        mock_pack = {
+            "source": "akshare",
+            "entity": {"fund_code": "110011", "type": "fund"},
+            "facts": {
+                "master": {"基金简称": "易方达中小盘混合", "基金类型": "混合型"},
+                "nav": {"nav_history": [{"date": "2025-01-01", "nav": 3.5}]},
+                "holdings": {"data": [{"股票代码": "600519"}], "total": 10},
+                "manager": [{"姓名": "张坤"}],
+                "scale": {"基金家数": 10000},
+                "allocation": [{"type": "股票", "ratio": "85%"}],
+            },
+            "source_trace": {"nav": {"provider": "akshare"}},
+            "coverage": {
+                "master": "complete",
+                "nav": "complete",
+                "holdings": "complete",
+                "manager": "complete",
+                "scale": "partial",
+                "allocation": "complete",
+                "fees": "not_implemented",
+                "peer": "not_implemented",
+            },
+            "missing_fields": ["fees", "peer"],
+            "categories_fetched": 6,
+            "categories_total": 8,
+            "elapsed_seconds": 0.8,
+        }
+
+        mock_gw = MagicMock()
+        mock_gw.get_fund_fact_pack = AsyncMock(return_value=mock_pack)
+
+        with patch.object(Container, "market_gateway", return_value=mock_gw):
+            captured = {}
+
+            class MockMCP:
+                def tool(self, **kwargs):
+                    def decorator(fn):
+                        key = frozenset(kwargs.get("tags", set()))
+                        captured[key] = fn
+                        return fn
+                    return decorator
+
+            register_fact_pack_tools(MockMCP())
+
+            # Find the fund fact pack tool (tagged with "fund")
+            tool_fn = None
+            for key, fn in captured.items():
+                if "fund" in key:
+                    tool_fn = fn
+                    break
+            assert tool_fn is not None, "Fund fact pack tool not registered"
+
+            result = _run(tool_fn(fund_code="110011"))
+
+        # Verify unified contract
+        assert "summary" in result
+        assert "artifact" in result
+        content = result["artifact"]["content"]
+        assert content["source"]["provider"] == "akshare"
+        assert content["data"]["entity"]["fund_code"] == "110011"
+        assert "markdown" in content
+        assert "易方达" in result["summary"]
