@@ -17,8 +17,7 @@ from src.server.core.dependencies import Container
 from src.server.utils.logger import logger
 from src.server.mcp.tools.artifact_utils import (
     ComponentType,
-    create_artifact_envelope,
-    create_artifact_response,
+    create_standard_artifact_response,
 )
 
 
@@ -81,21 +80,27 @@ def register_factor_tools(mcp: FastMCP):
             for k, v in factors.items():
                 md += f"| {k} | {v if v is not None else '-'} |\n"
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.STOCK_SCREENER,
                 name=f"量化因子: {symbol}",
-                content={"markdown": md, "data": result},
+                data=result,
+                symbol=symbol,
+                source="akshare",
                 description=summary,
+                markdown=md,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_stock_factors failed: {e}")
-            err = create_artifact_envelope(
-                component_type=ComponentType.TABLE, name="因子计算错误",
-                content={"error": str(e)}, description=f"因子计算失败: {e}",
+            return create_standard_artifact_response(
+                summary=f"因子计算失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="因子计算错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"因子计算失败: {e}",
             )
-            return create_artifact_response(summary=f"因子计算失败: {e}", artifact=err)
 
     # ------------------------------------------------------------------
     # get_stock_correlation — 多股相关性矩阵
@@ -156,21 +161,26 @@ def register_factor_tools(mcp: FastMCP):
                     line += f" {_safe_fmt(val)} |"
                 md += line + "\n"
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.TABLE,
                 name="股票相关性矩阵",
-                content={"markdown": md, "data": result},
+                data=result,
+                source="akshare",
                 description=summary,
+                markdown=md,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_stock_correlation failed: {e}")
-            err = create_artifact_envelope(
-                component_type=ComponentType.TABLE, name="相关性错误",
-                content={"error": str(e)}, description=f"相关性计算失败: {e}",
+            return create_standard_artifact_response(
+                summary=f"相关性计算失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="相关性错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"相关性计算失败: {e}",
             )
-            return create_artifact_response(summary=f"相关性计算失败: {e}", artifact=err)
 
     # ------------------------------------------------------------------
     # get_factor_ranking — 全市场因子排名
@@ -233,18 +243,24 @@ def register_factor_tools(mcp: FastMCP):
                     f"| {_safe_fmt(r.get('最新价'))} |\n"
                 )
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.STOCK_SCREENER,
                 name=f"因子排名: {factor}",
-                content={"markdown": md, "data": results},
+                data=results,
+                source="akshare",
                 description=summary,
+                limit=limit,
+                markdown=md,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_factor_ranking failed: {e}")
-            err = create_artifact_envelope(
-                component_type=ComponentType.TABLE, name="因子排名错误",
-                content={"error": str(e)}, description=f"因子排名失败: {e}",
+            return create_standard_artifact_response(
+                summary=f"因子排名失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="因子排名错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"因子排名失败: {e}",
             )
-            return create_artifact_response(summary=f"因子排名失败: {e}", artifact=err)

@@ -47,7 +47,7 @@ TOOL_GROUPS: List[ToolGroup] = [
         register=register_fundamental_tools,
         enabled=True,
         description="基本面分析",
-        count=7,
+        count=6,
     ),
     ToolGroup(
         name="asset",

@@ -21,8 +21,7 @@ from src.server.core.dependencies import Container
 from src.server.utils.logger import logger
 from src.server.mcp.tools.artifact_utils import (
     ComponentType,
-    create_artifact_envelope,
-    create_artifact_response,
+    create_standard_artifact_response,
 )
 
 
@@ -121,23 +120,27 @@ def register_fund_tools(mcp: FastMCP):
                     f"| {_safe_fmt(r.get('fee'))} |\n"
                 )
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.FUND_SEARCH,
                 name="基金搜索",
-                content={"markdown": md, "data": results},
+                data=results,
+                source="akshare",
                 description=summary,
+                limit=limit,
+                markdown=md,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"search_funds failed: {e}")
-            err_artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=f"基金搜索失败: {e}",
                 component_type=ComponentType.FUND_SEARCH,
                 name="基金搜索错误",
-                content={"error": str(e)},
+                data={"error": str(e)},
+                source="akshare",
                 description=f"基金搜索失败: {e}",
             )
-            return create_artifact_response(summary=f"基金搜索失败: {e}", artifact=err_artifact)
 
     # ------------------------------------------------------------------
     # get_fund_detail — 基金详情
@@ -190,23 +193,27 @@ def register_fund_tools(mcp: FastMCP):
                 for a in alloc:
                     md += f"| {a.get('资产类别', '')} | {a.get('单位占比', '-')}% |\n"
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.FUND_DETAIL,
                 name=f"基金详情: {fund_code}",
-                content={"markdown": md, "data": result},
+                data=result,
+                symbol=fund_code,
+                source="akshare",
                 description=summary,
+                markdown=md,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_fund_detail failed: {e}")
-            err_artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=f"基金详情查询失败: {e}",
                 component_type=ComponentType.FUND_DETAIL,
                 name="基金详情错误",
-                content={"error": str(e)},
+                data={"error": str(e)},
+                source="akshare",
                 description=f"基金详情查询失败: {e}",
             )
-            return create_artifact_response(summary=f"基金详情查询失败: {e}", artifact=err_artifact)
 
     # ------------------------------------------------------------------
     # get_fund_ranking — 基金排行
@@ -270,23 +277,27 @@ def register_fund_tools(mcp: FastMCP):
                     f"| {_safe_fmt(r.get('fee'))} |\n"
                 )
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.FUND_RANKING,
                 name="基金排行",
-                content={"markdown": md, "data": results},
+                data=results,
+                source="akshare",
                 description=summary,
+                limit=limit,
+                markdown=md,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_fund_ranking failed: {e}")
-            err_artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=f"基金排行查询失败: {e}",
                 component_type=ComponentType.FUND_RANKING,
                 name="基金排行错误",
-                content={"error": str(e)},
+                data={"error": str(e)},
+                source="akshare",
                 description=f"基金排行查询失败: {e}",
             )
-            return create_artifact_response(summary=f"基金排行查询失败: {e}", artifact=err_artifact)
 
     # ------------------------------------------------------------------
     # get_fund_manager — 基金经理
@@ -345,23 +356,27 @@ def register_fund_tools(mcp: FastMCP):
                     f"| {_fmt_return(r.get('best_return'))} |\n"
                 )
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.FUND_MANAGER,
                 name="基金经理",
-                content={"markdown": md, "data": results},
+                data=results,
+                source="akshare",
                 description=summary,
+                limit=limit,
+                markdown=md,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_fund_manager failed: {e}")
-            err_artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=f"基金经理查询失败: {e}",
                 component_type=ComponentType.FUND_MANAGER,
                 name="基金经理错误",
-                content={"error": str(e)},
+                data={"error": str(e)},
+                source="akshare",
                 description=f"基金经理查询失败: {e}",
             )
-            return create_artifact_response(summary=f"基金经理查询失败: {e}", artifact=err_artifact)
 
     # ------------------------------------------------------------------
     # get_fund_valuation — 基金实时估值
@@ -416,23 +431,26 @@ def register_fund_tools(mcp: FastMCP):
                     f"| {_safe_fmt(r.get('estimation_deviation'))} |\n"
                 )
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.FUND_VALUATION,
                 name="基金实时估值",
-                content={"markdown": md, "data": results},
+                data=results,
+                source="akshare",
                 description=summary,
+                markdown=md,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_fund_valuation failed: {e}")
-            err_artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=f"基金估值查询失败: {e}",
                 component_type=ComponentType.FUND_VALUATION,
                 name="基金估值错误",
-                content={"error": str(e)},
+                data={"error": str(e)},
+                source="akshare",
                 description=f"基金估值查询失败: {e}",
             )
-            return create_artifact_response(summary=f"基金估值查询失败: {e}", artifact=err_artifact)
 
     # ------------------------------------------------------------------
     # get_fund_performance — 基金业绩分析
@@ -505,23 +523,27 @@ def register_fund_tools(mcp: FastMCP):
                         f"| {_safe_fmt(p.get('平均收益'))}% |\n"
                     )
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.FUND_PERFORMANCE,
                 name=f"基金业绩分析: {fund_code}",
-                content={"markdown": md, "data": result},
+                data=result,
+                symbol=fund_code,
+                source="akshare",
                 description=summary,
+                markdown=md,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_fund_performance failed: {e}")
-            err_artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=f"基金业绩分析失败: {e}",
                 component_type=ComponentType.FUND_PERFORMANCE,
                 name="基金业绩错误",
-                content={"error": str(e)},
+                data={"error": str(e)},
+                source="akshare",
                 description=f"基金业绩分析失败: {e}",
             )
-            return create_artifact_response(summary=f"基金业绩分析失败: {e}", artifact=err_artifact)
 
     # ------------------------------------------------------------------
     # get_fund_scale — 全市场基金规模变动
@@ -570,20 +592,23 @@ def register_fund_tools(mcp: FastMCP):
                     f"| {_safe_fmt(r.get('total_nav'))} |\n"
                 )
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.FUND_SCALE,
                 name="全市场基金规模变动",
-                content={"markdown": md, "data": results},
+                data=results,
+                source="akshare",
                 description=summary,
+                markdown=md,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_fund_scale failed: {e}")
-            err_artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=f"基金规模变动查询失败: {e}",
                 component_type=ComponentType.FUND_SCALE,
                 name="基金规模错误",
-                content={"error": str(e)},
+                data={"error": str(e)},
+                source="akshare",
                 description=f"基金规模变动查询失败: {e}",
             )
-            return create_artifact_response(summary=f"基金规模变动查询失败: {e}", artifact=err_artifact)

@@ -17,8 +17,7 @@ from src.server.core.dependencies import Container
 from src.server.utils.logger import logger
 from src.server.mcp.tools.artifact_utils import (
     ComponentType,
-    create_artifact_envelope,
-    create_artifact_response,
+    create_standard_artifact_response,
 )
 
 
@@ -105,21 +104,27 @@ def register_etf_tools(mcp: FastMCP):
                     f"| {_safe_fmt(r.get('turnover'))} |\n"
                 )
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.TABLE,
                 name="ETF列表",
-                content={"markdown": md, "data": results},
+                data=results,
+                source="akshare",
                 description=summary,
+                markdown=md,
+                limit=limit,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_etf_list failed: {e}")
-            err = create_artifact_envelope(
-                component_type=ComponentType.TABLE, name="ETF列表错误",
-                content={"error": str(e)}, description=f"获取ETF列表失败: {e}",
+            return create_standard_artifact_response(
+                summary=f"获取ETF列表失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="ETF列表错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取ETF列表失败: {e}",
             )
-            return create_artifact_response(summary=f"获取ETF列表失败: {e}", artifact=err)
 
     # ------------------------------------------------------------------
     # get_etf_detail — ETF详情
@@ -162,21 +167,28 @@ def register_etf_tools(mcp: FastMCP):
                 if v is not None:
                     md += f"| {k} | {v} |\n"
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.TABLE,
                 name=f"ETF详情: {symbol}",
-                content={"markdown": md, "data": detail},
+                data=detail,
+                source="akshare",
                 description=summary,
+                markdown=md,
+                symbol=symbol,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_etf_detail failed: {e}")
-            err = create_artifact_envelope(
-                component_type=ComponentType.TABLE, name="ETF详情错误",
-                content={"error": str(e)}, description=f"获取ETF详情失败: {e}",
+            return create_standard_artifact_response(
+                summary=f"获取ETF详情失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="ETF详情错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取ETF详情失败: {e}",
+                symbol=symbol,
             )
-            return create_artifact_response(summary=f"获取ETF详情失败: {e}", artifact=err)
 
     # ------------------------------------------------------------------
     # get_etf_performance — ETF行情历史
@@ -241,18 +253,31 @@ def register_etf_tools(mcp: FastMCP):
                     f"| {_safe_fmt(r.get('amount'), '.0f')} |\n"
                 )
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.TABLE,
                 name=f"ETF行情: {symbol}",
-                content={"markdown": md, "data": results},
+                data=results,
+                source="akshare",
                 description=summary,
+                markdown=md,
+                symbol=symbol,
+                limit=limit,
+                start_date=start_date,
+                end_date=end_date,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_etf_performance failed: {e}")
-            err = create_artifact_envelope(
-                component_type=ComponentType.TABLE, name="ETF行情错误",
-                content={"error": str(e)}, description=f"获取ETF行情失败: {e}",
+            return create_standard_artifact_response(
+                summary=f"获取ETF行情失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="ETF行情错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取ETF行情失败: {e}",
+                symbol=symbol,
+                limit=limit,
+                start_date=start_date,
+                end_date=end_date,
             )
-            return create_artifact_response(summary=f"获取ETF行情失败: {e}", artifact=err)

@@ -264,6 +264,7 @@ def create_standard_artifact_response(
     description: str = "",
     metadata: Optional[Dict[str, Any]] = None,
     display_in_report: bool = True,
+    markdown: Optional[str] = None,
     **contract_kwargs: Any,
 ) -> ArtifactResponse:
     """Create an MCP response that embeds the unified data contract.
@@ -292,6 +293,10 @@ def create_standard_artifact_response(
         Extra artifact-level metadata.
     display_in_report:
         Whether to show in generated reports.
+    markdown:
+        Optional markdown rendering hint for front-end visualisation.
+        If provided, added to the contract as a top-level field alongside
+        ``data``, ``source``, etc.
     **contract_kwargs:
         Extra fields forwarded to ``create_data_response`` (e.g. ``period``,
         ``start_date``, ``end_date``, ``interval``, ``limit``, ``date``).
@@ -301,6 +306,9 @@ def create_standard_artifact_response(
     contract_data = create_data_response(
         data, symbol=symbol, source=source, **contract_kwargs
     )
+    if markdown is not None:
+        contract_data["markdown"] = markdown
+
     artifact = create_artifact_envelope(
         component_type=component_type,
         name=name,

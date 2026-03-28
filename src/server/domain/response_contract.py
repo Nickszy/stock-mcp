@@ -65,7 +65,10 @@ def create_data_response(
     if period is not None:
         result["period"] = period
     if limit is not None:
-        result["limit"] = int(limit)
+        if isinstance(limit, str) and limit != "all":
+            result["limit"] = int(limit)
+        else:
+            result["limit"] = limit if isinstance(limit, str) else int(limit)
     if start_date is not None:
         result["start_date"] = start_date
     if end_date is not None:

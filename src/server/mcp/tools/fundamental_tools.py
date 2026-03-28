@@ -353,7 +353,9 @@ def register_fundamental_tools(mcp: FastMCP):
                 )
             return {"error": str(e)}
 
-    @mcp.tool(tags={"fundamental"})
+    # get_financial_reports removed — merged into get_stock_financial_statements (COL-139)
+    # The _get_financial_reports_impl is kept for internal chart data generation.
+
     async def get_financial_reports(
         symbol: str,
         output_format: OutputFormat = "markdown",
@@ -1267,7 +1269,7 @@ def register_fundamental_tools(mcp: FastMCP):
             return {"error": str(e)}
 
     @mcp.tool(tags={"fundamental"})
-    async def get_financial_statements(
+    async def get_stock_financial_statements(
         symbol: str,
         report_type: str = "all",
         periods: int | None = None,

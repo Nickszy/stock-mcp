@@ -17,8 +17,7 @@ from src.server.core.dependencies import Container
 from src.server.utils.logger import logger
 from src.server.mcp.tools.artifact_utils import (
     ComponentType,
-    create_artifact_envelope,
-    create_artifact_response,
+    create_standard_artifact_response,
 )
 
 
@@ -98,21 +97,26 @@ def register_index_tools(mcp: FastMCP):
             if total > 30:
                 md += f"\n*... 还有 {total - 30} 个指数*\n"
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.TABLE,
                 name="A股指数列表",
-                content={"markdown": md, "data": results},
+                data=results,
+                source="akshare",
                 description=summary,
+                markdown=md,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_index_list failed: {e}")
-            err = create_artifact_envelope(
-                component_type=ComponentType.TABLE, name="指数列表错误",
-                content={"error": str(e)}, description=f"获取指数列表失败: {e}",
+            return create_standard_artifact_response(
+                summary=f"获取指数列表失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="指数列表错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取指数列表失败: {e}",
             )
-            return create_artifact_response(summary=f"获取指数列表失败: {e}", artifact=err)
 
     # ------------------------------------------------------------------
     # get_index_pe_pb — 指数估值PE/PB历史
@@ -159,21 +163,28 @@ def register_index_tools(mcp: FastMCP):
             for r in results:
                 md += f"| {r.get('date', '')} | {_safe_fmt(r.get('pe'))} | {_safe_fmt(r.get('pb'))} |\n"
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.TABLE,
                 name=f"指数估值: {symbol}",
-                content={"markdown": md, "data": results},
+                data=results,
+                source="akshare",
                 description=summary,
+                markdown=md,
+                symbol=symbol,
+                limit=limit,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_index_pe_pb failed: {e}")
-            err = create_artifact_envelope(
-                component_type=ComponentType.TABLE, name="指数估值错误",
-                content={"error": str(e)}, description=f"获取指数估值失败: {e}",
+            return create_standard_artifact_response(
+                summary=f"获取指数估值失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="指数估值错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取指数估值失败: {e}",
             )
-            return create_artifact_response(summary=f"获取指数估值失败: {e}", artifact=err)
 
     # ------------------------------------------------------------------
     # get_index_performance — 指数行情历史
@@ -246,18 +257,27 @@ def register_index_tools(mcp: FastMCP):
                     f"| {_safe_fmt(r.get('amount'), '.0f')} |\n"
                 )
 
-            artifact = create_artifact_envelope(
+            return create_standard_artifact_response(
+                summary=summary,
                 component_type=ComponentType.TABLE,
                 name=f"指数行情: {idx_name}",
-                content={"markdown": md, "data": results},
+                data=results,
+                source="akshare",
                 description=summary,
+                markdown=md,
+                symbol=resolved_symbol,
+                limit=limit,
+                start_date=start_date,
+                end_date=end_date,
             )
-            return create_artifact_response(summary=summary, artifact=artifact)
 
         except Exception as e:
             logger.error(f"get_index_performance failed: {e}")
-            err = create_artifact_envelope(
-                component_type=ComponentType.TABLE, name="指数行情错误",
-                content={"error": str(e)}, description=f"获取指数行情失败: {e}",
+            return create_standard_artifact_response(
+                summary=f"获取指数行情失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="指数行情错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取指数行情失败: {e}",
             )
-            return create_artifact_response(summary=f"获取指数行情失败: {e}", artifact=err)
