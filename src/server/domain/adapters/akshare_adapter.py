@@ -2518,7 +2518,7 @@ class AkshareAdapter(BaseDataAdapter):
 
             # --- RSI ---
             if "RSI" in indicators:
-                for w in [6, 12, 24]:
+                for w in [6, 12, 14, 24]:
                     delta = close.diff()
                     gain = delta.where(delta > 0, 0)
                     loss = (-delta).where(delta < 0, 0)
@@ -2594,6 +2594,98 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.error(f"Failed to calculate technical indicators: {e}")
             raise ValueError(f"Failed to calculate technical indicators: {e}")
+
+    async def get_technical_signals(self, symbol: str) -> Dict[str, Any]:
+        """Derive deterministic technical signals from indicator values.
+
+        Fact-only output: reports signal state without analysis conclusions.
+        Signals are mechanical thresholds, not trading recommendations.
+        """
+        try:
+            tech = await self.calculate_technical_indicators(
+                symbol, indicators=["RSI", "MACD", "BOLL"], days=60,
+            )
+        except Exception as e:
+            return {"symbol": symbol, "signals": {}, "error": str(e)}
+
+        data = tech.get("data", {})
+        signals: Dict[str, Any] = {}
+
+        # --- RSI Signal ---
+        rsi14_list = data.get("rsi14", [])
+        if rsi14_list:
+            last_rsi = None
+            for item in reversed(rsi14_list):
+                v = item.get("value")
+                if v is not None:
+                    last_rsi = v
+                    break
+            if last_rsi is not None:
+                if last_rsi > 70:
+                    rsi_signal = "RSI超买区"
+                elif last_rsi < 30:
+                    rsi_signal = "RSI超卖区"
+                else:
+                    rsi_signal = "RSI中性区"
+                signals["rsi"] = {
+                    "value": last_rsi,
+                    "signal": rsi_signal,
+                    "threshold_overbought": 70,
+                    "threshold_oversold": 30,
+                }
+
+        # --- MACD Signal ---
+        macd_list = data.get("macd", [])
+        if macd_list and len(macd_list) >= 2:
+            curr = macd_list[-1]
+            prev = macd_list[-2]
+            dif_c = curr.get("dif")
+            dea_c = curr.get("dea")
+            dif_p = prev.get("dif")
+            dea_p = prev.get("dea")
+            if all(v is not None for v in [dif_c, dea_c, dif_p, dea_p]):
+                if dif_p <= dea_p and dif_c > dea_c:
+                    macd_signal = "MACD金叉"
+                elif dif_p >= dea_p and dif_c < dea_c:
+                    macd_signal = "MACD死叉"
+                else:
+                    macd_signal = "MACD无交叉"
+                signals["macd"] = {
+                    "dif": dif_c,
+                    "dea": dea_c,
+                    "macd_bar": curr.get("macd_bar"),
+                    "signal": macd_signal,
+                }
+
+        # --- Bollinger Band Signal ---
+        boll_list = data.get("boll", [])
+        latest_close = tech.get("latest_close")
+        if boll_list and latest_close is not None:
+            last_boll = boll_list[-1]
+            upper = last_boll.get("upper")
+            lower = last_boll.get("lower")
+            mid = last_boll.get("mid")
+            if all(v is not None for v in [upper, lower, mid]):
+                if latest_close > upper:
+                    boll_signal = "突破上轨"
+                elif latest_close < lower:
+                    boll_signal = "跌破下轨"
+                else:
+                    boll_signal = "布林带内"
+                signals["boll"] = {
+                    "close": latest_close,
+                    "upper": upper,
+                    "mid": mid,
+                    "lower": lower,
+                    "signal": boll_signal,
+                }
+
+        return {
+            "symbol": symbol,
+            "date": tech.get("latest_date"),
+            "signals": signals,
+            "source": "akshare",
+        }
 
     # ------------------------------------------------------------------
     # 融资融券 / 解禁 / 回购 / 指数成分 / 基金净值
@@ -5873,6 +5965,20 @@ class AkshareAdapter(BaseDataAdapter):
                 missing_fields.append("snapshot")
         except Exception as e:
             coverage["snapshot"] = f"error: {e}"
+
+        # --- 2b. Technical Signals (确定性技术信号) ---
+        try:
+            sig = await self.get_technical_signals(symbol)
+            if sig and "error" not in sig and sig.get("signals"):
+                if "snapshot" in facts:
+                    facts["snapshot"]["signals"] = sig["signals"]
+                else:
+                    facts["snapshot"] = {"signals": sig["signals"]}
+                source_trace["signals"] = {"provider": "akshare"}
+                if coverage.get("snapshot") == "missing":
+                    coverage["snapshot"] = "partial"
+        except Exception:
+            pass
 
         # --- 3. Kline (K线与因子数据) ---
         try:
