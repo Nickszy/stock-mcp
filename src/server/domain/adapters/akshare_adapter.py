@@ -4098,11 +4098,96 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             coverage["business_structure"] = f"error: {e}"
 
-        # --- Categories not yet aggregated ---
-        for cat in ["company_master", "peers"]:
-            if cat not in facts:
-                coverage[cat] = "not_implemented"
-                missing_fields.append(cat)
+        # --- 7. Company Master (公司主档) ---
+        try:
+            df = await self._run(ak.stock_individual_info_em, symbol=symbol)
+            if df is not None and not df.empty:
+                info = {}
+                for _, row in df.iterrows():
+                    k = row.get("item")
+                    v = row.get("value")
+                    if k:
+                        info[k] = str(v) if v is not None else None
+                if info:
+                    facts["company_master"] = {
+                        "company_name": info.get("公司名称", ""),
+                        "short_name": info.get("股票简称", ""),
+                        "established_date": info.get("成立日期"),
+                        "ipo_date": info.get("上市日期"),
+                        "registered_address": info.get("注册地址"),
+                        "office_address": info.get("办公地址"),
+                        "website": info.get("公司网址"),
+                        "legal_representative": info.get("法人代表"),
+                        "chairman": info.get("董事长"),
+                        "general_manager": info.get("总经理"),
+                        "secretary": info.get("董秘"),
+                        "phone": info.get("电话"),
+                        "email": info.get("邮箱"),
+                        "employees": info.get("员工总数"),
+                        "registered_capital": info.get("注册资本"),
+                        "main_business": info.get("主营业务"),
+                        "business_scope": info.get("经营范围"),
+                        "company_profile": info.get("公司简介"),
+                        "industry": info.get("行业"),
+                    }
+                    source_trace["company_master"] = {"provider": "akshare", "api": "stock_individual_info_em"}
+                    coverage["company_master"] = "complete"
+                else:
+                    coverage["company_master"] = "missing"
+                    missing_fields.append("company_master")
+            else:
+                coverage["company_master"] = "missing"
+                missing_fields.append("company_master")
+        except Exception as e:
+            coverage["company_master"] = f"error: {e}"
+            source_trace["company_master"] = {"error": str(e)}
+            missing_fields.append("company_master")
+
+        # --- 8. Peers (同业对比) ---
+        try:
+            cm = facts.get("company_master", {})
+            industry = cm.get("industry") if cm else None
+            if industry:
+                cons_df = await self._run(ak.stock_board_industry_cons_em, symbol=industry)
+                if cons_df is not None and not cons_df.empty:
+                    cap_col = "总市值" if "总市值" in cons_df.columns else None
+                    code_col = "代码" if "代码" in cons_df.columns else None
+                    name_col = "名称" if "名称" in cons_df.columns else None
+                    pe_col = "市盈率-动态" if "市盈率-动态" in cons_df.columns else None
+                    pb_col = "市净率" if "市净率" in cons_df.columns else None
+                    peers_list = []
+                    target_code = str(symbol).strip()
+                    for _, row in cons_df.iterrows():
+                        code_val = str(row.get(code_col, "")).strip() if code_col else ""
+                        if code_val == target_code:
+                            continue
+                        peers_list.append({
+                            "code": code_val,
+                            "name": str(row.get(name_col, "")) if name_col else "",
+                            "pe": self._safe_float(row.get(pe_col)) if pe_col else None,
+                            "pb": self._safe_float(row.get(pb_col)) if pb_col else None,
+                            "market_cap": self._safe_float(row.get(cap_col)) if cap_col else None,
+                        })
+                    # Sort by market cap descending, take top 10
+                    peers_list.sort(key=lambda x: x.get("market_cap") or 0, reverse=True)
+                    peers_list = peers_list[:10]
+                    facts["peers"] = {
+                        "industry": industry,
+                        "peers": peers_list,
+                        "count": len(peers_list),
+                    }
+                    source_trace["peers"] = {"provider": "akshare", "api": "stock_board_industry_cons_em"}
+                    coverage["peers"] = "complete"
+                else:
+                    coverage["peers"] = "missing"
+                    missing_fields.append("peers")
+            else:
+                coverage["peers"] = "missing: no industry info"
+                missing_fields.append("peers")
+        except Exception as e:
+            coverage["peers"] = f"error: {e}"
+            source_trace["peers"] = {"error": str(e)}
+            missing_fields.append("peers")
 
         elapsed = _time.perf_counter() - t0
 

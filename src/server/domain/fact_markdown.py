@@ -247,17 +247,76 @@ def _render_business_structure(data: Any) -> str:
     return str(data)
 
 
+def _render_company_master(data: Any) -> str:
+    """Render company master facts (basic company information)."""
+    if not data or not isinstance(data, dict):
+        return ""
+    fields = [
+        ("公司名称", "company_name"),
+        ("简称", "short_name"),
+        ("行业", "industry"),
+        ("成立日期", "established_date"),
+        ("上市日期", "ipo_date"),
+        ("法人代表", "legal_representative"),
+        ("董事长", "chairman"),
+        ("总经理", "general_manager"),
+        ("董秘", "secretary"),
+        ("注册资本", "registered_capital"),
+        ("员工总数", "employees"),
+        ("办公地址", "office_address"),
+        ("网址", "website"),
+    ]
+    rows = []
+    for label, key in fields:
+        val = data.get(key)
+        if val:
+            rows.append([label, str(val)])
+    if not rows:
+        return ""
+    return _table(["字段", "值"], rows)
+
+
+def _render_peers(data: Any) -> str:
+    """Render peer comparison facts (industry peers)."""
+    if not data or not isinstance(data, dict):
+        return ""
+    parts = []
+    industry = data.get("industry", "")
+    if industry:
+        parts.append(f"**行业**: {industry}")
+    peers = data.get("peers", [])
+    if not peers:
+        return "\n".join(parts) if parts else ""
+    parts.append(f"**同业公司** ({data.get('count', len(peers))}家)")
+    headers = ["代码", "名称", "PE(动态)", "PB", "总市值"]
+    rows = []
+    for p in peers[:10]:
+        mcap = p.get("market_cap")
+        mcap_str = _fmt_num(mcap) if mcap else "-"
+        rows.append([
+            p.get("code", ""),
+            p.get("name", ""),
+            _fmt_num(p.get("pe")) if p.get("pe") else "-",
+            _fmt_num(p.get("pb")) if p.get("pb") else "-",
+            mcap_str,
+        ])
+    parts.append(_table(headers, rows))
+    return "\n\n".join(parts)
+
+
 # ------------------------------------------------------------------
 # Main entry point
 # ------------------------------------------------------------------
 
 _CATEGORY_RENDERERS = {
     "security_master": ("证券主档", _render_security_master),
+    "company_master": ("公司主档", _render_company_master),
     "financial": ("财务事实", _render_financial),
     "market": ("市场事实", _render_market),
     "governance": ("治理与股权", _render_governance),
     "events": ("事件事实", _render_events),
     "business_structure": ("业务结构", _render_business_structure),
+    "peers": ("同业对比", _render_peers),
 }
 
 # Categories that have data but no dedicated renderer: generic dict renderer

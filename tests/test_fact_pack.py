@@ -149,15 +149,25 @@ class TestFactPackAdapter:
             m_rst.return_value = None
             m_biz.return_value = [{"biz": "白酒"}]
 
-            result = _run(adapter.get_stock_fact_pack(symbol="600519"))
+            # Mock _run for company_master and peers (new categories)
+            original_run = adapter._run
+            async def _mock_run(func, **kwargs):
+                func_name = getattr(func, "__name__", "")
+                if "stock_individual_info_em" in func_name:
+                    import pandas as pd
+                    return pd.DataFrame({"item": ["股票简称"], "value": ["测试"]})
+                if "stock_board_industry_cons_em" in func_name:
+                    import pandas as pd
+                    return pd.DataFrame()
+                return await original_run(func, **kwargs)
+
+            with patch.object(adapter, "_run", side_effect=_mock_run):
+                result = _run(adapter.get_stock_fact_pack(symbol="600519"))
 
         # Should still succeed with partial data
         assert "facts" in result
         # financial coverage should show error
         assert result["coverage"].get("financial", "").startswith("error")
-        # company_master and peers are always in missing_fields (not_implemented)
-        assert "company_master" in result["missing_fields"]
-        assert "peers" in result["missing_fields"]
 
     def test_coverage_dict_has_categories(self, mock_cache):
         """Coverage dict should have entries for all categories."""
@@ -181,7 +191,20 @@ class TestFactPackAdapter:
 
             m_info.return_value = _mock_asset_info("测试", "600000")
 
-            result = _run(adapter.get_stock_fact_pack(symbol="600000"))
+            # Mock _run for company_master and peers (new categories)
+            original_run = adapter._run
+            async def _mock_run_coverage(func, **kwargs):
+                func_name = getattr(func, "__name__", "")
+                if "stock_individual_info_em" in func_name:
+                    import pandas as pd
+                    return pd.DataFrame()
+                if "stock_board_industry_cons_em" in func_name:
+                    import pandas as pd
+                    return pd.DataFrame()
+                return await original_run(func, **kwargs)
+
+            with patch.object(adapter, "_run", side_effect=_mock_run_coverage):
+                result = _run(adapter.get_stock_fact_pack(symbol="600000"))
 
         coverage = result["coverage"]
         # Should have all 8 categories
