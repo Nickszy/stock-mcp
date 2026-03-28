@@ -370,3 +370,173 @@ def register_fact_pack_tools(mcp: FastMCP):
                 source="akshare",
                 description=f"获取基金事实包失败: {e}",
             )
+
+    # ------------------------------------------------------------------
+    # get_market_fact_pack — 行情事实包
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"fact-pack", "market"})
+    async def get_market_fact_pack(
+        symbol: str,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取行情事实包(Fact Pack)：一次调用聚合全维度行情结构化事实数据。
+
+        聚合 8 大事实类别: 标的估值、技术快照、K线因子、资金流、市场广度、
+        指数板块、衍生行情、相对强弱。
+        返回统一结构: entity + facts + source_trace + coverage。
+
+        Typical use cases:
+        - "给我 600519 的完整行情事实包"
+        - "贵州茅台的最新行情+资金流+技术指标数据"
+        - "查一下宁德时代的相对强弱+资金流+估值数据"
+
+        Args:
+            symbol: 股票代码 (如 600519, 000001)
+            ctx: FastMCP Context.
+
+        Returns:
+            行情事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        """
+        if ctx:
+            await ctx.info(f"获取行情事实包: {symbol}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_market_fact_pack", symbol=symbol)
+
+            gateway = Container.market_gateway()
+            result = await gateway.get_market_fact_pack(symbol=symbol)
+
+            elapsed = time.perf_counter() - t0
+            categories_fetched = result.get("categories_fetched", 0)
+            categories_total = result.get("categories_total", 8)
+            coverage = result.get("coverage", {})
+            missing = result.get("missing_fields", [])
+
+            summary = (
+                f"行情事实包: {symbol} "
+                f"[{categories_fetched}/{categories_total}类] "
+                f"(耗时 {elapsed:.1f}s)"
+            )
+
+            md = f"# 行情事实包: {symbol}\n\n"
+            md += f"**已获取**: {categories_fetched}/{categories_total} 类"
+            md += f" | **耗时**: {elapsed:.1f}s\n\n"
+
+            if coverage:
+                complete = sum(1 for v in coverage.values() if v == "complete")
+                partial = sum(1 for v in coverage.values() if v == "partial")
+                md += f"**覆盖率**: {complete}完整 + {partial}部分 / {categories_total}类\n\n"
+
+            facts = result.get("facts", {})
+
+            # Master (valuation)
+            mst = facts.get("master", {})
+            if mst:
+                md += "## 估值指标\n\n"
+                for k, v in mst.items():
+                    md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Snapshot (technical)
+            snap = facts.get("snapshot", {})
+            if snap:
+                md += "## 技术快照\n\n"
+                for k, v in snap.items():
+                    md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Kline
+            kl = facts.get("kline", {})
+            if kl:
+                md += "## K线因子\n\n"
+                fac = kl.get("factors", {})
+                if isinstance(fac, dict):
+                    for k, v in fac.items():
+                        md += f"- **{k}**: {v}\n"
+                else:
+                    md += f"{fac}\n"
+                md += "\n"
+
+            # Money Flow
+            mf = facts.get("money_flow", {})
+            if mf:
+                md += "## 资金流\n\n"
+                if isinstance(mf, dict):
+                    for k, v in mf.items():
+                        if isinstance(v, list) and v:
+                            md += f"- **{k}**: {len(v)}条记录\n"
+                        else:
+                            md += f"- **{k}**: {v}\n"
+                else:
+                    md += f"{mf}\n"
+                md += "\n"
+
+            # Breadth
+            br = facts.get("breadth", {})
+            if br:
+                md += "## 市场广度\n\n"
+                for k, v in br.items():
+                    md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Index/Sector
+            idx = facts.get("index", {})
+            if idx:
+                md += "## 指数/板块行情\n\n"
+                for k, v in idx.items():
+                    if isinstance(v, list) and v:
+                        md += f"- **{k}**: {len(v)}条记录\n"
+                    else:
+                        md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Derivative
+            drv = facts.get("derivative", {})
+            if drv:
+                md += "## 衍生行情\n\n"
+                for k, v in drv.items():
+                    md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Relative
+            rs = facts.get("relative", {})
+            if rs:
+                md += "## 相对强弱\n\n"
+                for k, v in rs.items():
+                    md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Source trace
+            trace = result.get("source_trace", {})
+            if trace:
+                md += "## 数据溯源\n\n"
+                md += "| 类别 | 详情 |\n"
+                md += "|------|------|\n"
+                for cat, info in trace.items():
+                    md += f"| {cat} | {info} |\n"
+                md += "\n"
+
+            if missing:
+                md += f"## 缺失字段\n\n> {', '.join(missing)}\n"
+
+            return create_standard_artifact_response(
+                summary=summary,
+                component_type=ComponentType.TABLE,
+                name=f"行情事实包: {symbol}",
+                data=result,
+                source="akshare",
+                description=summary,
+                markdown=md,
+                symbol=symbol,
+            )
+
+        except Exception as e:
+            logger.error(f"get_market_fact_pack failed: {e}")
+            return create_standard_artifact_response(
+                summary=f"获取行情事实包失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="行情事实包错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取行情事实包失败: {e}",
+            )

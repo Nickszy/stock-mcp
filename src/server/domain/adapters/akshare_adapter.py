@@ -5639,3 +5639,174 @@ class AkshareAdapter(BaseDataAdapter):
         await self.cache.set(cache_key, result, ttl=600)
         return result
 
+    # ------------------------------------------------------------------
+    # Market Fact Pack (COL-152)
+    # ------------------------------------------------------------------
+
+    async def get_market_fact_pack(self, symbol: str) -> Dict[str, Any]:
+        """Aggregate market/quote facts across all categories into a single pack.
+
+        Calls existing adapter methods and organizes results into 8 fact
+        categories: master, snapshot, kline, money_flow, breadth, index,
+        derivative, relative.
+
+        Args:
+            symbol: Stock code (e.g. 600519, 000001)
+        """
+        cache_key = f"akshare:market_fact_pack:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        import time as _time
+        t0 = _time.perf_counter()
+
+        entity = {"symbol": symbol, "type": "market"}
+        facts: Dict[str, Any] = {}
+        source_trace: Dict[str, Any] = {}
+        coverage: Dict[str, str] = {}
+        missing_fields: List[str] = []
+
+        # --- 1. Master (标的估值指标) ---
+        try:
+            val = await self._get_valuation_raw(symbol)
+            if val:
+                facts["master"] = val
+                coverage["master"] = "complete"
+                source_trace["master"] = {"provider": "akshare"}
+            else:
+                coverage["master"] = "missing"
+                missing_fields.append("master")
+        except Exception as e:
+            coverage["master"] = f"error: {e}"
+
+        # --- 2. Snapshot (技术指标快照) ---
+        try:
+            tech = await self.calculate_technical_indicators(symbol, days=30)
+            if tech and "error" not in tech:
+                snap: Dict[str, Any] = {}
+                for ind_name, ind_data in tech.items():
+                    if isinstance(ind_data, list) and ind_data:
+                        snap[ind_name] = ind_data[-1] if len(ind_data) <= 5 else ind_data[-5:]
+                    elif isinstance(ind_data, dict):
+                        snap[ind_name] = ind_data
+                facts["snapshot"] = snap
+                coverage["snapshot"] = "complete"
+                source_trace["snapshot"] = {"provider": "akshare"}
+            else:
+                coverage["snapshot"] = "missing"
+                missing_fields.append("snapshot")
+        except Exception as e:
+            coverage["snapshot"] = f"error: {e}"
+
+        # --- 3. Kline (K线与因子数据) ---
+        try:
+            factors = await self.get_stock_factors(symbol, days=60)
+            if factors and "error" not in factors:
+                facts["kline"] = {
+                    "factors": factors.get("factors", {}),
+                    "symbol": factors.get("symbol", symbol),
+                }
+                coverage["kline"] = "complete"
+                source_trace["kline"] = {"provider": "akshare"}
+            else:
+                coverage["kline"] = "missing"
+                missing_fields.append("kline")
+        except Exception as e:
+            coverage["kline"] = f"error: {e}"
+
+        # --- 4. Money Flow (资金流) ---
+        try:
+            flow = await self.get_money_flow(f"SSE:{symbol}")
+            if not flow or "error" in flow:
+                flow = await self.get_money_flow(f"SZSE:{symbol}")
+            if flow and "error" not in flow:
+                facts["money_flow"] = flow
+                coverage["money_flow"] = "complete"
+                source_trace["money_flow"] = {"provider": "akshare"}
+            else:
+                coverage["money_flow"] = "missing"
+                missing_fields.append("money_flow")
+        except Exception as e:
+            coverage["money_flow"] = f"error: {e}"
+
+        # --- 5. Market Breadth (市场广度) ---
+        try:
+            breadth = await self.get_market_breadth(days=20)
+            if breadth and "error" not in breadth:
+                facts["breadth"] = {
+                    k: v for k, v in breadth.items()
+                    if k not in ("source", "error")
+                }
+                coverage["breadth"] = "complete"
+                source_trace["breadth"] = {"provider": "akshare"}
+            else:
+                coverage["breadth"] = "missing"
+                missing_fields.append("breadth")
+        except Exception as e:
+            coverage["breadth"] = f"error: {e}"
+
+        # --- 6. Index / Sector (指数/板块行情) ---
+        try:
+            sector = await self.get_sector_trend()
+            if sector and "error" not in sector:
+                facts["index"] = {
+                    k: v for k, v in sector.items()
+                    if k not in ("source", "error")
+                }
+                coverage["index"] = "partial"
+                source_trace["index"] = {"provider": "akshare"}
+            else:
+                coverage["index"] = "missing"
+                missing_fields.append("index")
+        except Exception as e:
+            coverage["index"] = f"error: {e}"
+
+        # --- 7. Derivative (衍生行情/期货基差) ---
+        try:
+            basis = await self.get_futures_basis(days=30)
+            if basis and "error" not in basis:
+                facts["derivative"] = {
+                    k: v for k, v in basis.items()
+                    if k not in ("source", "error")
+                }
+                coverage["derivative"] = "partial"
+                source_trace["derivative"] = {"provider": "akshare"}
+            else:
+                coverage["derivative"] = "missing"
+                missing_fields.append("derivative")
+        except Exception as e:
+            coverage["derivative"] = f"error: {e}"
+
+        # --- 8. Relative Strength (相对强弱) ---
+        try:
+            rs = await self.get_relative_strength(symbol)
+            if rs and "error" not in rs:
+                facts["relative"] = {
+                    k: v for k, v in rs.items()
+                    if k not in ("source", "error")
+                }
+                coverage["relative"] = "complete"
+                source_trace["relative"] = {"provider": "akshare"}
+            else:
+                coverage["relative"] = "missing"
+                missing_fields.append("relative")
+        except Exception as e:
+            coverage["relative"] = f"error: {e}"
+
+        elapsed = _time.perf_counter() - t0
+
+        result = {
+            "source": "akshare",
+            "entity": entity,
+            "facts": facts,
+            "source_trace": source_trace,
+            "coverage": coverage,
+            "missing_fields": missing_fields,
+            "categories_fetched": len([v for v in coverage.values() if v in ("complete", "partial")]),
+            "categories_total": 8,
+            "elapsed_seconds": round(elapsed, 2),
+        }
+        await self.cache.set(cache_key, result, ttl=600)
+        return result
+

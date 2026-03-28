@@ -277,8 +277,8 @@ class TestFactPackRegistry:
     def test_total_tool_count(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        # 110 + 1(stock fact-pack) + 1(fund fact-pack) = 112
-        assert total == 112, f"Expected 112, got {total}"
+        # 110 + 1(stock) + 1(fund) + 1(market) = 113
+        assert total == 113, f"Expected 113, got {total}"
 
     def test_fact_pack_group_present(self):
         from src.server.mcp.registry import TOOL_GROUPS
@@ -289,7 +289,7 @@ class TestFactPackRegistry:
         from src.server.mcp.registry import TOOL_GROUPS
         fp = [g for g in TOOL_GROUPS if g.name == "fact-pack"]
         assert len(fp) == 1
-        assert fp[0].count == 2  # stock + fund
+        assert fp[0].count == 3  # stock + fund + market
         assert fp[0].enabled is True
 
 
@@ -462,3 +462,163 @@ class TestFundFactPackMCPTool:
         assert content["data"]["entity"]["fund_code"] == "110011"
         assert "markdown" in content
         assert "易方达" in result["summary"]
+
+
+# =====================================================================
+# Market Fact Pack Tests (COL-152)
+# =====================================================================
+
+
+class TestMarketFactPackAdapter:
+    """Verify get_market_fact_pack adapter method."""
+
+    def test_returns_correct_structure(self, mock_cache):
+        from src.server.domain.adapters.akshare_adapter import AkshareAdapter
+
+        adapter = AkshareAdapter(mock_cache)
+
+        with patch.object(adapter, "_get_valuation_raw", new_callable=AsyncMock) as m_val, \
+             patch.object(adapter, "calculate_technical_indicators", new_callable=AsyncMock) as m_tech, \
+             patch.object(adapter, "get_stock_factors", new_callable=AsyncMock) as m_fac, \
+             patch.object(adapter, "get_money_flow", new_callable=AsyncMock) as m_flow, \
+             patch.object(adapter, "get_market_breadth", new_callable=AsyncMock) as m_br, \
+             patch.object(adapter, "get_sector_trend", new_callable=AsyncMock) as m_sec, \
+             patch.object(adapter, "get_futures_basis", new_callable=AsyncMock) as m_basis, \
+             patch.object(adapter, "get_relative_strength", new_callable=AsyncMock) as m_rs:
+
+            m_val.return_value = {"pe": 30.5, "pb": 10.2}
+            m_tech.return_value = {"MA": [{"date": "2025-01-01", "ma5": 100}], "RSI": [{"date": "2025-01-01", "rsi": 55}]}
+            m_fac.return_value = {"factors": {"momentum_1m": 0.05}, "symbol": "600519"}
+            m_flow.return_value = {"net_inflow": 1e8, "data": []}
+            m_br.return_value = {"up_count": 2000, "down_count": 1500, "advance_decline_ratio": 1.33}
+            m_sec.return_value = {"sector": "白酒", "trend": "up"}
+            m_basis.return_value = {"basis": -10.5, "index_code": "IF0"}
+            m_rs.return_value = {"rs_pct": 0.03, "benchmark": "000300"}
+
+            result = _run(adapter.get_market_fact_pack(symbol="600519"))
+
+        # Top-level structure
+        assert "entity" in result
+        assert "facts" in result
+        assert "source_trace" in result
+        assert "coverage" in result
+        assert "missing_fields" in result
+        assert "categories_fetched" in result
+        assert "categories_total" in result
+
+        # Entity
+        assert result["entity"]["symbol"] == "600519"
+        assert result["entity"]["type"] == "market"
+
+        # Facts
+        facts = result["facts"]
+        assert "master" in facts
+        assert "snapshot" in facts
+        assert "kline" in facts
+        assert "money_flow" in facts
+        assert "breadth" in facts
+        assert "index" in facts
+        assert "derivative" in facts
+        assert "relative" in facts
+
+        # All 8 categories should be fetched
+        assert result["categories_fetched"] == 8
+        assert result["categories_total"] == 8
+
+    def test_handles_sub_method_failure(self, mock_cache):
+        from src.server.domain.adapters.akshare_adapter import AkshareAdapter
+
+        adapter = AkshareAdapter(mock_cache)
+
+        with patch.object(adapter, "_get_valuation_raw", new_callable=AsyncMock, side_effect=Exception("API error")), \
+             patch.object(adapter, "calculate_technical_indicators", new_callable=AsyncMock) as m_tech, \
+             patch.object(adapter, "get_stock_factors", new_callable=AsyncMock) as m_fac, \
+             patch.object(adapter, "get_money_flow", new_callable=AsyncMock) as m_flow, \
+             patch.object(adapter, "get_market_breadth", new_callable=AsyncMock) as m_br, \
+             patch.object(adapter, "get_sector_trend", new_callable=AsyncMock) as m_sec, \
+             patch.object(adapter, "get_futures_basis", new_callable=AsyncMock) as m_basis, \
+             patch.object(adapter, "get_relative_strength", new_callable=AsyncMock) as m_rs:
+
+            m_tech.return_value = {"MA": []}
+            m_fac.return_value = {"factors": {}, "symbol": "600519"}
+            m_flow.return_value = {"error": "no data"}
+            m_br.return_value = {"up_count": 100}
+            m_sec.return_value = {"sector": "白酒"}
+            m_basis.return_value = {"basis": -10}
+            m_rs.return_value = {"rs_pct": 0.01}
+
+            result = _run(adapter.get_market_fact_pack(symbol="600519"))
+
+        # Should still succeed with partial data
+        assert "facts" in result
+        assert "error" in result["coverage"].get("master", "")
+        assert result["categories_fetched"] < 8
+
+
+class TestMarketFactPackMCPTool:
+    """Verify market fact pack MCP tool produces unified contract."""
+
+    def test_tool_contract_structure(self, mock_cache):
+        from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
+        from src.server.core.dependencies import Container
+
+        mock_pack = {
+            "source": "akshare",
+            "entity": {"symbol": "600519", "type": "market"},
+            "facts": {
+                "master": {"pe": 30.5, "pb": 10.2},
+                "snapshot": {"MA": [{"ma5": 100}], "RSI": [{"rsi": 55}]},
+                "kline": {"factors": {"momentum_1m": 0.05}},
+                "money_flow": {"net_inflow": 1e8},
+                "breadth": {"up_count": 2000, "down_count": 1500},
+                "index": {"sector": "白酒"},
+                "derivative": {"basis": -10.5},
+                "relative": {"rs_pct": 0.03},
+            },
+            "source_trace": {"master": {"provider": "akshare"}},
+            "coverage": {
+                "master": "complete", "snapshot": "complete",
+                "kline": "complete", "money_flow": "complete",
+                "breadth": "complete", "index": "partial",
+                "derivative": "partial", "relative": "complete",
+            },
+            "missing_fields": [],
+            "categories_fetched": 8,
+            "categories_total": 8,
+            "elapsed_seconds": 0.5,
+        }
+
+        mock_gw = MagicMock()
+        mock_gw.get_market_fact_pack = AsyncMock(return_value=mock_pack)
+
+        with patch.object(Container, "market_gateway", return_value=mock_gw):
+            captured = {}
+
+            class MockMCP:
+                def tool(self, **kwargs):
+                    def decorator(fn):
+                        key = frozenset(kwargs.get("tags", set()))
+                        captured[key] = fn
+                        return fn
+                    return decorator
+
+            register_fact_pack_tools(MockMCP())
+
+            # Find the market fact pack tool (tagged with "market")
+            tool_fn = None
+            for key, fn in captured.items():
+                if "market" in key:
+                    tool_fn = fn
+                    break
+            assert tool_fn is not None, "Market fact pack tool not registered"
+
+            result = _run(tool_fn(symbol="600519"))
+
+        # Verify unified contract
+        assert "summary" in result
+        assert "artifact" in result
+        content = result["artifact"]["content"]
+        assert content["source"]["provider"] == "akshare"
+        assert content["data"]["entity"]["symbol"] == "600519"
+        assert "markdown" in content
+        assert "600519" in result["summary"]
