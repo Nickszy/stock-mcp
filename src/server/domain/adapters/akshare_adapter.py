@@ -4117,6 +4117,14 @@ class AkshareAdapter(BaseDataAdapter):
             "categories_total": 8,
             "elapsed_seconds": round(elapsed, 2),
         }
+
+        # Build fact_markdown view (COL-149)
+        try:
+            from src.server.domain.fact_markdown import build_stock_fact_markdown
+            result["fact_markdown"] = build_stock_fact_markdown(result)
+        except Exception as e:
+            self.logger.warning(f"fact_markdown generation failed: {e}")
+
         await self.cache.set(cache_key, result, ttl=600)
         return result
 
