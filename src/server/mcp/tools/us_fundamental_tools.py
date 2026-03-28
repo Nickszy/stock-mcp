@@ -436,7 +436,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
             ).rstrip()
 
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_COMPANY_PROFILE.value,
+                component_type=ComponentType.US_COMPANY_PROFILE,
                 name=f"{symbol} 公司概况",
                 content=data,
                 description=summary,
@@ -454,7 +454,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
             logger.error("get_us_company_profile error", symbol=symbol, error=str(e))
             summary = f"获取 {symbol} 公司概况失败: {e}"
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_COMPANY_PROFILE.value,
+                component_type=ComponentType.US_COMPANY_PROFILE,
                 name=f"{symbol} 公司概况",
                 content={"error": str(e)},
                 description=summary,
@@ -522,7 +522,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
             ).rstrip()
 
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_ANALYST_RECOMMENDATIONS.value,
+                component_type=ComponentType.US_ANALYST_RECOMMENDATIONS,
                 name=f"{symbol} 分析师评级",
                 content=data,
                 description=summary,
@@ -540,7 +540,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
             logger.error("get_us_analyst_recommendations error", symbol=symbol, error=str(e))
             summary = f"获取 {symbol} 分析师评级失败: {e}"
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_ANALYST_RECOMMENDATIONS.value,
+                component_type=ComponentType.US_ANALYST_RECOMMENDATIONS,
                 name=f"{symbol} 分析师评级",
                 content={"error": str(e)},
                 description=summary,
@@ -601,7 +601,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
             summary = f"{symbol} 收入构成: {', '.join(parts)}" if parts else f"{symbol} 收入构成: 暂无数据"
 
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_REVENUE_SEGMENTS.value,
+                component_type=ComponentType.US_REVENUE_SEGMENTS,
                 name=f"{symbol} 收入构成",
                 content=data,
                 description=summary,
@@ -619,7 +619,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
             logger.error("get_us_revenue_segments error", symbol=symbol, error=str(e))
             summary = f"获取 {symbol} 收入构成失败: {e}"
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_REVENUE_SEGMENTS.value,
+                component_type=ComponentType.US_REVENUE_SEGMENTS,
                 name=f"{symbol} 收入构成",
                 content={"error": str(e)},
                 description=summary,
@@ -675,7 +675,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
             )
 
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_INSIDER_TRADING.value,
+                component_type=ComponentType.US_INSIDER_TRADING,
                 name=f"{symbol} 内部人交易",
                 content=data,
                 description=summary,
@@ -693,7 +693,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
             logger.error("get_us_insider_trading error", symbol=symbol, error=str(e))
             summary = f"获取 {symbol} 内部人交易失败: {e}"
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_INSIDER_TRADING.value,
+                component_type=ComponentType.US_INSIDER_TRADING,
                 name=f"{symbol} 内部人交易",
                 content={"error": str(e)},
                 description=summary,
@@ -757,7 +757,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
             summary = summary.rstrip()
 
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_SHARE_STATISTICS.value,
+                component_type=ComponentType.US_SHARE_STATISTICS,
                 name=f"{symbol} 股份统计",
                 content=data,
                 description=summary,
@@ -775,7 +775,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
             logger.error("get_us_share_statistics error", symbol=symbol, error=str(e))
             summary = f"获取 {symbol} 股份统计失败: {e}"
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_SHARE_STATISTICS.value,
+                component_type=ComponentType.US_SHARE_STATISTICS,
                 name=f"{symbol} 股份统计",
                 content={"error": str(e)},
                 description=summary,
@@ -830,7 +830,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
             )
 
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_COMPANY_PROFILE.value,
+                component_type=ComponentType.US_COMPANY_PROFILE,
                 name=f"{symbol} 财务健康评分",
                 content=data,
                 description=summary,
@@ -848,7 +848,7 @@ def register_us_fundamental_tools(mcp: FastMCP):
             logger.error("get_us_financial_health error", symbol=symbol, error=str(e))
             summary = f"获取 {symbol} 财务健康评分失败: {e}"
             artifact = create_artifact_envelope(
-                component_type=ComponentType.US_COMPANY_PROFILE.value,
+                component_type=ComponentType.US_COMPANY_PROFILE,
                 name=f"{symbol} 财务健康",
                 content={"error": str(e)},
                 description=summary,

@@ -6,6 +6,7 @@ All methods are async via asyncio.run_in_executor to avoid blocking.
 
 import asyncio
 import logging
+import math
 import time
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
@@ -1367,8 +1368,7 @@ class YahooAdapter(BaseDataAdapter):
                 "exchange": info.get("exchange", ""),
                 "quote_type": info.get("quoteType", ""),
                 "currency": info.get("currency", ""),
-                "founded_year": info.get("companyOfficers", [{}])
-                and info.get("maxAge"),
+                "founded_year": info.get("firstTradeDateEpochUtc"),
                 "ceo": "",
                 # Key financial snapshot
                 "pe_ttm": _safe("trailingPE"),
@@ -1422,18 +1422,23 @@ class YahooAdapter(BaseDataAdapter):
 
             rec_df, summary_df, upgrades_df, info = await self._run(_fetch)
 
-            # Target price from info
-            target_price = None
-            if info and isinstance(info, dict):
-                target_price = info.get("targetHighPrice")
-                target_low = info.get("targetLowPrice")
-                target_mean = info.get("targetMeanPrice")
-                target_median = info.get("targetMedianPrice")
-                current_price = info.get("currentPrice")
-                num_analysts = info.get("numberOfAnalystOpinions")
-            else:
-                target_low = target_mean = target_median = current_price = None
-                num_analysts = None
+            # Target price from info — sanitize NaN/inf
+            def _safe_price(val):
+                if val is None:
+                    return None
+                try:
+                    f = float(val)
+                    return None if (math.isnan(f) or math.isinf(f)) else f
+                except Exception:
+                    return None
+
+            target_price = _safe_price(info.get("targetHighPrice"))
+            target_low = _safe_price(info.get("targetLowPrice"))
+            target_mean = _safe_price(info.get("targetMeanPrice"))
+            target_median = _safe_price(info.get("targetMedianPrice"))
+            current_price = _safe_price(info.get("currentPrice"))
+            num_analysts_raw = info.get("numberOfAnalystOpinions")
+            num_analysts = int(num_analysts_raw) if num_analysts_raw is not None and not (isinstance(num_analysts_raw, float) and (math.isnan(num_analysts_raw) or math.isinf(num_analysts_raw))) else None
 
             # Parse recommendations
             recommendations = []
@@ -1555,6 +1560,8 @@ class YahooAdapter(BaseDataAdapter):
                 if val is not None:
                     try:
                         val = float(val)
+                        if math.isnan(val) or math.isinf(val):
+                            continue
                         geo_segments.append(
                             {"region": label, "key": key, "revenue": val}
                         )
@@ -1583,6 +1590,8 @@ class YahooAdapter(BaseDataAdapter):
                 if val is not None:
                     try:
                         val = float(val)
+                        if math.isnan(val) or math.isinf(val):
+                            continue
                         biz_segments.append(
                             {"segment": label, "key": key, "revenue": val}
                         )
@@ -1640,8 +1649,8 @@ class YahooAdapter(BaseDataAdapter):
                             "insider_name": str(row.get("Insider", "")),
                             "title": str(row.get("Title", "")),
                             "transaction_date": str(row.get("Date", ""))[:10],
-                            "shares": int(row.get("Shares", 0)) if row.get("Shares") else None,
-                            "value": float(row.get("Value", 0)) if row.get("Value") else None,
+                            "shares": int(row.get("Shares", 0)) if row.get("Shares") and not math.isnan(float(row.get("Shares", 0))) else None,
+                            "value": float(row.get("Value", 0)) if row.get("Value") and not math.isnan(float(row.get("Value", 0))) else None,
                             "transaction_type": "Purchase",
                         }
                     )
@@ -1667,8 +1676,8 @@ class YahooAdapter(BaseDataAdapter):
                             "insider_name": str(row.get("Insider", "")),
                             "title": str(row.get("Title", "")),
                             "transaction_date": str(row.get("Date", ""))[:10],
-                            "shares": int(shares_raw) if shares_raw else None,
-                            "value": float(value_raw) if value_raw else None,
+                            "shares": int(shares_raw) if shares_raw and not math.isnan(float(shares_raw)) else None,
+                            "value": float(value_raw) if value_raw and not math.isnan(float(value_raw)) else None,
                             "transaction_type": direction,
                         }
                     )
