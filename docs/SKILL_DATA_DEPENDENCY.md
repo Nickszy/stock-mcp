@@ -1,6 +1,6 @@
 # Skill 数据依赖矩阵与缺口盘点 v1
 
-> **版本**: v1.0 | **日期**: 2026-03-29 | **状态**: 盘点完成
+> **版本**: v1.1 | **日期**: 2026-03-29 | **状态**: 更新 — G1-G5, G7 已补齐
 > **依赖**: COL-154 Skill 体系设计 + COL-148~153 事实数据体系 + COL-156 REST API
 
 ---
@@ -10,9 +10,9 @@
 | Fact Pack | 类别总数 | 已实现 | 未实现 | 覆盖率 |
 |-----------|---------|--------|--------|--------|
 | Stock Fact Pack | 8 | 8 | 0 | 100% |
-| Fund Fact Pack | 8 | 8 | 0 | 100% |
+| Fund Fact Pack | 8 | 7 | 1 | 87.5% |
 | Market Fact Pack | 8 | 8 | 0 | 100% |
-| **合计** | **24** | **24** | **0** | **100%** |
+| **合计** | **24** | **23** | **1** | **96%** |
 
 | 辅助能力 | 状态 |
 |---------|------|
@@ -47,18 +47,12 @@
 | governance (治理与股权) | 必需 | Stock FP → governance | ✅ 已具备 |
 | events (事件事实) | 必需 | Stock FP → events | ✅ 已具备 |
 | business_structure (业务结构) | 必需 | Stock FP → business_structure | ✅ 已具备 |
-| company_master (公司主档) | 必需 | Stock FP → company_master | ❌ 未实现 |
-| peers (同业对比) | 必需 | Stock FP → peers | ❌ 未实现 |
-| 技术分析信号汇总 | 可选 | `calculate_technical_indicators` | ⚠️ 有指标无信号解读层 |
+| company_master (公司主档) | 必需 | Stock FP → company_master | ✅ 已具备 (akshare `stock_individual_info_em`) |
+| peers (同业对比) | 必需 | Stock FP → peers | ✅ 已具备 (`stock_board_industry_cons_em` 按市值筛选) |
+| 技术分析信号汇总 | 可选 | `get_technical_signals` | ✅ 已具备 (RSI/MACD/布林带确定性信号) |
 | 新闻舆情 | 可选 | news group (默认禁用) | ⚠️ 禁用状态 |
 
-**覆盖率: 75%** — 关键缺口: company_master, peers。
-
-**缺口详情**:
-- **company_master**: 公司基本信息聚合 (成立日期、注册地、法人、主营业务描述、员工数等)。akshare 有 `stock_individual_info_em` 可直接提供。
-- **peers**: 同行业对标公司列表及对比数据。可从 `stock_board_industry_cons_em` 获取同板块成分股，再筛选市值/行业相近标的。
-- **技术信号解读**: 已有 SMA/RSI/MACD 等指标计算，但缺少"超买/超卖/金叉/死叉"等确定性信号判断层。
-- **news**: 工具组存在但默认禁用，需评估启用条件 (API 配额/合规性)。
+**覆盖率: 95%** — 核心数据齐全。仅新闻舆情为可选增强。
 
 ---
 
@@ -72,16 +66,14 @@
 | manager (基金经理) | 必需 | Fund FP → manager | ✅ 已具备 |
 | scale (规模与份额) | 必需 | Fund FP → scale | ✅ 已具备 |
 | allocation (资产配置) | 必需 | Fund FP → allocation | ✅ 已具备 |
-| fees (费率与分红) | 必需 | Fund FP → fees | ❌ 未实现 |
-| peer_comparison (同类比较) | 必需 | Fund FP → peer_comparison | ❌ 未实现 |
-| 基金经理变更事件 | 可选 | fund detail 中的变更记录 | ⚠️ 需提取 |
+| fees (费率与分红) | 必需 | Fund FP → fees | ✅ 已具备 (`fund_open_fund_info_em` 提取费率) |
+| peer_comparison (同类比较) | 必需 | Fund FP → peer_comparison | ✅ 已具备 (基于 `get_fund_ranking` 构建) |
+| 基金经理变更事件 | 可选 | fund detail 中的变更记录 | ❌ Blocked — akshare 无历史变更 API (COL-161) |
 
-**覆盖率: 75%** — 关键缺口: fees, peer_comparison。
+**覆盖率: 95%** — 核心数据齐全。仅经理变更历史被外部数据源阻塞。
 
 **缺口详情**:
-- **fees**: 管理费、托管费、申购费、赎回费。akshare 有 `fund_open_fund_info_em` 可获取费率数据。
-- **peer_comparison**: 同类型基金收益/风险对比排名。可基于已有 `get_fund_ranking` 构建。
-- **经理变更**: 需从 fund detail 中提取变更记录并结构化。
+- **经理变更**: akshare 现有 API 不提供基金经理变更历史记录。已创建 COL-161 追踪，状态 Blocked，需外部数据源。
 
 ---
 
@@ -110,9 +102,9 @@
 | 指数行情 | 必需 | Market FP → index | ✅ 已具备 |
 | 板块涨跌排行 | 必需 | `get_sector_trend` | ✅ 已具备 |
 | 风格轮动 | 必需 | `get_style_rotation` | ✅ 已具备 |
-| 行业估值历史百分位 | 可选 | `get_sector_pe_pb_historical` | ⚠️ 未接入 fact pack |
+| 行业估值历史百分位 | 可选 | Market FP → index (含 `get_sector_pe_pb_historical`) | ✅ 已具备 |
 
-**覆盖率: 95%** — 行业估值百分位为可选增强。
+**覆盖率: 100%** — 无缺口。
 
 ---
 
@@ -140,9 +132,9 @@
 | 解禁日历 | 必需 | Stock FP → events | ✅ 已具备 |
 | 股东变动 | 必需 | Stock FP → governance | ✅ 已具备 |
 | 新闻舆情预警 | 可选 | news group | ⚠️ 禁用状态 |
-| 技术信号异常 | 可选 | 技术指标 | ⚠️ 缺信号解读层 |
+| 技术信号异常 | 可选 | `get_technical_signals` | ✅ 已具备 (RSI/MACD/布林带确定性信号) |
 
-**覆盖率: 85%** — 核心数据齐全，增强层 (新闻/技术信号) 可后续补充。
+**覆盖率: 95%** — 核心数据齐全。仅新闻舆情为可选增强。
 
 ---
 
@@ -156,10 +148,10 @@
 | 市场信号 | 必需 | Market FP → money_flow | ✅ 已具备 |
 | 解禁计划 | 必需 | Stock FP → events | ✅ 已具备 |
 | 股东变动 | 必需 | Stock FP → governance | ✅ 已具备 |
-| 同业估值对比 | 可选 | Stock FP → peers | ❌ 未实现 |
-| 基金费率检查 | 可选 | Fund FP → fees | ❌ 未实现 |
+| 同业估值对比 | 可选 | Stock FP → peers | ✅ 已具备 |
+| 基金费率检查 | 可选 | Fund FP → fees | ✅ 已具备 |
 
-**覆盖率: 85%** — 核心检查项齐全。peers 缺失影响同业对比环节。
+**覆盖率: 100%** — 无缺口。
 
 ---
 
@@ -210,9 +202,9 @@
 | 估值对比 | 必需 | FP → financial/valuation | ✅ 已具备 |
 | 财务对比 | 必需 | FP → financial | ✅ 已具备 |
 | 市场指标对比 | 必需 | Market FP × N | ✅ 已具备 |
-| 同业对比框架 | 可选 | Stock FP → peers | ❌ 未实现 |
+| 同业对比框架 | 可选 | Stock FP → peers | ✅ 已具备 |
 
-**覆盖率: 90%** — 缺 peers 影响自动选择对比标的。
+**覆盖率: 100%** — 无缺口。
 
 ---
 
@@ -221,49 +213,50 @@
 | Skill | 覆盖率 | 状态 | 关键缺口 |
 |-------|--------|------|---------|
 | S1 搜索与定位 | 100% | ✅ 可用 | - |
-| S2 个股研究 | 75% | ⚠️ 部分可用 | company_master, peers |
-| S3 基金研究 | 75% | ⚠️ 部分可用 | fees, peer_comparison |
+| S2 个股研究 | 95% | ✅ 可用 | 新闻舆情 (可选) |
+| S3 基金研究 | 95% | ✅ 可用 | 经理变更历史 (Blocked, COL-161) |
 | S4 财报速读 | 90% | ✅ 可用 | 公告结构化提取 (可选) |
-| S5 市场观察 | 95% | ✅ 可用 | 行业估值百分位 (可选) |
+| S5 市场观察 | 100% | ✅ 可用 | - |
 | S6 组合分析 | 100% | ✅ 可用 | - |
-| S7 风控预警 | 85% | ✅ 可用 | 新闻/技术信号 (可选) |
-| S8 买前检查 | 85% | ✅ 可用 | peers (可选) |
+| S7 风控预警 | 95% | ✅ 可用 | 新闻舆情 (可选) |
+| S8 买前检查 | 100% | ✅ 可用 | - |
 | S9 持仓晨报 | 100% | ✅ 可用 | - |
 | S10 交易复盘 | 100% | ✅ 可用 | - |
 | S11 主题搜索 | 100% | ✅ 可用 | - |
-| S12 对比分析 | 90% | ✅ 可用 | peers (可选) |
+| S12 对比分析 | 100% | ✅ 可用 | - |
 
-**可直接使用的 Skill**: S1, S4, S5, S6, S7, S8, S9, S10, S11, S12 (10/12)
-**部分可用的 Skill**: S2, S3 (2/12)
+**全部可用的 Skill**: S1-S12 (12/12)
+**完全覆盖 (100%)**: S1, S5, S6, S8, S9, S10, S11, S12 (8/12)
+**接近完全 (≥90%)**: S2, S3, S4, S7 (4/12)
 
 ---
 
 ## 4. 缺口优先级排序
 
-### P0 — 阻塞核心 Skill
+### P0 — 阻塞核心 Skill (已全部完成 ✅)
 
-| # | 缺口 | 影响 Skill | 实现方案 | 预估工作量 |
-|---|------|-----------|---------|-----------|
-| G1 | **company_master** | S2 个股研究 | akshare `stock_individual_info_em` 聚合 | 小 |
-| G2 | **peers** (同业对比) | S2, S8, S12 | 从 `stock_board_industry_cons_em` 取同板块 → 按市值筛选 | 中 |
-| G3 | **fees** (基金费率) | S3 基金研究 | akshare `fund_open_fund_info_em` 提取费率字段 | 小 |
-| G4 | **peer_comparison** (基金同类比较) | S3 基金研究 | 基于 `get_fund_ranking` 构建 | 中 |
+| # | 缺口 | 影响 Skill | 实现方案 | 状态 |
+|---|------|-----------|---------|------|
+| G1 | **company_master** | S2 个股研究 | akshare `stock_individual_info_em` 聚合 | ✅ 已实现 |
+| G2 | **peers** (同业对比) | S2, S8, S12 | 从 `stock_board_industry_cons_em` 取同板块 → 按市值筛选 | ✅ 已实现 |
+| G3 | **fees** (基金费率) | S3 基金研究 | akshare `fund_open_fund_info_em` 提取费率字段 | ✅ 已实现 |
+| G4 | **peer_comparison** (基金同类比较) | S3 基金研究 | 基于 `get_fund_ranking` 构建 | ✅ 已实现 |
 
 ### P1 — 增强层
 
-| # | 缺口 | 影响 Skill | 实现方案 | 预估工作量 |
-|---|------|-----------|---------|-----------|
-| G5 | 技术信号解读层 | S2, S5, S7 | 在 `calculate_technical_indicators` 基础上加信号判断 | 中 |
-| G6 | A股公告结构化提取 | S4 | 从原始公告提取关键数字 | 大 |
-| G7 | 行业估值历史百分位接入 fact pack | S5, S8 | 已有 `get_sector_pe_pb_historical`，需接入 Market FP | 小 |
-| G8 | 新闻舆情启用评估 | S2, S7, S9 | 评估 API 配额和合规性后启用 news group | 评估 |
+| # | 缺口 | 影响 Skill | 实现方案 | 状态 |
+|---|------|-----------|---------|------|
+| G5 | 技术信号解读层 | S2, S5, S7 | 在 `calculate_technical_indicators` 基础上加 `get_technical_signals` | ✅ 已实现 |
+| G6 | A股公告结构化提取 | S4 | 从原始公告提取关键数字 | ❌ 未实现 (大工作量) |
+| G7 | 行业估值历史百分位接入 fact pack | S5, S8 | 已接入 Market FP → index 类别 | ✅ 已实现 |
+| G8 | 新闻舆情启用评估 | S2, S7, S9 | 评估 API 配额和合规性后启用 news group | ❌ 待评估 |
 
 ### P2 — 可选增强
 
-| # | 缺口 | 影响 Skill | 实现方案 | 预估工作量 |
-|---|------|-----------|---------|-----------|
-| G9 | 基金经理变更事件 | S3 | 从 fund detail 提取变更记录 | 小 |
-| G10 | 持仓标的间相关性可视化 | S6 | 已有 `get_stock_correlation`，前端展示层 | 小 |
+| # | 缺口 | 影响 Skill | 实现方案 | 状态 |
+|---|------|-----------|---------|------|
+| G9 | 基金经理变更事件 | S3 | akshare 无历史变更 API | ❌ Blocked (COL-161) |
+| G10 | 持仓标的间相关性可视化 | S6 | 已有 `get_stock_correlation`，前端展示层 | ❌ 未实现 |
 
 ---
 
@@ -271,30 +264,30 @@
 
 基于以上缺口分析，建议拆分为以下实现任务:
 
-### TASK-A: 补齐 Stock Fact Pack 缺失类别 (G1 + G2)
+### TASK-A: 补齐 Stock Fact Pack 缺失类别 (G1 + G2) ✅ 已完成
 
-- 实现 `company_master` 事实类别
-- 实现 `peers` 事实类别
-- 更新 `get_stock_fact_pack` 的 coverage 输出
-- 更新 `build_stock_fact_markdown` 的 Markdown 视图
+- ✅ 实现 `company_master` 事实类别
+- ✅ 实现 `peers` 事实类别
+- ✅ 更新 `get_stock_fact_pack` 的 coverage 输出
+- ✅ 更新 `build_stock_fact_markdown` 的 Markdown 视图
 
-### TASK-B: 补齐 Fund Fact Pack 缺失类别 (G3 + G4)
+### TASK-B: 补齐 Fund Fact Pack 缺失类别 (G3 + G4) ✅ 已完成
 
-- 实现 `fees` 事实类别
-- 实现 `peer_comparison` 事实类别
-- 更新 `get_fund_fact_pack` 的 coverage 输出
-- 更新 `build_fund_fact_markdown` 的 Markdown 视图
+- ✅ 实现 `fees` 事实类别
+- ✅ 实现 `peer_comparison` 事实类别
+- ✅ 更新 `get_fund_fact_pack` 的 coverage 输出
+- ✅ 更新 `build_fund_fact_markdown` 的 Markdown 视图
 
-### TASK-C: 技术信号解读层 (G5)
+### TASK-C: 技术信号解读层 (G5) ✅ 已完成
 
-- 为 `calculate_technical_indicators` 输出增加确定性信号判断
-- 信号类型: 超买/超卖 (RSI)、金叉/死叉 (MACD)、突破/跌破 (布林带)
-- 信号输出为事实型: "RSI(14)=78.2" 而非 "超买"
+- ✅ 新增 `get_technical_signals()` 方法
+- ✅ 信号类型: RSI 超买/超卖、MACD 金叉/死叉、布林带突破/跌破
+- ✅ 信号输出为事实型: "RSI(14)=78.2, signal=overbought" 而非分析结论
 
-### TASK-D: 行业估值百分位接入 Market FP (G7)
+### TASK-D: 行业估值百分位接入 Market FP (G7) ✅ 已完成
 
-- 将 `get_sector_pe_pb_historical` 接入 Market Fact Pack 的 index 类别
-- 计算历史百分位并作为确定性加工输出
+- ✅ 将 `get_sector_pe_pb_historical` 接入 Market Fact Pack 的 index 类别
+- ✅ 输出历史百分位 (pe_percentile) 作为确定性加工输出
 
 ---
 
@@ -303,8 +296,17 @@
 基于数据依赖分析，建议分三批实施 Skill:
 
 **第一批 (数据完备)**: S1, S6, S9, S10, S11 — 覆盖率 100%，可直接开始
-**第二批 (补齐 G1-G4 后)**: S2, S3, S12 — 需要补齐 fact pack 缺失类别
-**第三批 (增强层)**: S4, S5, S7, S8 — 已可用但可选增强数据进一步提升体验
+**第二批 (已补齐 G1-G5, G7)**: S2, S3, S5, S7, S8, S12 — 数据依赖已全部满足 ✅
+**第三批 (增强层)**: S4 — 已可用 (90%)，可选补齐公告结构化提取 (G6)
+
+### 剩余开放缺口 (非阻塞)
+
+| 缺口 | 类型 | 影响 | 前置条件 |
+|------|------|------|---------|
+| G6 A股公告结构化提取 | P1 增强 | S4 | 大工作量，需 NLP/正则提取 |
+| G8 新闻舆情启用 | P1 增强 | S2, S7, S9 | API 配额评估 + 合规审批 |
+| G9 基金经理变更 | P2 可选 | S3 | Blocked — 需外部数据源 (COL-161) |
+| G10 相关性可视化 | P2 可选 | S6 | 前端展示层 |
 
 ---
 
@@ -318,8 +320,8 @@
 | Stock | governance | `_render_governance` |
 | Stock | events | `_render_events` |
 | Stock | business_structure | `_render_business_structure` |
-| Stock | company_master | ❌ 无 (未实现) |
-| Stock | peers | ❌ 无 (未实现) |
+| Stock | company_master | ✅ `_render_company_master` |
+| Stock | peers | ✅ `_render_peers` |
 | Fund | 全部 | `build_fund_fact_markdown` (统一渲染) |
 | Market | 全部 | `build_market_fact_markdown` (统一渲染) |
 
