@@ -25,6 +25,7 @@ from src.server.mcp.tools.us_technical_tools import register_us_technical_tools
 from src.server.mcp.tools.us_sector_tools import register_us_sector_tools
 from src.server.mcp.tools.us_macro_tools import register_us_macro_tools
 from src.server.mcp.tools.sector_research_tools import register_sector_research_tools
+from src.server.mcp.tools.quantitative_tools import register_quantitative_tools
 
 
 @dataclass(frozen=True)
@@ -128,6 +129,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="行业研究编排（scope/universe/peer/evidence）",
         count=7,
+    ),
+    ToolGroup(
+        name="quantitative",
+        register=register_quantitative_tools,
+        enabled=True,
+        description="A股量化分析 (多条件选股/筛选)",
+        count=1,
     ),
 ]
 

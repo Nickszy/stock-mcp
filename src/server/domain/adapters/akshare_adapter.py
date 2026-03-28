@@ -3773,3 +3773,245 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.error(f"Failed to get stock institutional research: {e}")
             return {"data": [], "date": date, "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # A-share quantitative stock screener
+    # ------------------------------------------------------------------
+
+    async def screen_stocks(
+        self,
+        min_pe: Optional[float] = None,
+        max_pe: Optional[float] = None,
+        min_pb: Optional[float] = None,
+        max_pb: Optional[float] = None,
+        min_market_cap: Optional[float] = None,
+        max_market_cap: Optional[float] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        min_turnover_rate: Optional[float] = None,
+        max_turnover_rate: Optional[float] = None,
+        min_volume_ratio: Optional[float] = None,
+        max_volume_ratio: Optional[float] = None,
+        min_change_pct: Optional[float] = None,
+        max_change_pct: Optional[float] = None,
+        min_ytd_change: Optional[float] = None,
+        max_ytd_change: Optional[float] = None,
+        min_60d_change: Optional[float] = None,
+        max_60d_change: Optional[float] = None,
+        min_amplitude: Optional[float] = None,
+        max_amplitude: Optional[float] = None,
+        exchange: Optional[str] = None,
+        sector: Optional[str] = None,
+        sort_by: str = "market_cap",
+        sort_order: str = "desc",
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        """Quantitative stock screener for all A-share stocks.
+
+        Fetches the full A-share universe via stock_zh_a_spot_em and applies
+        user-supplied filters to produce a ranked result set.
+
+        Args:
+            min_pe / max_pe: PE (TTM) range
+            min_pb / max_pb: Price-to-Book range
+            min_market_cap / max_market_cap: Total market cap range (in CNY billions)
+            min_price / max_price: Latest price range
+            min_turnover_rate / max_turnover_rate: Turnover rate % range
+            min_volume_ratio / max_volume_ratio: Volume ratio range
+            min_change_pct / max_change_pct: Daily change % range
+            min_ytd_change / max_ytd_change: Year-to-date change % range
+            min_60d_change / max_60d_change: 60-day change % range
+            min_amplitude / max_amplitude: Amplitude % range
+            exchange: Filter by exchange ("SSE", "SZSE", "BSE", or None for all)
+            sector: Not yet implemented (reserved for future sector-level filtering)
+            sort_by: Sort field (market_cap, pe, pb, price, turnover_rate, volume_ratio, change_pct, ytd_change)
+            sort_order: "asc" or "desc"
+            limit: Max number of results (default 50, max 200)
+
+        Returns:
+            Dict with filtered results, total count, applied filters, and metadata.
+        """
+        limit = min(max(limit, 1), 200)
+
+        cache_key = "akshare:screen_stocks:snapshot"
+        cached_df = await self.cache.get(cache_key)
+
+        if cached_df is not None:
+            df = pd.DataFrame(cached_df)
+        else:
+            try:
+                df = await self._run(ak.stock_zh_a_spot_em)
+                if df is None or df.empty:
+                    return {
+                        "results": [],
+                        "total": 0,
+                        "filters_applied": {},
+                        "source": "akshare",
+                    }
+                # Cache raw snapshot for 5 minutes (screener runs frequently)
+                await self.cache.set(cache_key, df.to_dict(orient="records"), ttl=300)
+            except Exception as e:
+                self.logger.error(f"screen_stocks: failed to fetch snapshot: {e}")
+                return {
+                    "results": [],
+                    "total": 0,
+                    "filters_applied": {},
+                    "source": "akshare",
+                    "error": str(e),
+                }
+
+        # Normalize columns
+        col_map = {
+            "代码": "code",
+            "名称": "name",
+            "最新价": "price",
+            "涨跌幅": "change_pct",
+            "涨跌额": "change_amt",
+            "成交量": "volume",
+            "成交额": "turnover",
+            "振幅": "amplitude",
+            "最高": "high",
+            "最低": "low",
+            "今开": "open",
+            "昨收": "prev_close",
+            "量比": "volume_ratio",
+            "换手率": "turnover_rate",
+            "市盈率-动态": "pe",
+            "市净率": "pb",
+            "总市值": "market_cap",
+            "流通市值": "float_market_cap",
+            "60日涨跌幅": "change_60d",
+            "年初至今涨跌幅": "change_ytd",
+        }
+        df = df.rename(columns=col_map)
+
+        # Derive exchange from code
+        def _infer_exchange(code: str) -> str:
+            c = str(code)
+            if c.startswith("6"):
+                return "SSE"
+            elif c.startswith("0") or c.startswith("3"):
+                return "SZSE"
+            elif c.startswith("8") or c.startswith("4"):
+                return "BSE"
+            return "OTHER"
+
+        if "exchange" not in df.columns:
+            df["exchange"] = df["code"].apply(_infer_exchange)
+
+        # Convert market cap to billions for user-friendly filtering
+        df["market_cap_b"] = pd.to_numeric(df.get("market_cap", 0), errors="coerce").fillna(0) / 1e8
+
+        # Apply filters
+        filters_applied: Dict[str, Any] = {}
+
+        def _apply_range(df_in, col: str, lo, hi):
+            """Filter df_in by [lo, hi] on numeric col."""
+            if lo is not None:
+                df_in = df_in[pd.to_numeric(df_in.get(col), errors="coerce") >= lo]
+            if hi is not None:
+                df_in = df_in[pd.to_numeric(df_in.get(col), errors="coerce") <= hi]
+            return df_in
+
+        if min_pe is not None or max_pe is not None:
+            filters_applied["pe"] = {"min": min_pe, "max": max_pe}
+            # Only keep rows with positive PE (exclude loss-makers)
+            df = df[pd.to_numeric(df.get("pe"), errors="coerce") > 0]
+            df = _apply_range(df, "pe", min_pe, max_pe)
+
+        if min_pb is not None or max_pb is not None:
+            filters_applied["pb"] = {"min": min_pb, "max": max_pb}
+            df = _apply_range(df, "pb", min_pb, max_pb)
+
+        if min_market_cap is not None or max_market_cap is not None:
+            filters_applied["market_cap_b"] = {"min": min_market_cap, "max": max_market_cap}
+            df = _apply_range(df, "market_cap_b", min_market_cap, max_market_cap)
+
+        if min_price is not None or max_price is not None:
+            filters_applied["price"] = {"min": min_price, "max": max_price}
+            df = _apply_range(df, "price", min_price, max_price)
+
+        if min_turnover_rate is not None or max_turnover_rate is not None:
+            filters_applied["turnover_rate"] = {"min": min_turnover_rate, "max": max_turnover_rate}
+            df = _apply_range(df, "turnover_rate", min_turnover_rate, max_turnover_rate)
+
+        if min_volume_ratio is not None or max_volume_ratio is not None:
+            filters_applied["volume_ratio"] = {"min": min_volume_ratio, "max": max_volume_ratio}
+            df = _apply_range(df, "volume_ratio", min_volume_ratio, max_volume_ratio)
+
+        if min_change_pct is not None or max_change_pct is not None:
+            filters_applied["change_pct"] = {"min": min_change_pct, "max": max_change_pct}
+            df = _apply_range(df, "change_pct", min_change_pct, max_change_pct)
+
+        if min_ytd_change is not None or max_ytd_change is not None:
+            filters_applied["change_ytd"] = {"min": min_ytd_change, "max": max_ytd_change}
+            df = _apply_range(df, "change_ytd", min_ytd_change, max_ytd_change)
+
+        if min_60d_change is not None or max_60d_change is not None:
+            filters_applied["change_60d"] = {"min": min_60d_change, "max": max_60d_change}
+            df = _apply_range(df, "change_60d", min_60d_change, max_60d_change)
+
+        if min_amplitude is not None or max_amplitude is not None:
+            filters_applied["amplitude"] = {"min": min_amplitude, "max": max_amplitude}
+            df = _apply_range(df, "amplitude", min_amplitude, max_amplitude)
+
+        if exchange is not None:
+            exchange_upper = exchange.upper()
+            filters_applied["exchange"] = exchange_upper
+            df = df[df["exchange"] == exchange_upper]
+
+        # Sort
+        sort_col_map = {
+            "market_cap": "market_cap_b",
+            "pe": "pe",
+            "pb": "pb",
+            "price": "price",
+            "turnover_rate": "turnover_rate",
+            "volume_ratio": "volume_ratio",
+            "change_pct": "change_pct",
+            "ytd_change": "change_ytd",
+            "change_60d": "change_60d",
+            "amplitude": "amplitude",
+        }
+        actual_sort_col = sort_col_map.get(sort_by, "market_cap_b")
+        ascending = sort_order.lower() == "asc"
+
+        if actual_sort_col in df.columns:
+            df[actual_sort_col] = pd.to_numeric(df[actual_sort_col], errors="coerce")
+            df = df.sort_values(by=actual_sort_col, ascending=ascending, na_position="last")
+
+        total = len(df)
+        df = df.head(limit)
+
+        # Format output
+        results = []
+        for _, row in df.iterrows():
+            price = self._safe_float(row.get("price"))
+            market_cap_b = self._safe_float(row.get("market_cap_b"))
+
+            results.append({
+                "ticker": f"{row.get('exchange', 'SSE')}:{row.get('code', '')}",
+                "code": str(row.get("code", "")),
+                "name": str(row.get("name", "")),
+                "price": round(price, 2) if price is not None else None,
+                "change_pct": round(self._safe_float(row.get("change_pct")) or 0, 2),
+                "pe": round(self._safe_float(row.get("pe")) or 0, 2),
+                "pb": round(self._safe_float(row.get("pb")) or 0, 2),
+                "market_cap_b": round(market_cap_b, 2) if market_cap_b is not None else None,
+                "turnover_rate": round(self._safe_float(row.get("turnover_rate")) or 0, 2),
+                "volume_ratio": round(self._safe_float(row.get("volume_ratio")) or 0, 2),
+                "amplitude": round(self._safe_float(row.get("amplitude")) or 0, 2),
+                "change_ytd": round(self._safe_float(row.get("change_ytd")) or 0, 2),
+                "change_60d": round(self._safe_float(row.get("change_60d")) or 0, 2),
+            })
+
+        return {
+            "results": results,
+            "total": total,
+            "returned": len(results),
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "filters_applied": filters_applied,
+            "source": "akshare",
+        }
+

@@ -122,6 +122,8 @@ _MARKET_METHODS: Set[str] = {
     "get_stock_northbound_ranking",
     "get_stock_shareholder_changes",
     "get_stock_institutional_research",
+    # Quantitative screener
+    "screen_stocks",
 }
 
 

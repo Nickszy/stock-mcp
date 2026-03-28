@@ -54,6 +54,8 @@ class ComponentType(str, Enum):
     US_REVENUE_SEGMENTS = "us_revenue_segments"
     US_INSIDER_TRADING = "us_insider_trading"
     US_SHARE_STATISTICS = "us_share_statistics"
+    # Quantitative
+    STOCK_SCREENER = "stock_screener"
     # 其他
     OTHER = "other"
 
