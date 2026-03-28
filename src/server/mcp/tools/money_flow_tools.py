@@ -2652,3 +2652,234 @@ def register_money_flow_tools(mcp: FastMCP):
         except Exception as e:
             logger.error(f"Calculate risk metrics failed: {e}", exc_info=True)
             return {"error": str(e), "component_type": "risk_metrics"}
+
+    # ==================================================================
+    # Additional data domain tools (COL-140)
+    # ==================================================================
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_dragon_tiger_list(
+        start_date: str = "",
+        end_date: str = "",
+        days: int = 10,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取龙虎榜每日明细
+
+        查询龙虎榜(交易所公开披露的大额买卖信息)数据，包括：
+        买入/卖出营业部、买卖金额、上榜原因等。
+
+        用途:
+        - 跟踪游资/机构动向
+        - 发现主力资金关注的个股
+        - 判断市场情绪和热点
+
+        Args:
+            start_date: 开始日期 YYYYMMDD (可选)
+            end_date: 结束日期 YYYYMMDD (可选)
+            days: 最近N天 (默认10, 当start_date为空时使用)
+            ctx: FastMCP Context
+
+        Returns:
+            龙虎榜明细数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取龙虎榜数据", extra={"days": days})
+        try:
+            logger.info("MCP tool called: get_dragon_tiger_list", days=days)
+            result = await money_flow_use_cases.get_dragon_tiger_list(
+                start_date=start_date, end_date=end_date, days=days,
+            )
+            data = result.get("data", [])
+            summary_text = f"龙虎榜({len(data)}条记录)"
+
+            artifact = create_artifact_envelope(
+                component_type="dragon_tiger",
+                name="龙虎榜",
+                content=result,
+                description=summary_text,
+                metadata={"type": "dragon_tiger", "days": days},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get dragon tiger list failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "dragon_tiger"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_block_trade(
+        start_date: str = "",
+        end_date: str = "",
+        days: int = 10,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取大宗交易每日明细
+
+        查询大宗交易数据，包括成交价、成交量、成交额、折溢价率等。
+        大宗交易通常反映机构/大股东的交易行为。
+
+        用途:
+        - 跟踪机构/大股东交易动向
+        - 发现大额折价/溢价交易机会
+        - 判断重要股东减持/增持意图
+
+        Args:
+            start_date: 开始日期 YYYYMMDD (可选)
+            end_date: 结束日期 YYYYMMDD (可选)
+            days: 最近N天 (默认10)
+            ctx: FastMCP Context
+
+        Returns:
+            大宗交易明细数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取大宗交易数据", extra={"days": days})
+        try:
+            logger.info("MCP tool called: get_block_trade", days=days)
+            result = await money_flow_use_cases.get_block_trade(
+                start_date=start_date, end_date=end_date, days=days,
+            )
+            data = result.get("data", [])
+            summary_text = f"大宗交易({len(data)}条记录)"
+
+            artifact = create_artifact_envelope(
+                component_type="block_trade",
+                name="大宗交易",
+                content=result,
+                description=summary_text,
+                metadata={"type": "block_trade", "days": days},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get block trade failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "block_trade"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_convertible_bond(
+        bond_code: str = "",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取可转债实时行情
+
+        查询可转债市场实时行情数据，包括转股价值、纯债价值、转股溢价率等。
+
+        用途:
+        - 可转债投资分析
+        - 转股套利机会筛选
+        - 下修博弈/强赎博弈跟踪
+
+        Args:
+            bond_code: 可转债代码 (如 113050), 为空返回全市场
+            ctx: FastMCP Context
+
+        Returns:
+            可转债行情数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取可转债行情", extra={"bond_code": bond_code})
+        try:
+            logger.info("MCP tool called: get_convertible_bond", bond_code=bond_code)
+            result = await money_flow_use_cases.get_convertible_bond(bond_code=bond_code)
+
+            data = result.get("data", [])
+            summary_text = f"可转债行情({len(data)}只)"
+
+            artifact = create_artifact_envelope(
+                component_type="convertible_bond",
+                name=f"可转债: {bond_code or '全市场'}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "convertible_bond", "bond_code": bond_code},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get convertible bond failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "convertible_bond"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_fund_holdings(
+        fund_code: str = "",
+        quarter: str = "",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取基金重仓股数据
+
+        查询公募基金的前十大重仓股、持仓比例等信息，可以了解基金经理的投资偏好。
+
+        用途:
+        - 跟踪明星基金经理持仓变化
+        - 发现机构集中持有个股
+        - 行业配置分析
+
+        Args:
+            fund_code: 基金代码 (如 110011, 005827)
+            quarter: 季度 (如 20244 表示2024年第4季度)
+            ctx: FastMCP Context
+
+        Returns:
+            基金持仓数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取基金持仓", extra={"fund_code": fund_code, "quarter": quarter})
+        try:
+            logger.info("MCP tool called: get_fund_holdings", fund_code=fund_code, quarter=quarter)
+            result = await money_flow_use_cases.get_fund_holdings(
+                fund_code=fund_code, quarter=quarter,
+            )
+            data = result.get("data", [])
+            summary_text = f"基金持仓{' - ' + fund_code if fund_code else ''}({len(data)}条)"
+
+            artifact = create_artifact_envelope(
+                component_type="fund_holdings",
+                name=f"基金持仓: {fund_code or '全部'}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "fund_holdings", "fund_code": fund_code, "quarter": quarter},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get fund holdings failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "fund_holdings"}
+
+    @mcp.tool(tags={"money-flow"})
+    async def get_commodity_inventory(
+        symbol: str = "螺纹钢",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取商品期货库存/仓单数据
+
+        查询商品期货的仓库库存数据，是判断供需基本面变化的重要指标。
+
+        支持品种: 螺纹钢、铁矿石、铜、铝、锌、镍、锡、黄金、白银、原油等。
+
+        用途:
+        - 判断商品供需格局
+        - 库存变化趋势分析
+        - 期货合约价格辅助判断
+
+        Args:
+            symbol: 商品名称 (如 "螺纹钢", "铁矿石", "铜", "原油")
+            ctx: FastMCP Context
+
+        Returns:
+            商品库存数据
+        """
+        if ctx:
+            await ctx.info("🔧 获取商品库存", extra={"symbol": symbol})
+        try:
+            logger.info("MCP tool called: get_commodity_inventory", symbol=symbol)
+            result = await money_flow_use_cases.get_commodity_inventory(symbol=symbol)
+
+            data = result.get("data", [])
+            summary_text = f"{symbol}库存({len(data)}条记录)"
+
+            artifact = create_artifact_envelope(
+                component_type="commodity_inventory",
+                name=f"库存: {symbol}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "commodity_inventory", "symbol": symbol},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get commodity inventory failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "commodity_inventory"}

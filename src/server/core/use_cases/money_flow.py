@@ -369,3 +369,51 @@ async def calculate_risk_metrics(
     return await manager.calculate_risk_metrics(
         symbol=symbol, indicators=indicators, days=days
     )
+
+
+# ---- Additional Data Domains ----
+
+
+async def get_dragon_tiger_list(
+    start_date: str = "", end_date: str = "", days: int = 10,
+) -> Dict[str, Any]:
+    """Get dragon-tiger list (龙虎榜) daily details."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_dragon_tiger_list", start_date=start_date, days=days)
+    return await manager.get_dragon_tiger_list(
+        start_date=start_date, end_date=end_date, days=days
+    )
+
+
+async def get_block_trade(
+    start_date: str = "", end_date: str = "", days: int = 10,
+) -> Dict[str, Any]:
+    """Get block trade (大宗交易) daily details."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_block_trade", start_date=start_date, days=days)
+    return await manager.get_block_trade(
+        start_date=start_date, end_date=end_date, days=days
+    )
+
+
+async def get_convertible_bond(bond_code: str = "") -> Dict[str, Any]:
+    """Get convertible bond (可转债) market data."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_convertible_bond", bond_code=bond_code)
+    return await manager.get_convertible_bond(bond_code=bond_code)
+
+
+async def get_fund_holdings(
+    fund_code: str = "", quarter: str = "",
+) -> Dict[str, Any]:
+    """Get fund portfolio holdings data."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_fund_holdings", fund_code=fund_code, quarter=quarter)
+    return await manager.get_fund_holdings(fund_code=fund_code, quarter=quarter)
+
+
+async def get_commodity_inventory(symbol: str = "螺纹钢") -> Dict[str, Any]:
+    """Get commodity futures inventory/warehouse receipt data."""
+    manager = Container.market_gateway()
+    logger.info("UseCase: get_commodity_inventory", symbol=symbol)
+    return await manager.get_commodity_inventory(symbol=symbol)

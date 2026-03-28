@@ -632,3 +632,49 @@ class TestQuantitativeData:
         if metrics["volatility_annual"] is not None:
             assert metrics["volatility_annual"] > 0, \
                 f"Volatility should be positive, got {metrics['volatility_annual']}"
+
+
+# ---- 11. 新增数据域 (龙虎榜/大宗交易/可转债/基金持仓/商品库存) ----
+
+class TestAdditionalDataDomains:
+    """新增数据域质量测试."""
+
+    @pytest.mark.asyncio
+    async def test_dragon_tiger_list(self, adapter):
+        """龙虎榜数据."""
+        result = await _retry(adapter.get_dragon_tiger_list, days=5)
+        assert "data" in result
+        data = result.get("data", [])
+        assert isinstance(data, list)
+
+    @pytest.mark.asyncio
+    async def test_block_trade(self, adapter):
+        """大宗交易数据."""
+        result = await _retry(adapter.get_block_trade, days=5)
+        assert "data" in result
+        data = result.get("data", [])
+        assert isinstance(data, list)
+
+    @pytest.mark.asyncio
+    async def test_convertible_bond(self, adapter):
+        """可转债行情数据."""
+        result = await _retry(adapter.get_convertible_bond)
+        assert "data" in result
+        data = result.get("data", [])
+        assert isinstance(data, list)
+
+    @pytest.mark.asyncio
+    async def test_fund_holdings(self, adapter):
+        """基金持仓数据."""
+        result = await _retry(adapter.get_fund_holdings, fund_code="110011")
+        assert "data" in result
+        data = result.get("data", [])
+        assert isinstance(data, list)
+
+    @pytest.mark.asyncio
+    async def test_commodity_inventory(self, adapter):
+        """商品期货库存数据."""
+        result = await _retry(adapter.get_commodity_inventory, symbol="螺纹钢")
+        assert "data" in result
+        data = result.get("data", [])
+        assert isinstance(data, list)
