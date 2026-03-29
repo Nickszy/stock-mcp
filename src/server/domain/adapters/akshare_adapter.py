@@ -5411,6 +5411,213 @@ class AkshareAdapter(BaseDataAdapter):
             return {"results": [], "symbol": symbol, "source": "akshare", "error": str(e)}
 
     # ------------------------------------------------------------------
+    # ETF Fact Pack
+    # ------------------------------------------------------------------
+
+    async def get_etf_fact_pack(self, symbol: str) -> Dict[str, Any]:
+        """Aggregate ETF fact pack: master, realtime, performance, flow, technical.
+
+        Args:
+            symbol: ETF code (e.g. '510300', '159919')
+        """
+        symbol = self._to_ak_code(symbol)
+        import asyncio as _asyncio
+
+        entity = {"symbol": symbol, "type": "etf", "source": "akshare"}
+        facts: Dict[str, Any] = {}
+        source_trace: Dict[str, str] = {}
+        coverage: Dict[str, str] = {}
+        missing_fields: List[str] = []
+        categories_total = 5
+
+        async def _fetch_master():
+            try:
+                detail = await self.get_etf_detail(symbol)
+                d = detail.get("detail", {})
+                if d and not detail.get("error"):
+                    facts["master"] = d
+                    source_trace["master"] = "akshare: fund_etf_fund_daily_em"
+                    coverage["master"] = "complete"
+                else:
+                    missing_fields.append("master")
+                    coverage["master"] = "missing"
+            except Exception as e:
+                source_trace["master"] = f"error: {e}"
+                coverage["master"] = "error"
+
+        async def _fetch_realtime():
+            try:
+                df = await self._run(ak.fund_etf_spot_em)
+                if df is not None and not df.empty:
+                    code_col = "代码" if "代码" in df.columns else df.columns[0]
+                    target = df[df[code_col].astype(str) == symbol]
+                    if not target.empty:
+                        row = target.iloc[0]
+                        col_map = {
+                            "名称": "name", "最新价": "price",
+                            "涨跌额": "change", "涨跌幅": "change_pct",
+                            "成交量": "volume", "成交额": "amount",
+                            "开盘价": "open", "最高价": "high",
+                            "最低价": "low", "昨收": "prev_close",
+                            "IOPV实时估值": "iopv", "总市值": "total_market_cap",
+                        }
+                        rt = {}
+                        for cn, en in col_map.items():
+                            if cn in row.index:
+                                v = row[cn]
+                                rt[en] = v.item() if hasattr(v, "item") else v
+                        facts["realtime"] = rt
+                        source_trace["realtime"] = "akshare: fund_etf_spot_em"
+                        coverage["realtime"] = "complete"
+                        return
+                missing_fields.append("realtime")
+                coverage["realtime"] = "missing"
+            except Exception as e:
+                source_trace["realtime"] = f"error: {e}"
+                coverage["realtime"] = "error"
+
+        async def _fetch_performance():
+            try:
+                perf = await self.get_etf_performance(symbol, period="daily", limit=60)
+                results = perf.get("results", [])
+                if results and not perf.get("error"):
+                    # Derive summary stats from recent data
+                    latest = results[-1] if results else {}
+                    closes = [r.get("close", 0) for r in results if r.get("close")]
+                    if len(closes) >= 2:
+                        chg_1d = (closes[-1] - closes[-2]) / closes[-2] * 100 if closes[-2] else 0
+                        chg_5d = (closes[-1] - closes[-6]) / closes[-6] * 100 if len(closes) >= 6 and closes[-6] else 0
+                        chg_20d = (closes[-1] - closes[-21]) / closes[-21] * 100 if len(closes) >= 21 and closes[-21] else 0
+                    else:
+                        chg_1d = chg_5d = chg_20d = None
+                    facts["performance"] = {
+                        "latest_date": latest.get("date", ""),
+                        "latest_close": latest.get("close"),
+                        "latest_volume": latest.get("volume"),
+                        "change_pct_1d": round(chg_1d, 2) if chg_1d is not None else None,
+                        "change_pct_5d": round(chg_5d, 2) if chg_5d is not None else None,
+                        "change_pct_20d": round(chg_20d, 2) if chg_20d is not None else None,
+                        "data_points": len(results),
+                        "history": results[-10:],
+                    }
+                    source_trace["performance"] = "akshare: fund_etf_hist_em"
+                    coverage["performance"] = "complete"
+                else:
+                    missing_fields.append("performance")
+                    coverage["performance"] = "missing"
+            except Exception as e:
+                source_trace["performance"] = f"error: {e}"
+                coverage["performance"] = "error"
+
+        async def _fetch_flow():
+            try:
+                flow = await self.get_etf_flow(symbol, days=30)
+                data = flow.get("data", [])
+                if data and not flow.get("error"):
+                    facts["flow"] = data[0] if len(data) == 1 else data
+                    source_trace["flow"] = "akshare: fund_etf_spot_em"
+                    coverage["flow"] = "complete"
+                else:
+                    missing_fields.append("flow")
+                    coverage["flow"] = "missing"
+            except Exception as e:
+                source_trace["flow"] = f"error: {e}"
+                coverage["flow"] = "error"
+
+        async def _fetch_technical():
+            try:
+                perf = await self.get_etf_performance(symbol, period="daily", limit=120)
+                results = perf.get("results", [])
+                if len(results) < 30:
+                    missing_fields.append("technical")
+                    coverage["technical"] = "missing"
+                    return
+                closes = [r.get("close", 0) for r in results if r.get("close")]
+                if len(closes) < 30:
+                    missing_fields.append("technical")
+                    coverage["technical"] = "missing"
+                    return
+                import numpy as np
+                s = np.array(closes, dtype=float)
+                # RSI(14)
+                delta = np.diff(s)
+                gain = np.where(delta > 0, delta, 0)
+                loss = np.where(delta < 0, -delta, 0)
+                avg_gain = np.mean(gain[-14:])
+                avg_loss = np.mean(loss[-14:])
+                rs = avg_gain / avg_loss if avg_loss != 0 else 100
+                rsi14 = 100 - (100 / (1 + rs))
+                # MACD
+                ema12 = pd.Series(s).ewm(span=12, adjust=False).mean()
+                ema26 = pd.Series(s).ewm(span=26, adjust=False).mean()
+                dif = ema12 - ema26
+                dea = dif.ewm(span=9, adjust=False).mean()
+                macd_bar = (dif - dea) * 2
+                # Bollinger
+                ma20 = np.mean(s[-20:])
+                std20 = np.std(s[-20:])
+                upper = ma20 + 2 * std20
+                lower = ma20 - 2 * std20
+                last_close = s[-1]
+                # Signal summary
+                signals = {}
+                if rsi14 > 70:
+                    signals["rsi"] = f"RSI({rsi14:.1f}) 超买区"
+                elif rsi14 < 30:
+                    signals["rsi"] = f"RSI({rsi14:.1f}) 超卖区"
+                else:
+                    signals["rsi"] = f"RSI({rsi14:.1f}) 中性区"
+                if len(dif) >= 2:
+                    if dif.iloc[-2] <= dea.iloc[-2] and dif.iloc[-1] > dea.iloc[-1]:
+                        signals["macd"] = "MACD金叉"
+                    elif dif.iloc[-2] >= dea.iloc[-2] and dif.iloc[-1] < dea.iloc[-1]:
+                        signals["macd"] = "MACD死叉"
+                    else:
+                        signals["macd"] = "MACD无交叉"
+                if last_close > upper:
+                    signals["boll"] = "突破上轨"
+                elif last_close < lower:
+                    signals["boll"] = "跌破下轨"
+                else:
+                    signals["boll"] = "布林带内"
+                facts["technical"] = {
+                    "rsi14": round(float(rsi14), 2),
+                    "macd_dif": round(float(dif.iloc[-1]), 4),
+                    "macd_dea": round(float(dea.iloc[-1]), 4),
+                    "macd_bar": round(float(macd_bar.iloc[-1]), 4),
+                    "boll_upper": round(float(upper), 4),
+                    "boll_mid": round(float(ma20), 4),
+                    "boll_lower": round(float(lower), 4),
+                    "signals": signals,
+                }
+                source_trace["technical"] = "akshare: derived from fund_etf_hist_em"
+                coverage["technical"] = "complete"
+            except Exception as e:
+                source_trace["technical"] = f"error: {e}"
+                coverage["technical"] = "error"
+
+        await _asyncio.gather(
+            _fetch_master(),
+            _fetch_realtime(),
+            _fetch_performance(),
+            _fetch_flow(),
+            _fetch_technical(),
+        )
+
+        categories_fetched = sum(
+            1 for v in coverage.values() if v in ("complete", "partial")
+        )
+        return {
+            "entity": entity,
+            "facts": facts,
+            "source_trace": source_trace,
+            "coverage": coverage,
+            "categories_fetched": categories_fetched,
+            "categories_total": categories_total,
+            "missing_fields": missing_fields,
+        }
+
+    # ------------------------------------------------------------------
     # COL-142: 量价因子 / 相关性 / 组合分析
     # ------------------------------------------------------------------
 

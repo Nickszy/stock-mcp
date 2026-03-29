@@ -735,3 +735,152 @@ def register_fact_pack_tools(mcp: FastMCP):
                 source="yahoo",
                 description=f"获取美股事实包失败: {e}",
             )
+
+    # ------------------------------------------------------------------
+    # get_etf_fact_pack — ETF事实包
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"fact-pack", "etf"})
+    async def get_etf_fact_pack(
+        symbol: str,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取ETF事实包(Fact Pack)：一次调用聚合全维度ETF结构化事实数据。
+
+        聚合 5 大事实类别: ETF主档、实时行情、历史表现、资金流/申赎、技术信号。
+        返回统一结构: entity + facts + source_trace + coverage。
+
+        Typical use cases:
+        - "给我 510300 的完整ETF事实包"
+        - "沪深300ETF的最新行情+申赎+技术信号"
+        - "查一下 159919 的规模+涨跌幅+RSI/MACD信号"
+
+        Args:
+            symbol: ETF代码 (如 510300, 159919)
+            ctx: FastMCP Context.
+
+        Returns:
+            ETF事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        """
+        if ctx:
+            await ctx.info(f"获取ETF事实包: {symbol}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_etf_fact_pack", symbol=symbol)
+
+            gateway = Container.market_gateway()
+            result = await gateway.get_etf_fact_pack(symbol=symbol)
+
+            elapsed = time.perf_counter() - t0
+            categories_fetched = result.get("categories_fetched", 0)
+            categories_total = result.get("categories_total", 5)
+            coverage = result.get("coverage", {})
+            missing = result.get("missing_fields", [])
+            facts = result.get("facts", {})
+
+            # Get name from master or realtime
+            master = facts.get("master", {})
+            rt = facts.get("realtime", {})
+            name = rt.get("name", master.get("名称", symbol))
+
+            summary = (
+                f"ETF事实包: {name}({symbol}) "
+                f"[{categories_fetched}/{categories_total}类] "
+                f"(耗时 {elapsed:.1f}s)"
+            )
+
+            # Build structured Markdown fact view
+            md = f"# ETF事实包: {name}({symbol})\n\n"
+            md += f"**已获取**: {categories_fetched}/{categories_total} 类"
+            md += f" | **耗时**: {elapsed:.1f}s\n\n"
+
+            if coverage:
+                complete = sum(1 for v in coverage.values() if v == "complete")
+                partial = sum(1 for v in coverage.values() if v == "partial")
+                md += f"**覆盖率**: {complete}完整 + {partial}部分 / {categories_total}类\n\n"
+
+            # Master
+            if master:
+                md += "## ETF主档\n\n"
+                for k, v in master.items():
+                    md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Realtime
+            if rt:
+                md += "## 实时行情\n\n"
+                for k, v in rt.items():
+                    md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Performance
+            perf = facts.get("performance", {})
+            if perf:
+                md += "## 历史表现\n\n"
+                for k, v in perf.items():
+                    if k == "history":
+                        md += f"- **近10日行情**: {len(v)}条\n"
+                    else:
+                        md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Flow
+            flow = facts.get("flow", {})
+            if flow:
+                md += "## 资金流/申赎\n\n"
+                if isinstance(flow, dict):
+                    for k, v in flow.items():
+                        md += f"- **{k}**: {v}\n"
+                elif isinstance(flow, list):
+                    for item in flow[:5]:
+                        md += f"- {item}\n"
+                md += "\n"
+
+            # Technical
+            tech = facts.get("technical", {})
+            if tech:
+                md += "## 技术信号\n\n"
+                signals = tech.get("signals", {})
+                if signals:
+                    for indicator, signal in signals.items():
+                        md += f"- **{indicator}**: {signal}\n"
+                md += f"- **RSI(14)**: {tech.get('rsi14', '-')}\n"
+                md += f"- **MACD DIF**: {tech.get('macd_dif', '-')}\n"
+                md += f"- **MACD DEA**: {tech.get('macd_dea', '-')}\n"
+                md += f"- **BOLL上轨**: {tech.get('boll_upper', '-')}\n"
+                md += f"- **BOLL下轨**: {tech.get('boll_lower', '-')}\n"
+                md += "\n"
+
+            # Source trace
+            trace = result.get("source_trace", {})
+            if trace:
+                md += "## 数据溯源\n\n"
+                md += "| 类别 | 详情 |\n"
+                md += "|------|------|\n"
+                for cat, info in trace.items():
+                    md += f"| {cat} | {info} |\n"
+                md += "\n"
+
+            if missing:
+                md += f"## 缺失类别\n\n> {', '.join(missing)}\n"
+
+            return create_standard_artifact_response(
+                summary=summary,
+                component_type=ComponentType.TABLE,
+                name=f"ETF事实包: {name}({symbol})",
+                data=result,
+                source="akshare",
+                description=summary,
+                markdown=md,
+                symbol=symbol,
+            )
+
+        except Exception as e:
+            logger.error(f"get_etf_fact_pack failed: {e}")
+            return create_standard_artifact_response(
+                summary=f"获取ETF事实包失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="ETF事实包错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取ETF事实包失败: {e}",
+            )
