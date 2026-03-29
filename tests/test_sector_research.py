@@ -27,7 +27,7 @@ def _build_client(monkeypatch: pytest.MonkeyPatch):
 
 def _payload(response):
     """Extract the inner data payload from rest_response envelope."""
-    return response.json()["data"]["data"]
+    return response.json()["data"]
 
 
 # ---------------------------------------------------------------------------

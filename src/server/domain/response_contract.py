@@ -107,18 +107,52 @@ def rest_response(
     source: Optional[str] = None,
     **contract_kwargs: Any,
 ) -> Dict[str, Any]:
-    """Convenience wrapper for REST endpoints.
+    """Build a flat REST envelope for API endpoints.
 
-    Returns the standard contract wrapped in the existing REST envelope
-    ``{"code": 0, "message": "success", "data": <contract>}``.
+    Returns ``{"code": 0, "message": "success", "data": <flat_payload>}``.
 
-    This keeps backward compatibility with the money_flow route pattern
-    while embedding the full contract inside ``data``.
+    The payload is *flattened*: metadata (source, symbol, etc.) sits at the
+    same level as the actual data fields.  No inner ``data`` wrapping —
+    front-end simply accesses ``response.data.flow``, ``response.data.income``,
+    etc.  without double-nesting.
+
+    When *data* is a dict its keys are spread directly into the payload
+    alongside metadata.  When *data* is a list or scalar it is placed under
+    a ``"data"`` key (since it can't be spread).
     """
-    contract = create_data_response(
-        data, symbol=symbol, source=source, **contract_kwargs
-    )
-    return {"code": 0, "message": "success", "data": contract}
+    payload: Dict[str, Any] = {}
+
+    # Metadata fields
+    if symbol is not None:
+        payload["symbol"] = symbol
+    for k, v in contract_kwargs.items():
+        if v is not None:
+            payload[k] = v
+
+    # Source
+    provider = source
+    if provider is None and isinstance(data, dict):
+        _src = data.get("source")
+        if isinstance(_src, str) and _src:
+            provider = _src
+        elif isinstance(_src, dict):
+            provider = _src.get("provider")
+    if symbol is None and isinstance(data, dict):
+        _sym = data.get("symbol") or data.get("ticker") or data.get("fund_code")
+        if isinstance(_sym, str) and _sym:
+            payload["symbol"] = _sym
+    payload["source"] = {
+        "provider": provider or "unknown",
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Core data: spread dict keys or wrap non-dict
+    if isinstance(data, dict):
+        payload.update(data)
+    else:
+        payload["data"] = data
+
+    return {"code": 0, "message": "success", "data": payload}
 
 
 def maybe_markdown_response(

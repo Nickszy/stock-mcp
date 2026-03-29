@@ -130,6 +130,7 @@ def test_rest_response_wrapper():
     assert resp["code"] == 0
     assert resp["message"] == "success"
     assert "data" in resp
+    # list data is wrapped under "data" key inside payload
     assert resp["data"]["data"] == [1, 2, 3]
     assert resp["data"]["symbol"] == "600519"
     assert resp["data"]["source"]["provider"] == "akshare"
@@ -144,6 +145,8 @@ def test_rest_response_backward_compat():
     # Must have the same top-level keys as the old manual wrapper
     assert set(resp.keys()) == {"code", "message", "data"}
     assert resp["code"] == 0
+    # dict data is flattened into payload
+    assert resp["data"]["flow"] == []
 
 
 # ---------------------------------------------------------------------------

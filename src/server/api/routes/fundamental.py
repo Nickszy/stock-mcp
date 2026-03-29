@@ -43,7 +43,7 @@ async def get_financials(
             symbol, period=period, periods=periods
         )
 
-        return rest_response(data=result["data"], symbol=result.get("symbol"),
+        return rest_response(data=result, symbol=result.get("symbol"),
                              source=result.get("source", {}).get("provider"),
                              period=period, limit=periods)
 

@@ -349,13 +349,12 @@ class TestFactPackRestRoute:
 
         assert result["code"] == 0
         payload = result["data"]
-        # rest_response wraps: {symbol, source, data: <normalized>}
+        # rest_response flattens: {symbol, source, entity, facts, ...}
         assert payload["symbol"] == "600519"
-        inner = payload["data"]
-        assert "entity" in inner
-        assert inner["entity"]["symbol"] == "600519"
-        assert "facts" in inner
-        facts = inner["facts"]
+        assert "entity" in payload
+        assert payload["entity"]["symbol"] == "600519"
+        assert "facts" in payload
+        facts = payload["facts"]
         assert "valuation" in facts
         assert facts["valuation"]["pe_ttm"] == 30.5
         assert "profitability" in facts
