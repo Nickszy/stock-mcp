@@ -322,7 +322,15 @@ def register_sector_research_tools(mcp: FastMCP):
         angle: str = "neutral",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Normalize sector research scope for downstream MCP calls."""
+        """规范化行业研究范围（行业研究流程的入口前置步骤）.
+
+        WHEN TO USE: 用户提到行业/板块/sector时（如"分析半导体行业"、"新能源板块怎么样"），
+        在调用其他sector工具之前必须先调用本工具确认范围和市场。
+        CONCEPT: 将用户模糊的行业名称规范化为结构化的研究scope，包含市场、深度、样本数、时间窗口。
+        DIFFERENTIATION: 本工具不返回任何数据，仅做范围规范化，是所有sector_research工具链的prerequisite。
+        不要用本工具替代build_sector_universe（本工具不构建股票池）。
+        next_recommended_tools: build_sector_universe, build_sector_structure_snapshot
+        """
         detected_market = _detect_market(market, sector_name, None)
         safe_peer_count = max(5, min(int(peer_count), 30))
         safe_horizon = max(30, min(int(horizon_days), 3650))
@@ -377,10 +385,15 @@ def register_sector_research_tools(mcp: FastMCP):
         max_companies: int = 10,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Build a research universe for a sector.
+        """构建行业研究股票池（获取行业内代表性公司列表）.
 
-        For CN market, best-effort auto constituents retrieval is attempted via
-        Tushare (ths_index + ths_member). For US market, pass symbols explicitly.
+        WHEN TO USE: 需要获取某个行业/板块的成分股列表时调用。CN市场支持通过Tushare自动获取板块成分股，
+        US市场需要手动传入symbols。典型触发："半导体板块有哪些龙头"、"列出AI行业的主要公司"。
+        CONCEPT: 行业股票池（universe）是后续同业对比、证据包、价值链分类的基础数据。
+        CN市场通过同花顺板块指数成员获取，US市场依赖用户手动提供ticker列表。
+        DIFFERENTIATION: 本工具返回的是公司列表（ticker+名称），不包含估值/行情数据。
+        如需估值对比请用build_peer_benchmark_table，如需综合证据请用build_sector_evidence_pack。
+        next_recommended_tools: build_peer_benchmark_table, classify_value_chain, build_sector_evidence_pack
         """
         symbols = symbols or []
         detected_market = _detect_market(market, sector_name, symbols)
@@ -459,7 +472,17 @@ def register_sector_research_tools(mcp: FastMCP):
         market: str = "auto",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Build peer benchmark table for a list of companies."""
+        """构建同业估值对比表（PE/PB/EV-EBITDA/市值/营收增速）.
+
+        WHEN TO USE: 需要在同一行业内对比多家公司的估值水平时调用。
+        典型触发："比较这几家半导体公司的估值"、"同行对比"、"同业benchmark"。
+        CONCEPT: 同业对比表展示行业内各公司的核心估值指标（PE、PB、EV/EBITDA）和基本面指标（市值、营收增速、EBITDA利润率），
+        用于判断个股在行业中的相对估值位置。
+        DIFFERENTIATION: 本工具聚焦个股级别的估值对比，需要预先提供symbols列表。
+        与build_sector_universe不同（universe只返回公司列表不含估值数据），
+        与build_sector_structure_snapshot不同（snapshot是行业级别的宏观信号，本工具是公司级别的微观对比）。
+        next_recommended_tools: classify_value_chain, build_sector_evidence_pack
+        """
         if not symbols:
             summary = "构建同业对比失败: symbols 不能为空"
             artifact = create_artifact_envelope(
@@ -508,7 +531,17 @@ def register_sector_research_tools(mcp: FastMCP):
         market: str = "auto",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Classify sector peers into upstream/midstream/downstream buckets."""
+        """行业价值链分类（将公司分为上游/中游/下游）.
+
+        WHEN TO USE: 需要分析行业内公司在产业链中的位置分布时调用。
+        典型触发："这个行业产业链怎么分布"、"上游中游下游"、"value chain分析"、"产业链梳理"。
+        CONCEPT: 基于公司名称、主营业务描述和行业名称中的关键词，推断每家公司在产业链中的位置
+        （上游/原材料、中游/制造、下游/终端），并给出置信度。
+        CN市场会结合主营业务构成数据提高分类准确性。
+        DIFFERENTIATION: 本工具做的是产业链位置分类，不是估值分析（用build_peer_benchmark_table），
+        也不是行业宏观信号（用build_sector_structure_snapshot）。它是行业结构性分析的一部分。
+        next_recommended_tools: build_peer_benchmark_table, build_sector_evidence_pack
+        """
         if not symbols:
             summary = "价值链分类失败: symbols 不能为空"
             artifact = create_artifact_envelope(
@@ -605,7 +638,19 @@ def register_sector_research_tools(mcp: FastMCP):
         include_filings: bool = True,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Build structured evidence pack for sector-overview skill."""
+        """构建行业综合证据包（一键聚合行业快照+同业对比+公告数据）.
+
+        WHEN TO USE: 需要快速获取某个行业的全面数据概览时调用，是行业研究报告的数据基础。
+        典型触发："帮我全面分析XX行业"、"行业overview"、"行业全景"、
+        或当用户要求写行业研究报告时作为数据收集步骤。
+        CONCEPT: 证据包聚合了三个维度的数据：(1)行业快照（CN含趋势+估值，US含ETF分析），
+        (2)同业估值对比表，(3)公告/SEC文件摘要。是build_sector_report技能的核心数据源。
+        DIFFERENTIATION: 本工具是聚合型工具，内部调用多个子工具。
+        如只需单一维度数据，请直接用专用工具：行业趋势用get_sector_trend（money_flow_tools），
+        同业对比用build_peer_benchmark_table，估值百分位用get_sector_valuation_metrics（money_flow_tools）。
+        本工具与build_sector_structure_snapshot不同：evidence_pack提供原始数据，snapshot提供结构化信号评分。
+        next_recommended_tools: build_sector_structure_snapshot, quality_gate_sector_report
+        """
         symbols = symbols or []
         detected_market = _detect_market(market, sector_name, symbols)
         safe_days = max(30, min(int(days), 750))
@@ -750,13 +795,18 @@ def register_sector_research_tools(mcp: FastMCP):
         days: int = 90,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Build compact sector structure snapshot for decision framing.
+        """行业结构快照（价格动量+资金流+估值评分的综合信号判断）.
 
-        Snapshot dimensions:
-        - price momentum
-        - capital flow signal
-        - valuation regime
-        - aggregate structure score (-3 ~ +3)
+        WHEN TO USE: 需要快速判断某个行业当前的整体状态（看多/看空/中性）时调用。
+        典型触发："这个行业现在怎么样"、"板块强度如何"、"行业是否有投资机会"、
+        "行业结构分析"、"sector health check"。
+        CONCEPT: 从三个维度评估行业结构：(1)价格动量（涨跌幅），(2)资金流向信号（流入/流出），
+        (3)估值水平（低估/高估），最终输出-3到+3的结构评分。CN市场数据完整，US市场主要依赖ETF价格动量。
+        DIFFERENTIATION: 本工具输出的是结构化信号评分（定性判断），不是原始数据。
+        与build_sector_evidence_pack不同（evidence_pack提供原始数据，本工具提供信号评分）。
+        与money_flow_tools中的get_sector_trend不同（trend只看价格走势，本工具综合多维度）。
+        与get_market_money_flow不同（market_money_flow是跨行业排名对比，本工具是单行业深度评分）。
+        next_recommended_tools: build_peer_benchmark_table, build_sector_evidence_pack
         """
         detected_market = _detect_market(market, sector_name, None)
         safe_days = max(30, min(int(days), 365))
@@ -887,7 +937,17 @@ def register_sector_research_tools(mcp: FastMCP):
         require_question: bool = True,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Run quality gate checks for sector-overview report draft."""
+        """行业研究报告质量门控（检查报告完整性和数据支撑）.
+
+        WHEN TO USE: 在生成行业研究报告后，提交给用户之前必须调用本工具进行质量检查。
+        典型触发：研究报告初稿完成后、调用sector-overview技能输出报告前、用户要求检查报告质量。
+        CONCEPT: 从多个维度检查报告质量：是否包含必要章节（执行摘要/风险/结论），
+        是否有足够的数字事实支撑（>=min_numeric_facts），是否有同业数据、公告数据，
+        是否以提问结尾引导下一步讨论。
+        DIFFERENTIATION: 本工具不生成任何内容，仅做质量检查。是行业研究工作流的最后一步。
+        与build_sector_evidence_pack配合使用（evidence_pack提供数据，quality_gate验证报告质量）。
+        next_recommended_tools: (工作流终点，通过后可直接呈现给用户)
+        """
         evidence_pack = evidence_pack or {}
         min_numeric = max(3, min(int(min_numeric_facts), 30))
 

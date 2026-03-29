@@ -38,20 +38,13 @@ def register_us_technical_tools(mcp: FastMCP):
         days: int = 60,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get technical indicators for a US stock.
+        """美股技术指标分析。
 
-        Calculates MA(5/20/60), RSI(14), MACD, Bollinger Bands, ATR
-        over the specified look-back window using daily OHLCV data.
-
-        Args:
-            symbol: US stock ticker. Format: EXCHANGE:SYMBOL
-                Examples: NASDAQ:AAPL, NYSE:TSLA, NASDAQ:NVDA
-            days: Look-back window in calendar days (default 60, min 30)
-            ctx: FastMCP Context
-
-        Returns:
-            ArtifactResponse with indicator series and LLM summary
-        """
+WHEN TO USE: 用户要看美股单只股票的 MA/RSI/MACD/布林带/ATR，或先做技术面快照判断时使用；输入通常是“苹果 RSI 怎么样”“NVDA 技术指标如何”。
+CONCEPT: 基于价格与成交量衍生的技术指标，用于观察趋势、动量、波动和超买超卖状态。
+DIFFERENTIATION: 这是美股专用指标工具；A股技术指标请用 technical_tools.py 中的 get_technical_indicators。若只需K线用 get_us_price_history，若想要整合结论用 us_technical_analysis_summary。
+next_recommended_tools: get_us_price_history, get_us_volume_analysis, us_technical_analysis_summary
+"""
         if ctx:
             await ctx.info(f"📉 计算美股技术指标: {symbol} ({days}d)")
         try:
@@ -131,23 +124,13 @@ def register_us_technical_tools(mcp: FastMCP):
         days: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Analyze volume metrics for a US stock.
+        """美股量价关系分析。
 
-        Returns average volume (20d), current relative volume (RVol),
-        OBV trend direction, and daily volume bar chart data.
-
-        High RVol (>2x) with price breakout = strong signal.
-        OBV divergence (price up, OBV down) = distribution warning.
-
-        Args:
-            symbol: US stock ticker. Format: EXCHANGE:SYMBOL
-                Examples: NASDAQ:AAPL, NYSE:SPY, NASDAQ:QQQ
-            days: Analysis window in calendar days (default 30)
-            ctx: FastMCP Context
-
-        Returns:
-            ArtifactResponse with volume metrics and LLM summary
-        """
+WHEN TO USE: 用户关心放量突破、缩量回调、OBV 背离、相对成交量异常时使用；常见问法如“TSLA 今天是不是放量”“QQQ 量价是否配合上涨”。
+CONCEPT: 量价分析用成交量、相对成交量(RVol)和 OBV 判断资金参与度与趋势确认度。
+DIFFERENTIATION: 这是美股专用的量能工具；不直接给全套技术指标，也不同于仅返回K线的 get_us_price_history。A股技术分析请用 technical_tools.py。
+next_recommended_tools: get_us_technical_indicators, get_us_price_history, us_technical_analysis_summary
+"""
         if ctx:
             await ctx.info(f"📊 量价分析: {symbol} ({days}d)")
         try:
@@ -213,21 +196,13 @@ def register_us_technical_tools(mcp: FastMCP):
         interval: str = "1d",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get OHLCV price history (K-line data) for a US stock.
+        """美股K线历史数据 (OHLCV)。
 
-        Returns open, high, low, close, volume bars for each period.
-        Use interval='1wk' for weekly bars, '1mo' for monthly.
-
-        Args:
-            symbol: US stock ticker. Format: EXCHANGE:SYMBOL
-                Examples: NASDAQ:AAPL, NYSE:TSLA, NASDAQ:QQQ
-            days: Number of calendar days to look back (default 60)
-            interval: Bar interval: 1d (daily), 1wk (weekly), 1mo (monthly)
-            ctx: FastMCP Context
-
-        Returns:
-            ArtifactResponse with OHLCV bars and LLM summary
-        """
+WHEN TO USE: 用户要画K线图、看历史走势、找区间高低点时使用；常见问法如“AAPL 最近60天K线”“TSLA周线数据”。
+CONCEPT: OHLCV(开盘/最高/最低/收盘/成交量)是技术分析的基础数据，按日/周/月聚合。
+DIFFERENTIATION: 这是美股专用K线工具；返回原始价格数据而非衍生指标。需要技术指标请用 get_us_technical_indicators。A股K线用 asset_tools.py 的 get_kline_data。
+next_recommended_tools: get_us_technical_indicators, get_us_volume_analysis
+"""
         if ctx:
             await ctx.info(f"📈 获取K线数据: {symbol} ({days}d/{interval})")
         try:
