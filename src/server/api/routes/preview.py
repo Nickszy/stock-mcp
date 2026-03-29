@@ -45,13 +45,17 @@ _METHOD_CATEGORIES: Dict[str, List[str]] = {
         # 市场广度/情绪
         "get_market_breadth", "get_dragon_tiger_list", "get_block_trade",
         "get_margin_trading", "get_convertible_bond",
+        "get_stock_northbound_ranking",
+        # 美股宏观
+        "get_us_economic_growth", "get_us_inflation_employment",
+        "get_us_interest_rates", "get_us_market_overview",
     ],
     "行业 Sector": [
         # 行业数据
         "get_industry_ranking", "get_concept_ranking",
         "get_sector_trend", "get_sector_money_flow_history",
         "get_sector_pe_pb_historical", "get_sector_valuation_metrics",
-        "resolve_sector",
+        "resolve_sector", "get_factor_ranking",
     ],
     "A股个股 A-Share": [
         # 基本面
@@ -66,6 +70,10 @@ _METHOD_CATEGORIES: Dict[str, List[str]] = {
         "get_stock_shareholder_changes", "get_stock_institutional_research",
         "get_relative_strength", "calculate_risk_metrics",
         "get_restricted_release", "get_repurchase_info",
+        "get_shareholder_holding_detail",
+        "get_ipo_calendar", "get_ipo_info",
+        "get_stock_correlation", "get_stock_factors",
+        "screen_stocks", "get_filings",
         # 事实包
         "get_stock_fact_pack", "get_market_fact_pack",
     ],
@@ -85,11 +93,15 @@ _METHOD_CATEGORIES: Dict[str, List[str]] = {
     ],
     "基金 Fund": [
         "get_fund_holdings", "get_fund_nav",
+        "search_funds", "get_fund_detail", "get_fund_ranking",
+        "get_fund_manager", "get_fund_valuation", "get_fund_performance",
+        "get_fund_scale",
         "get_fund_fact_pack",
     ],
     "指数与ETF Index & ETF": [
-        "get_etf_flow",
-        "get_index_constituents", "get_index_constituent_weights",
+        "get_etf_flow", "get_etf_list", "get_etf_detail", "get_etf_performance",
+        "get_index_list", "get_index_constituents", "get_index_constituent_weights",
+        "get_index_pe_pb", "get_index_performance",
         "get_etf_fact_pack", "get_index_fact_pack",
     ],
 }

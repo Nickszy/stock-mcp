@@ -80,6 +80,8 @@ _TICKER_METHODS: Set[str] = {
     "get_stock_top10_shareholders",
     # Quantitative (needs single symbol)
     "get_stock_factors",
+    # Relative strength (needs single symbol + benchmark)
+    "get_relative_strength",
 }
 
 # market-wide: no symbol resolution, forward kwargs as-is
