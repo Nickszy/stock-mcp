@@ -5614,7 +5614,7 @@ class AkshareAdapter(BaseDataAdapter):
         categories_fetched = sum(
             1 for v in coverage.values() if v in ("complete", "partial")
         )
-        return {
+        result = {
             "entity": entity,
             "facts": facts,
             "source_trace": source_trace,
@@ -5623,6 +5623,15 @@ class AkshareAdapter(BaseDataAdapter):
             "categories_total": categories_total,
             "missing_fields": missing_fields,
         }
+
+        # Build fact_markdown view
+        try:
+            from src.server.domain.fact_markdown import build_etf_fact_markdown
+            result["fact_markdown"] = build_etf_fact_markdown(result)
+        except Exception as e:
+            self.logger.warning(f"fact_markdown generation failed: {e}")
+
+        return result
 
     # ------------------------------------------------------------------
     # Index Fact Pack
@@ -5851,7 +5860,7 @@ class AkshareAdapter(BaseDataAdapter):
         categories_fetched = sum(
             1 for v in coverage.values() if v in ("complete", "partial")
         )
-        return {
+        result = {
             "entity": entity,
             "facts": facts,
             "source_trace": source_trace,
@@ -5860,6 +5869,15 @@ class AkshareAdapter(BaseDataAdapter):
             "categories_total": categories_total,
             "missing_fields": missing_fields,
         }
+
+        # Build fact_markdown view
+        try:
+            from src.server.domain.fact_markdown import build_index_fact_markdown
+            result["fact_markdown"] = build_index_fact_markdown(result)
+        except Exception as e:
+            self.logger.warning(f"fact_markdown generation failed: {e}")
+
+        return result
 
     # ------------------------------------------------------------------
     # COL-142: 量价因子 / 相关性 / 组合分析

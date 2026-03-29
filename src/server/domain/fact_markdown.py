@@ -530,6 +530,8 @@ _MARKET_CATEGORY_TITLES = {
     "index": "指数/板块行情事实",
     "derivative": "衍生行情与波动率",
     "relative": "相对强弱与可比标的",
+    "north_bound": "北向资金",
+    "margin": "融资融券",
 }
 
 
@@ -546,4 +548,107 @@ def build_market_fact_markdown(fact_pack: Dict[str, Any]) -> str:
         title="行情",
         fact_pack=fact_pack,
         category_titles=_MARKET_CATEGORY_TITLES,
+    )
+
+
+# ------------------------------------------------------------------
+# US Stock fact pack Markdown builder (COL-175)
+# ------------------------------------------------------------------
+
+_US_STOCK_CATEGORY_TITLES = {
+    "profile": "公司概况",
+    "valuation": "估值指标",
+    "financials": "财务数据",
+    "ownership": "持仓与内部人",
+    "analyst": "分析师与收入构成",
+    "technical": "技术分析",
+}
+
+
+def build_us_stock_fact_markdown(fact_pack: Dict[str, Any]) -> str:
+    """Build fact-only Markdown view from US stock fact pack data.
+
+    Args:
+        fact_pack: Output of YahooAdapter.get_us_stock_fact_pack()
+
+    Returns:
+        Markdown string with sections and tables for each US stock fact category.
+    """
+    entity = fact_pack.get("entity", {})
+    ticker = entity.get("symbol", "?")
+    profile = fact_pack.get("facts", {}).get("profile", {})
+    name = profile.get("company_name", "") if isinstance(profile, dict) else ""
+
+    return _build_fact_markdown(
+        title=f"{name}" if name else ticker,
+        fact_pack=fact_pack,
+        category_titles=_US_STOCK_CATEGORY_TITLES,
+    )
+
+
+# ------------------------------------------------------------------
+# ETF fact pack Markdown builder (COL-175)
+# ------------------------------------------------------------------
+
+_ETF_CATEGORY_TITLES = {
+    "master": "ETF主档",
+    "realtime": "实时行情",
+    "performance": "历史表现",
+    "flow": "资金流/申赎",
+    "technical": "技术信号",
+}
+
+
+def build_etf_fact_markdown(fact_pack: Dict[str, Any]) -> str:
+    """Build fact-only Markdown view from ETF fact pack data.
+
+    Args:
+        fact_pack: Output of AkshareAdapter.get_etf_fact_pack()
+
+    Returns:
+        Markdown string with sections and tables for each ETF fact category.
+    """
+    entity = fact_pack.get("entity", {})
+    symbol = entity.get("symbol", "?")
+    master = fact_pack.get("facts", {}).get("master", {})
+    name = master.get("name", "") if isinstance(master, dict) else ""
+
+    return _build_fact_markdown(
+        title=f"ETF {name}" if name else f"ETF {symbol}",
+        fact_pack=fact_pack,
+        category_titles=_ETF_CATEGORY_TITLES,
+    )
+
+
+# ------------------------------------------------------------------
+# Index fact pack Markdown builder (COL-175)
+# ------------------------------------------------------------------
+
+_INDEX_CATEGORY_TITLES = {
+    "master": "指数主档",
+    "valuation": "PE/PB估值",
+    "performance": "行情表现",
+    "constituents": "主要成分股",
+    "technical": "技术信号",
+}
+
+
+def build_index_fact_markdown(fact_pack: Dict[str, Any]) -> str:
+    """Build fact-only Markdown view from index fact pack data.
+
+    Args:
+        fact_pack: Output of AkshareAdapter.get_index_fact_pack()
+
+    Returns:
+        Markdown string with sections and tables for each index fact category.
+    """
+    entity = fact_pack.get("entity", {})
+    symbol = entity.get("symbol", "?")
+    master = fact_pack.get("facts", {}).get("master", {})
+    name = master.get("name", "") if isinstance(master, dict) else ""
+
+    return _build_fact_markdown(
+        title=f"{name}" if name else f"指数 {symbol}",
+        fact_pack=fact_pack,
+        category_titles=_INDEX_CATEGORY_TITLES,
     )
