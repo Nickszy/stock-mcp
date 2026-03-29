@@ -4161,15 +4161,11 @@ class AkshareAdapter(BaseDataAdapter):
                 gov_data["top10_shareholders"] = holders.get("data", [])[:10]
         except Exception:
             pass
-        try:
-            changes = await self.get_stock_shareholder_changes()
-            if changes and "error" not in changes:
-                gov_data["shareholder_changes"] = changes.get("data", [])[:5]
-        except Exception:
-            pass
+        # Note: get_stock_shareholder_changes() returns market-wide data (no symbol param),
+        # so it is excluded from per-stock fact pack to avoid misleading AI agents.
         if gov_data:
             facts["governance"] = gov_data
-            coverage["governance"] = "partial"
+            coverage["governance"] = "complete" if gov_data.get("top10_shareholders") else "partial"
         else:
             coverage["governance"] = "missing"
             missing_fields.append("governance")
@@ -4203,7 +4199,24 @@ class AkshareAdapter(BaseDataAdapter):
             coverage["events"] = "missing"
             missing_fields.append("events")
 
-        # --- 6. Business Structure (业务结构) ---
+        # --- 6. Earnings Estimates (盈利预测) ---
+        try:
+            forecast = await self.get_profit_forecast(f"SSE:{symbol}")
+            if not forecast or "error" in forecast:
+                forecast = await self.get_profit_forecast(f"SZSE:{symbol}")
+            if forecast and "error" not in forecast and forecast.get("rows"):
+                facts["earnings_estimates"] = {
+                    "forecasts": forecast.get("rows", [])[:10],
+                    "source": forecast.get("source", "akshare"),
+                }
+                coverage["earnings_estimates"] = "complete"
+            else:
+                coverage["earnings_estimates"] = "missing"
+                missing_fields.append("earnings_estimates")
+        except Exception as e:
+            coverage["earnings_estimates"] = f"error: {e}"
+
+        # --- 7. Business Structure (业务结构) ---
         try:
             biz = await self.get_mainbz_info(f"SSE:{symbol}")
             if not biz or "error" in biz:
@@ -4217,7 +4230,7 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             coverage["business_structure"] = f"error: {e}"
 
-        # --- 7. Company Master (公司主档) ---
+        # --- 8. Company Master (公司主档) ---
         try:
             df = await self._run(ak.stock_individual_info_em, symbol=symbol)
             if df is not None and not df.empty:
@@ -4262,7 +4275,7 @@ class AkshareAdapter(BaseDataAdapter):
             source_trace["company_master"] = {"error": str(e)}
             missing_fields.append("company_master")
 
-        # --- 8. Peers (同业对比) ---
+        # --- 9. Peers (同业对比) ---
         try:
             cm = facts.get("company_master", {})
             industry = cm.get("industry") if cm else None
@@ -4308,7 +4321,7 @@ class AkshareAdapter(BaseDataAdapter):
             source_trace["peers"] = {"error": str(e)}
             missing_fields.append("peers")
 
-        # --- Category 9: Restricted Release (限售解禁) ---
+        # --- 10. Restricted Release (限售解禁) ---
         try:
             rr = await self.get_restricted_release(symbol=symbol, days=90)
             if rr and "error" not in rr and rr.get("data"):
@@ -4323,7 +4336,7 @@ class AkshareAdapter(BaseDataAdapter):
             source_trace["restricted_release"] = {"error": str(e)}
             missing_fields.append("restricted_release")
 
-        # --- Category 10: Repurchase (回购) ---
+        # --- 11. Repurchase (回购) ---
         try:
             rp = await self.get_repurchase_info(symbol=symbol)
             if rp and "error" not in rp and rp.get("data"):
@@ -4348,7 +4361,7 @@ class AkshareAdapter(BaseDataAdapter):
             "coverage": coverage,
             "missing_fields": missing_fields,
             "categories_fetched": len([v for v in coverage.values() if v == "complete" or v == "partial"]),
-            "categories_total": 10,
+            "categories_total": 11,
             "elapsed_seconds": round(elapsed, 2),
         }
 

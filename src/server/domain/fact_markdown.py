@@ -325,6 +325,7 @@ _GENERIC_CATEGORIES = {
     "peers": "同业对比",
     "restricted_release": "限售解禁",
     "repurchase": "回购数据",
+    "earnings_estimates": "盈利预测",
 }
 
 

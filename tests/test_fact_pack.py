@@ -119,8 +119,8 @@ class TestFactPackAdapter:
         # Coverage is a dict
         assert isinstance(result["coverage"], dict)
 
-        # categories_total is 10
-        assert result["categories_total"] == 10
+        # categories_total is 11 (added earnings_estimates)
+        assert result["categories_total"] == 11
 
     def test_handles_sub_method_failure_gracefully(self, mock_cache):
         """When a sub-method fails, fact pack should still return partial data."""
@@ -133,20 +133,20 @@ class TestFactPackAdapter:
              patch.object(adapter, "_get_valuation_raw", new_callable=AsyncMock) as m_val, \
              patch.object(adapter, "get_money_flow", new_callable=AsyncMock) as m_mf, \
              patch.object(adapter, "get_stock_top10_shareholders", new_callable=AsyncMock) as m_top10, \
-             patch.object(adapter, "get_stock_shareholder_changes", new_callable=AsyncMock) as m_chg, \
              patch.object(adapter, "get_dividend_info", new_callable=AsyncMock) as m_div, \
              patch.object(adapter, "get_repurchase_info", new_callable=AsyncMock) as m_rep, \
              patch.object(adapter, "get_restricted_release", new_callable=AsyncMock) as m_rst, \
+             patch.object(adapter, "get_profit_forecast", new_callable=AsyncMock) as m_forecast, \
              patch.object(adapter, "get_mainbz_info", new_callable=AsyncMock) as m_biz:
 
             m_info.return_value = _mock_asset_info("贵州茅台", "600519")
             m_val.return_value = {"pe": 30.5}
             m_mf.return_value = {}
             m_top10.return_value = {"data": []}
-            m_chg.return_value = {"data": []}
             m_div.return_value = {}
             m_rep.return_value = None
             m_rst.return_value = None
+            m_forecast.return_value = {"rows": [], "source": "akshare"}
             m_biz.return_value = [{"biz": "白酒"}]
 
             # Mock _run for company_master and peers (new categories)
