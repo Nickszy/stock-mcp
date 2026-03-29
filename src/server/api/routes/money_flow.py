@@ -330,3 +330,301 @@ async def get_futures_basis(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get futures basis: {str(e)}",
         )
+
+
+# ------------------------------------------------------------------
+# Batch: 26 missing REST endpoints for money-flow / market data
+# COL-177: Close MCP→REST coverage gap (119→109 endpoints)
+# ------------------------------------------------------------------
+
+
+@router.get("/market-money-flow", summary="全市场资金流向")
+async def get_market_money_flow(
+    days: int = Query(30, ge=5, le=120, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_market_money_flow(days=days)
+        return rest_response(data=result, symbol="全市场", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/market-liquidity", summary="市场流动性指标")
+async def get_market_liquidity(
+    days: int = Query(30, ge=5, le=120, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_market_liquidity(days=days)
+        return rest_response(data=result, symbol="全市场", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/money-supply", summary="货币供应量(M0/M1/M2)")
+async def get_money_supply() -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_money_supply()
+        return rest_response(data=result, symbol="货币供应", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/social-financing", summary="社会融资规模")
+async def get_social_financing() -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_social_financing()
+        return rest_response(data=result, symbol="社融", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pmi", summary="PMI 制造业/非制造业指数")
+async def get_pmi_data() -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_pmi_data()
+        return rest_response(data=result, symbol="PMI", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/gdp", summary="国内生产总值 GDP")
+async def get_gdp_data() -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_gdp_data()
+        return rest_response(data=result, symbol="GDP", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/dragon-tiger", summary="龙虎榜数据")
+async def get_dragon_tiger_list(
+    days: int = Query(5, ge=1, le=30, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_dragon_tiger_list(days=days)
+        return rest_response(data=result, symbol="龙虎榜", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/block-trade", summary="大宗交易数据")
+async def get_block_trade(
+    days: int = Query(10, ge=1, le=60, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_block_trade(days=days)
+        return rest_response(data=result, symbol="大宗交易", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/etf-flow", summary="ETF 资金流")
+async def get_etf_flow(
+    symbol: str = Query("", description="ETF 代码"),
+    days: int = Query(30, ge=5, le=120, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_etf_flow(symbol=symbol, days=days)
+        return rest_response(data=result, symbol=symbol or "ETF", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/convertible-bond", summary="可转债数据")
+async def get_convertible_bond(
+    symbol: str = Query("", description="债券代码"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_convertible_bond(symbol=symbol)
+        return rest_response(data=result, symbol=symbol or "可转债", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/futures-main", summary="期货主力合约")
+async def get_futures_main(
+    symbol: str = Query("", description="期货品种"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_futures_main(symbol=symbol)
+        return rest_response(data=result, symbol=symbol or "期货", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/option-summary", summary="期权概要数据")
+async def get_option_summary(
+    symbol: str = Query("", description="期权品种"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_option_summary(symbol=symbol)
+        return rest_response(data=result, symbol=symbol or "期权", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/commodity-inventory", summary="商品库存数据")
+async def get_commodity_inventory(
+    symbol: str = Query("", description="商品代码"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_commodity_inventory(symbol=symbol)
+        return rest_response(data=result, symbol=symbol or "商品", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/ggt-daily", summary="港股通每日数据")
+async def get_ggt_daily(
+    days: int = Query(30, ge=5, le=120, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_ggt_daily(days=days)
+        return rest_response(data=result, symbol="港股通", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/bond-yield", summary="国债收益率曲线")
+async def get_bond_yield(
+    days: int = Query(30, ge=5, le=250, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_bond_yield(days=days)
+        return rest_response(data=result, symbol="国债", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/northbound-holdings", summary="北向持股明细")
+async def get_stock_northbound_holdings(
+    symbol: str = Query(..., description="股票代码"),
+    days: int = Query(30, ge=5, le=120, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_stock_northbound_holdings(symbol=symbol)
+        return rest_response(data=result, symbol=symbol, source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/top10-shareholders", summary="前十大股东")
+async def get_stock_top10_shareholders(
+    symbol: str = Query(..., description="股票代码"),
+    date: str = Query("", description="季度日期"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_stock_top10_shareholders(symbol=symbol, date=date)
+        return rest_response(data=result, symbol=symbol, source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/shareholder-changes", summary="股东户数变化")
+async def get_stock_shareholder_changes(
+    symbol: str = Query(..., description="股票代码"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_stock_shareholder_changes(symbol=symbol)
+        return rest_response(data=result, symbol=symbol, source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/institutional-research", summary="机构调研记录")
+async def get_stock_institutional_research(
+    symbol: str = Query("", description="股票代码"),
+    days: int = Query(90, ge=5, le=365, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_stock_institutional_research(symbol=symbol, days=days)
+        return rest_response(data=result, symbol=symbol or "机构调研", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/fund-holdings", summary="基金持仓明细")
+async def get_fund_holdings(
+    symbol: str = Query("", description="基金代码"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_fund_holdings(symbol=symbol)
+        return rest_response(data=result, symbol=symbol or "基金持仓", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/fund-nav", summary="基金净值数据")
+async def get_fund_nav(
+    symbol: str = Query("", description="基金代码"),
+    days: int = Query(30, ge=5, le=365, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_fund_nav(symbol=symbol, days=days)
+        return rest_response(data=result, symbol=symbol or "基金净值", source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/index-constituents", summary="指数成分股列表")
+async def get_index_constituents(
+    symbol: str = Query(..., description="指数代码"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_index_constituents(symbol=symbol)
+        return rest_response(data=result, symbol=symbol, source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/index-weights", summary="指数成分权重")
+async def get_index_constituent_weights(
+    symbol: str = Query(..., description="指数代码"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_index_constituent_weights(symbol=symbol)
+        return rest_response(data=result, symbol=symbol, source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sector-pe-pb", summary="行业 PE/PB 历史百分位")
+async def get_sector_pe_pb_historical(
+    sector_name: str = Query(..., description="行业名称"),
+    days: int = Query(250, ge=30, le=750, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_sector_pe_pb_historical(
+            sector_name=sector_name, days=days,
+        )
+        return rest_response(data=result, symbol=sector_name, source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sector-valuation", summary="行业估值指标")
+async def get_sector_valuation_metrics(
+    sector_name: str = Query(..., description="行业名称"),
+    days: int = Query(250, ge=30, le=750, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().get_sector_valuation_metrics(
+            sector_name=sector_name, days=days,
+        )
+        return rest_response(data=result, symbol=sector_name, source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/risk-metrics", summary="风险指标计算")
+async def calculate_risk_metrics(
+    symbol: str = Query(..., description="股票代码"),
+    days: int = Query(250, ge=30, le=750, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await Container.market_gateway().calculate_risk_metrics(
+            symbol=symbol, days=days,
+        )
+        return rest_response(data=result, symbol=symbol, source="akshare")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
