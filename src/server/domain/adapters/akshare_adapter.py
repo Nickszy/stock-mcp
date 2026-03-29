@@ -85,6 +85,32 @@ class AkshareAdapter(BaseDataAdapter):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
+    async def _patched_akshare_call(self, func, *args, **kwargs):
+        """Run an akshare call with a pd.to_datetime monkey-patch.
+
+        Some akshare functions (e.g. stock_index_pe_lg) internally call
+        pd.to_datetime(series, unit='ms') on columns containing date strings
+        like '2005-04-08', causing ValueError. This patch catches that and
+        retries without the unit parameter.
+        """
+        import pandas as pd
+        original = pd.to_datetime
+
+        def patched(arg, *a, **kw):
+            try:
+                return original(arg, *a, **kw)
+            except (ValueError, TypeError):
+                if 'unit' in kw:
+                    kw = {k: v for k, v in kw.items() if k != 'unit'}
+                    return original(arg, *a, **kw)
+                raise
+
+        pd.to_datetime = patched
+        try:
+            return await self._run(func, *args, **kwargs)
+        finally:
+            pd.to_datetime = original
+
     @staticmethod
     def _safe_float(value: Any) -> Optional[float]:
         if value is None:
@@ -5120,7 +5146,7 @@ class AkshareAdapter(BaseDataAdapter):
         if cached:
             return cached
         try:
-            df = await self._run(ak.stock_index_pe_lg, symbol=symbol)
+            df = await self._patched_akshare_call(ak.stock_index_pe_lg, symbol=symbol)
             if df is None or df.empty:
                 return {"results": [], "symbol": symbol, "source": "akshare"}
 
