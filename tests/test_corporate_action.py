@@ -291,8 +291,8 @@ class TestCorporateActionRegistry:
     def test_total_tool_count_updated(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        # Was 107, added 3 new corporate-action tools → 110, +3 more → 113
-        assert total == 113, f"Expected 113, got {total}"
+        # Was 107, added 3 corporate-action → 110, +3 fact-pack(ETF/Index/correction) → 113, +3 ETF/Index fact-pack → 116
+        assert total == 116, f"Expected 116, got {total}"
 
     def test_all_groups_present(self):
         from src.server.mcp.registry import TOOL_GROUPS
