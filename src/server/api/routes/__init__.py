@@ -13,6 +13,7 @@ from .index import router as index_router
 from .quantitative import router as quantitative_router
 from .us_market import router as us_market_router
 from .corporate_action import router as corporate_action_router
+from .preview import router as preview_router
 
 __all__ = [
     "market_data_router",
@@ -27,4 +28,5 @@ __all__ = [
     "quantitative_router",
     "us_market_router",
     "corporate_action_router",
+    "preview_router",
 ]

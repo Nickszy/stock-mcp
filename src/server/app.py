@@ -36,6 +36,7 @@ from src.server.api.routes import (
     quantitative_router,
     us_market_router,
     corporate_action_router,
+    preview_router,
 )
 from src.server.utils.logger import logger
 from src.server.middleware import JsonArgumentsFixMiddleware
@@ -193,6 +194,7 @@ def create_app():
     app.include_router(quantitative_router, tags=["Quantitative Analysis"])
     app.include_router(us_market_router, tags=["US Market"])
     app.include_router(corporate_action_router, tags=["Corporate Action"])
+    app.include_router(preview_router, tags=["Preview"])
 
     logger.info("✅ RESTful API routes registered")
     logger.info("   - Health check: /health")
@@ -218,39 +220,8 @@ def create_app():
             logger.error(f"Failed to mount MCP endpoint: {e}", exc_info=True)
             logger.warning("⚠️  MCP endpoint not available, only RESTful API will work")
 
-    # 7. Add root endpoint with service information
-    @app.get("/", tags=["Root"])
-    async def root():
-        """Get service information and available endpoints"""
-        return {
-            "service": "Stock Tool Server",
-            "version": "1.0.0",
-            "description": "Financial data service with dual protocol support",
-            "protocols": {
-                "restful_api": {
-                    "description": "Standard HTTP JSON API",
-                    "base_url": "/api/v1",
-                    "documentation": {
-                        "swagger_ui": "/docs",
-                        "redoc": "/redoc",
-                        "openapi_json": "/openapi.json",
-                    },
-                    "endpoints": {
-                        "batch_prices": "POST /api/v1/market/prices/batch",
-                        "technical_indicators": "POST /api/v1/market/indicators/calculate",
-                    },
-                },
-                "mcp": {
-                    "description": "Model Context Protocol (for AI Agents)",
-                    "endpoint": "/mcp",
-                    "protocol": "Streamable HTTP (JSON-RPC 2.0)",
-                    "tools_count": get_enabled_tool_count(),
-                },
-            },
-            "health_check": "/health",
-            "supported_markets": ["US Stocks", "China A-Shares", "Cryptocurrency"],
-            "supported_exchanges": ["NASDAQ", "NYSE", "SSE", "SZSE", "BINANCE", "OKX"],
-        }
+    # 7. Root "/" endpoint is handled by preview_router (HTML workbench page)
+    # Service metadata moved to /api/meta (also in preview_router)
 
     logger.info("=" * 70)
     logger.info("🚀 Stock Tool Server Initialized")
