@@ -266,15 +266,15 @@ class TestRegistryAfterMerge:
     def test_total_tool_count(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        # 110 + 1(stock) + 1(fund) + 1(market) + 2(ETF/Index fact-pack) + 2(fact-pack REST) = 116
-        assert total == 116, f"Expected 116, got {total}"
+        # 116 + 3 fundamental(report/forecast/ratios) = 119
+        assert total == 119, f"Expected 119, got {total}"
 
     def test_fundamental_count(self):
         from src.server.mcp.registry import TOOL_GROUPS
         fundamental = [g for g in TOOL_GROUPS if g.name == "fundamental"]
         assert len(fundamental) == 1
-        # Was 7, now 6 after removing get_financial_reports
-        assert fundamental[0].count == 6
+        # Was 6, now 9 after re-adding get_financial_reports + forecast + ratios
+        assert fundamental[0].count == 9
 
     def test_all_contract_groups_present(self):
         from src.server.mcp.registry import TOOL_GROUPS

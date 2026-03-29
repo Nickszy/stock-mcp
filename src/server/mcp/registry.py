@@ -48,8 +48,8 @@ TOOL_GROUPS: List[ToolGroup] = [
         name="fundamental",
         register=register_fundamental_tools,
         enabled=True,
-        description="基本面分析",
-        count=6,
+        description="基本面分析 (财务报表/报告/主营构成/股东/分红/业绩预测/估值/盈利预测/财务比率)",
+        count=9,
     ),
     ToolGroup(
         name="asset",

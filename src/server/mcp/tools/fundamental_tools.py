@@ -21,6 +21,7 @@ from src.server.mcp.tools.artifact_utils import (
 from src.server.mcp.tools.output_format_utils import (
     format_output,
     _format_quarter_bars_markdown,
+    _format_table_markdown,
     OutputFormat,
 )
 from src.server.domain.symbols.errors import SymbolResolutionError
@@ -356,6 +357,7 @@ def register_fundamental_tools(mcp: FastMCP):
     # get_financial_reports removed — merged into get_stock_financial_statements (COL-139)
     # The _get_financial_reports_impl is kept for internal chart data generation.
 
+    @mcp.tool(tags={"fundamental"})
     async def get_financial_reports(
         symbol: str,
         output_format: OutputFormat = "markdown",
@@ -1431,3 +1433,149 @@ def register_fundamental_tools(mcp: FastMCP):
                     extra={"error": str(e)},
                 )
             return {"error": str(e), "component_type": "financial_statements"}
+
+    @mcp.tool(tags={"fundamental"})
+    async def get_profit_forecast(
+        symbol: str,
+        output_format: OutputFormat = "markdown",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get analyst profit forecasts for the given ticker.
+
+        Args:
+            symbol: Asset ticker. Format: EXCHANGE:SYMBOL
+                - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
+            output_format: Output format - "markdown" (default) or "json"
+            ctx: FastMCP Context for logging
+
+        Returns:
+            Analyst consensus earnings forecasts (EPS, revenue, net income estimates)
+        """
+        if ctx:
+            await ctx.info(f"🔧 获取盈利预测: {symbol}", extra={"symbol": symbol})
+
+        try:
+            logger.info("MCP tool called: get_profit_forecast", symbol=symbol)
+            result = await fundamental_use_cases.get_profit_forecast(symbol)
+            ts_code = await _resolve_ts_code(symbol)
+
+            if isinstance(result, dict) and result.get("error"):
+                return result
+
+            summary = f"{ts_code} 盈利预测"
+            forecasts = result if isinstance(result, list) else result.get("rows", result.get("data", []))
+
+            if output_format == "json":
+                artifact = create_artifact_envelope(
+                    component_type="profit_forecast",
+                    name=f"盈利预测: {ts_code}",
+                    content=forecasts,
+                    description=summary,
+                    metadata={"type": "profit_forecast", "ts_code": ts_code},
+                )
+                return create_artifact_response(summary=summary, artifact=artifact)
+
+            md_parts = [f"## {ts_code} 盈利预测\n"]
+            if isinstance(forecasts, list) and forecasts:
+                md_parts.append(_format_table_markdown(forecasts, "盈利预测明细"))
+            elif isinstance(forecasts, dict):
+                for key, val in forecasts.items():
+                    if isinstance(val, list) and val:
+                        md_parts.append(_format_table_markdown(val, key))
+                    elif not key.startswith("_"):
+                        md_parts.append(f"**{key}**: {val}")
+
+            md_output = "\n".join(md_parts)
+            artifact = create_artifact_envelope(
+                component_type="profit_forecast_markdown",
+                name=f"盈利预测: {ts_code}",
+                content={"markdown": md_output, "format": "markdown"},
+                description=summary,
+                metadata={"output_format": "markdown", "ts_code": ts_code},
+                visible_to_llm=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except SymbolResolutionError as e:
+            if ctx:
+                await ctx.warning(f"⚠️ 符号解析失败: {symbol}", extra=e.to_dict())
+            return create_symbol_error_response(
+                e, component_type="profit_forecast", name=f"{symbol} 盈利预测"
+            )
+        except Exception as e:
+            logger.error(f"Get profit forecast failed: {e}")
+            if ctx:
+                await ctx.error(f"❌ 获取盈利预测失败: {symbol}", extra={"error": str(e)})
+            return {"error": str(e), "component_type": "profit_forecast"}
+
+    @mcp.tool(tags={"fundamental"})
+    async def get_financial_ratios(
+        symbol: str,
+        output_format: OutputFormat = "markdown",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get key financial ratios (PE, PB, ROE, etc.) for the given ticker.
+
+        Args:
+            symbol: Asset ticker. Format: EXCHANGE:SYMBOL
+                - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
+            output_format: Output format - "markdown" (default) or "json"
+            ctx: FastMCP Context for logging
+
+        Returns:
+            Key financial ratios including valuation, profitability, and leverage metrics
+        """
+        if ctx:
+            await ctx.info(f"🔧 获取财务比率: {symbol}", extra={"symbol": symbol})
+
+        try:
+            logger.info("MCP tool called: get_financial_ratios", symbol=symbol)
+            result = await fundamental_use_cases.get_fundamental_analysis(symbol)
+            ts_code = await _resolve_ts_code(symbol)
+            if isinstance(result, dict) and result.get("error"):
+                return result
+            ratios_data = result.get("ratios", result)
+
+            summary = f"{ts_code} 关键财务比率"
+
+            if output_format == "json":
+                artifact = create_artifact_envelope(
+                    component_type="financial_ratios",
+                    name=f"财务比率: {ts_code}",
+                    content=ratios_data,
+                    description=summary,
+                    metadata={"type": "financial_ratios", "ts_code": ts_code},
+                )
+                return create_artifact_response(summary=summary, artifact=artifact)
+
+            md_parts = [f"## {ts_code} 财务比率\n"]
+            if isinstance(ratios_data, dict):
+                rows = [{"指标": k, "数值": v} for k, v in ratios_data.items()
+                        if not k.startswith("_") and not isinstance(v, (dict, list))]
+                if rows:
+                    md_parts.append(_format_table_markdown(rows, "关键比率"))
+            elif isinstance(ratios_data, list) and ratios_data:
+                md_parts.append(_format_table_markdown(ratios_data, "关键比率"))
+
+            md_output = "\n".join(md_parts)
+            artifact = create_artifact_envelope(
+                component_type="financial_ratios_markdown",
+                name=f"财务比率: {ts_code}",
+                content={"markdown": md_output, "format": "markdown"},
+                description=summary,
+                metadata={"output_format": "markdown", "ts_code": ts_code},
+                visible_to_llm=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except SymbolResolutionError as e:
+            if ctx:
+                await ctx.warning(f"⚠️ 符号解析失败: {symbol}", extra=e.to_dict())
+            return create_symbol_error_response(
+                e, component_type="financial_ratios", name=f"{symbol} 财务比率"
+            )
+        except Exception as e:
+            logger.error(f"Get financial ratios failed: {e}")
+            if ctx:
+                await ctx.error(f"❌ 获取财务比率失败: {symbol}", extra={"error": str(e)})
+            return {"error": str(e), "component_type": "financial_ratios"}
