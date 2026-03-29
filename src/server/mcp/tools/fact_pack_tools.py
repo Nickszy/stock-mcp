@@ -884,3 +884,160 @@ def register_fact_pack_tools(mcp: FastMCP):
                 source="akshare",
                 description=f"获取ETF事实包失败: {e}",
             )
+
+    # ------------------------------------------------------------------
+    # get_index_fact_pack — 指数事实包
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"fact-pack", "index"})
+    async def get_index_fact_pack(
+        symbol: str,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取指数事实包(Fact Pack)：一次调用聚合全维度指数结构化事实数据。
+
+        聚合 5 大事实类别: 指数主档、PE/PB估值与历史分位、行情表现、成分股、技术信号。
+        返回统一结构: entity + facts + source_trace + coverage。
+
+        Typical use cases:
+        - "给我 000300 的完整指数事实包"
+        - "沪深300的最新PE/PB估值+技术信号"
+        - "查一下上证50的成分股+涨跌幅+MACD"
+
+        Args:
+            symbol: 指数代码 (如 000300=沪深300, 000001=上证指数, 399006=创业板指)
+            ctx: FastMCP Context.
+
+        Returns:
+            指数事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        """
+        if ctx:
+            await ctx.info(f"获取指数事实包: {symbol}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_index_fact_pack", symbol=symbol)
+
+            gateway = Container.market_gateway()
+            result = await gateway.get_index_fact_pack(symbol=symbol)
+
+            elapsed = time.perf_counter() - t0
+            categories_fetched = result.get("categories_fetched", 0)
+            categories_total = result.get("categories_total", 5)
+            coverage = result.get("coverage", {})
+            missing = result.get("missing_fields", [])
+            facts = result.get("facts", {})
+
+            # Get name from master
+            master = facts.get("master", {})
+            name = master.get("index_name", symbol)
+
+            summary = (
+                f"指数事实包: {name}({symbol}) "
+                f"[{categories_fetched}/{categories_total}类] "
+                f"(耗时 {elapsed:.1f}s)"
+            )
+
+            # Build structured Markdown fact view
+            md = f"# 指数事实包: {name}({symbol})\n\n"
+            md += f"**已获取**: {categories_fetched}/{categories_total} 类"
+            md += f" | **耗时**: {elapsed:.1f}s\n\n"
+
+            if coverage:
+                complete = sum(1 for v in coverage.values() if v == "complete")
+                partial = sum(1 for v in coverage.values() if v == "partial")
+                md += f"**覆盖率**: {complete}完整 + {partial}部分 / {categories_total}类\n\n"
+
+            # Master
+            if master:
+                md += "## 指数主档\n\n"
+                for k, v in master.items():
+                    md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Valuation
+            val = facts.get("valuation", {})
+            if val:
+                md += "## PE/PB估值\n\n"
+                md += f"- **最新日期**: {val.get('latest_date', '-')}\n"
+                md += f"- **PE**: {val.get('pe', '-')}\n"
+                md += f"- **PB**: {val.get('pb', '-')}\n"
+                md += f"- **PE历史分位**: {val.get('pe_percentile', '-')}%\n"
+                md += f"- **PB历史分位**: {val.get('pb_percentile', '-')}%\n"
+                md += f"- **数据点数**: {val.get('data_points', 0)}\n"
+                md += "\n"
+
+            # Performance
+            perf = facts.get("performance", {})
+            if perf:
+                md += "## 行情表现\n\n"
+                md += f"- **最新日期**: {perf.get('latest_date', '-')}\n"
+                md += f"- **最新收盘**: {perf.get('latest_close', '-')}\n"
+                md += f"- **日涨跌幅**: {perf.get('change_pct_1d', '-')}%\n"
+                md += f"- **5日涨跌幅**: {perf.get('change_pct_5d', '-')}%\n"
+                md += f"- **20日涨跌幅**: {perf.get('change_pct_20d', '-')}%\n"
+                md += f"- **数据点数**: {perf.get('data_points', 0)}\n"
+                md += "\n"
+
+            # Constituents
+            cons = facts.get("constituents", {})
+            if cons:
+                md += f"## 成分股 (共{cons.get('total', 0)}只)\n\n"
+                top10 = cons.get("top10", [])
+                if top10:
+                    md += "| 股票代码 | 股票名称 |\n"
+                    md += "|---------|--------|\n"
+                    for c in top10[:10]:
+                        if isinstance(c, dict):
+                            code = c.get("index_code", c.get("constituent_code", ""))
+                            cname = c.get("index_name", c.get("constituent_name", ""))
+                            md += f"| {code} | {cname} |\n"
+                md += "\n"
+
+            # Technical
+            tech = facts.get("technical", {})
+            if tech:
+                md += "## 技术信号\n\n"
+                signals = tech.get("signals", {})
+                if signals:
+                    for indicator, signal in signals.items():
+                        md += f"- **{indicator}**: {signal}\n"
+                md += f"- **RSI(14)**: {tech.get('rsi14', '-')}\n"
+                md += f"- **MACD DIF**: {tech.get('macd_dif', '-')}\n"
+                md += f"- **MACD DEA**: {tech.get('macd_dea', '-')}\n"
+                md += f"- **BOLL上轨**: {tech.get('boll_upper', '-')}\n"
+                md += f"- **BOLL下轨**: {tech.get('boll_lower', '-')}\n"
+                md += "\n"
+
+            # Source trace
+            trace = result.get("source_trace", {})
+            if trace:
+                md += "## 数据溯源\n\n"
+                md += "| 类别 | 详情 |\n"
+                md += "|------|------|\n"
+                for cat, info in trace.items():
+                    md += f"| {cat} | {info} |\n"
+                md += "\n"
+
+            if missing:
+                md += f"## 缺失类别\n\n> {', '.join(missing)}\n"
+
+            return create_standard_artifact_response(
+                summary=summary,
+                component_type=ComponentType.TABLE,
+                name=f"指数事实包: {name}({symbol})",
+                data=result,
+                source="akshare",
+                description=summary,
+                markdown=md,
+                symbol=symbol,
+            )
+
+        except Exception as e:
+            logger.error(f"get_index_fact_pack failed: {e}")
+            return create_standard_artifact_response(
+                summary=f"获取指数事实包失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="指数事实包错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取指数事实包失败: {e}",
+            )

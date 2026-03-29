@@ -5618,6 +5618,243 @@ class AkshareAdapter(BaseDataAdapter):
         }
 
     # ------------------------------------------------------------------
+    # Index Fact Pack
+    # ------------------------------------------------------------------
+
+    # Common index code → name mapping for PE/PB lookup
+    _INDEX_NAME_MAP: Dict[str, str] = {
+        "000001": "上证指数", "000016": "上证50",
+        "000300": "沪深300", "000905": "中证500",
+        "000852": "中证1000", "399006": "创业板指",
+        "399673": "创业板50", "399001": "深证成指",
+        "399005": "中小板指", "399673": "创业板50",
+    }
+
+    async def get_index_fact_pack(self, symbol: str) -> Dict[str, Any]:
+        """Aggregate Index fact pack: master, valuation, performance, constituents, technical.
+
+        Args:
+            symbol: Index code (e.g. '000300', '000001')
+        """
+        import asyncio as _asyncio
+
+        entity = {"symbol": symbol, "type": "index", "source": "akshare"}
+        facts: Dict[str, Any] = {}
+        source_trace: Dict[str, str] = {}
+        coverage: Dict[str, str] = {}
+        missing_fields: List[str] = []
+        categories_total = 5
+
+        # Resolve index name for PE/PB API
+        index_name = self._INDEX_NAME_MAP.get(symbol, "")
+
+        async def _fetch_master():
+            try:
+                idx_list = await self.get_index_list()
+                results = idx_list.get("results", [])
+                match = None
+                for r in results:
+                    code = str(r.get("index_code", ""))
+                    if code == symbol or code == symbol.lstrip("0"):
+                        match = r
+                        break
+                if match:
+                    facts["master"] = match
+                    # Update name from master if not in static map
+                    nonlocal index_name
+                    if not index_name:
+                        index_name = match.get("index_name", "")
+                    source_trace["master"] = "akshare: index_stock_info"
+                    coverage["master"] = "complete"
+                else:
+                    facts["master"] = {"index_code": symbol, "index_name": index_name or symbol}
+                    source_trace["master"] = "akshare: index_stock_info (not found)"
+                    coverage["master"] = "partial"
+            except Exception as e:
+                source_trace["master"] = f"error: {e}"
+                coverage["master"] = "error"
+
+        async def _fetch_valuation():
+            try:
+                if not index_name:
+                    missing_fields.append("valuation")
+                    coverage["valuation"] = "missing"
+                    source_trace["valuation"] = "skipped: no index name for PE/PB API"
+                    return
+                pepb = await self.get_index_pe_pb(symbol=index_name, limit=30)
+                results = pepb.get("results", [])
+                if results and not pepb.get("error"):
+                    latest = results[-1] if results else {}
+                    pe_values = [r.get("pe") for r in results if r.get("pe") is not None]
+                    pb_values = [r.get("pb") for r in results if r.get("pb") is not None]
+                    pe_pct = None
+                    pb_pct = None
+                    if pe_values and latest.get("pe") is not None:
+                        pe_pct = sum(1 for v in pe_values if v < latest["pe"]) / len(pe_values) * 100
+                    if pb_values and latest.get("pb") is not None:
+                        pb_pct = sum(1 for v in pb_values if v < latest["pb"]) / len(pb_values) * 100
+                    facts["valuation"] = {
+                        "latest_date": latest.get("date", ""),
+                        "pe": latest.get("pe"),
+                        "pb": latest.get("pb"),
+                        "pe_percentile": round(pe_pct, 1) if pe_pct is not None else None,
+                        "pb_percentile": round(pb_pct, 1) if pb_pct is not None else None,
+                        "data_points": len(results),
+                    }
+                    source_trace["valuation"] = f"akshare: stock_index_pe_lg ({index_name})"
+                    coverage["valuation"] = "complete"
+                else:
+                    missing_fields.append("valuation")
+                    coverage["valuation"] = "missing"
+            except Exception as e:
+                source_trace["valuation"] = f"error: {e}"
+                coverage["valuation"] = "error"
+
+        async def _fetch_performance():
+            try:
+                perf = await self.get_index_performance(symbol=symbol, period="daily", limit=60)
+                results = perf.get("results", [])
+                if results and not perf.get("error"):
+                    latest = results[-1] if results else {}
+                    closes = [r.get("close", 0) for r in results if r.get("close")]
+                    changes = {}
+                    if len(closes) >= 2 and closes[-2]:
+                        changes["change_pct_1d"] = round((closes[-1] - closes[-2]) / closes[-2] * 100, 2)
+                    if len(closes) >= 6 and closes[-6]:
+                        changes["change_pct_5d"] = round((closes[-1] - closes[-6]) / closes[-6] * 100, 2)
+                    if len(closes) >= 21 and closes[-21]:
+                        changes["change_pct_20d"] = round((closes[-1] - closes[-21]) / closes[-21] * 100, 2)
+                    facts["performance"] = {
+                        "latest_date": latest.get("date", ""),
+                        "latest_close": latest.get("close"),
+                        "latest_volume": latest.get("volume"),
+                        "latest_amount": latest.get("amount"),
+                        **changes,
+                        "data_points": len(results),
+                        "history": results[-10:],
+                    }
+                    source_trace["performance"] = "akshare: index_zh_a_hist"
+                    coverage["performance"] = "complete"
+                else:
+                    missing_fields.append("performance")
+                    coverage["performance"] = "missing"
+            except Exception as e:
+                source_trace["performance"] = f"error: {e}"
+                coverage["performance"] = "error"
+
+        async def _fetch_constituents():
+            try:
+                cons = await self.get_index_constituents(index_code=symbol)
+                data = cons.get("data", [])
+                if data and not cons.get("error"):
+                    # Summarize top constituents
+                    facts["constituents"] = {
+                        "total": cons.get("total_constituents", len(data)),
+                        "top10": data[:10],
+                    }
+                    source_trace["constituents"] = "akshare: index_stock_cons_csindex"
+                    coverage["constituents"] = "complete"
+                else:
+                    missing_fields.append("constituents")
+                    coverage["constituents"] = "missing"
+            except Exception as e:
+                source_trace["constituents"] = f"error: {e}"
+                coverage["constituents"] = "error"
+
+        async def _fetch_technical():
+            try:
+                perf = await self.get_index_performance(symbol=symbol, period="daily", limit=120)
+                results = perf.get("results", [])
+                if len(results) < 30:
+                    missing_fields.append("technical")
+                    coverage["technical"] = "missing"
+                    return
+                closes = [r.get("close", 0) for r in results if r.get("close")]
+                if len(closes) < 30:
+                    missing_fields.append("technical")
+                    coverage["technical"] = "missing"
+                    return
+                import numpy as np
+                s = np.array(closes, dtype=float)
+                # RSI(14)
+                delta = np.diff(s)
+                gain = np.where(delta > 0, delta, 0)
+                loss = np.where(delta < 0, -delta, 0)
+                avg_gain = np.mean(gain[-14:])
+                avg_loss = np.mean(loss[-14:])
+                rs = avg_gain / avg_loss if avg_loss != 0 else 100
+                rsi14 = 100 - (100 / (1 + rs))
+                # MACD
+                ema12 = pd.Series(s).ewm(span=12, adjust=False).mean()
+                ema26 = pd.Series(s).ewm(span=26, adjust=False).mean()
+                dif = ema12 - ema26
+                dea = dif.ewm(span=9, adjust=False).mean()
+                macd_bar = (dif - dea) * 2
+                # Bollinger
+                ma20 = np.mean(s[-20:])
+                std20 = np.std(s[-20:])
+                upper = ma20 + 2 * std20
+                lower = ma20 - 2 * std20
+                last_close = s[-1]
+                signals = {}
+                if rsi14 > 70:
+                    signals["rsi"] = f"RSI({rsi14:.1f}) 超买区"
+                elif rsi14 < 30:
+                    signals["rsi"] = f"RSI({rsi14:.1f}) 超卖区"
+                else:
+                    signals["rsi"] = f"RSI({rsi14:.1f}) 中性区"
+                if len(dif) >= 2:
+                    if dif.iloc[-2] <= dea.iloc[-2] and dif.iloc[-1] > dea.iloc[-1]:
+                        signals["macd"] = "MACD金叉"
+                    elif dif.iloc[-2] >= dea.iloc[-2] and dif.iloc[-1] < dea.iloc[-1]:
+                        signals["macd"] = "MACD死叉"
+                    else:
+                        signals["macd"] = "MACD无交叉"
+                if last_close > upper:
+                    signals["boll"] = "突破上轨"
+                elif last_close < lower:
+                    signals["boll"] = "跌破下轨"
+                else:
+                    signals["boll"] = "布林带内"
+                facts["technical"] = {
+                    "rsi14": round(float(rsi14), 2),
+                    "macd_dif": round(float(dif.iloc[-1]), 4),
+                    "macd_dea": round(float(dea.iloc[-1]), 4),
+                    "macd_bar": round(float(macd_bar.iloc[-1]), 4),
+                    "boll_upper": round(float(upper), 4),
+                    "boll_mid": round(float(ma20), 4),
+                    "boll_lower": round(float(lower), 4),
+                    "signals": signals,
+                }
+                source_trace["technical"] = "akshare: derived from index_zh_a_hist"
+                coverage["technical"] = "complete"
+            except Exception as e:
+                source_trace["technical"] = f"error: {e}"
+                coverage["technical"] = "error"
+
+        # Run valuation after master (needs index_name)
+        await _fetch_master()
+        await _asyncio.gather(
+            _fetch_valuation(),
+            _fetch_performance(),
+            _fetch_constituents(),
+            _fetch_technical(),
+        )
+
+        categories_fetched = sum(
+            1 for v in coverage.values() if v in ("complete", "partial")
+        )
+        return {
+            "entity": entity,
+            "facts": facts,
+            "source_trace": source_trace,
+            "coverage": coverage,
+            "categories_fetched": categories_fetched,
+            "categories_total": categories_total,
+            "missing_fields": missing_fields,
+        }
+
+    # ------------------------------------------------------------------
     # COL-142: 量价因子 / 相关性 / 组合分析
     # ------------------------------------------------------------------
 

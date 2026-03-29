@@ -764,6 +764,11 @@ class MarketGateway:
         result = await self._akshare_adapter().get_etf_fact_pack(symbol)
         return self._sanitize_na(result)
 
+    async def get_index_fact_pack(self, symbol: str) -> Dict[str, Any]:
+        """Get aggregated index fact pack (AkshareAdapter only)."""
+        result = await self._akshare_adapter().get_index_fact_pack(symbol)
+        return self._sanitize_na(result)
+
     async def get_market_fact_pack(self, symbol: str) -> Dict[str, Any]:
         """Get aggregated market fact pack (AkshareAdapter only)."""
         result = await self._akshare_adapter().get_market_fact_pack(symbol)
