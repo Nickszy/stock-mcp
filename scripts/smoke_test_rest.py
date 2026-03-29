@@ -28,6 +28,8 @@ ENDPOINTS: List[Tuple[str, str, dict]] = [
     ("GET", "/api/v1/fact-pack/fund/110011", {}),
     ("GET", "/api/v1/fact-pack/market/SSE:600519", {}),
     ("GET", "/api/v1/fact-pack/us-stock/AAPL", {}),
+    ("GET", "/api/v1/fact-pack/etf/510300", {}),
+    ("GET", "/api/v1/fact-pack/index/000300", {}),
 
     # --- Fund ---
     ("GET", "/api/v1/fund/detail", {"fund_code": "110011"}),

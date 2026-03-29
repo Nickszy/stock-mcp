@@ -6,6 +6,8 @@ Provides RESTful HTTP endpoints for aggregated fact pack data:
 - Fund fact pack (COL-150)
 - Market fact pack (COL-152)
 - US Stock fact pack (COL-164)
+- ETF fact pack (COL-170)
+- Index fact pack (COL-171)
 """
 
 from fastapi import APIRouter, HTTPException, status, Query
@@ -119,4 +121,56 @@ async def get_us_stock_fact_pack(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get US stock fact pack: {str(e)}",
+        )
+
+
+# ------------------------------------------------------------------
+# get_etf_fact_pack (COL-170)
+# ------------------------------------------------------------------
+@router.get(
+    "/etf/{symbol}",
+    summary="获取ETF事实包",
+    description=(
+        "聚合全维度ETF结构化事实数据: ETF主档、实时行情、历史表现、"
+        "资金流/申赎、技术信号(RSI/MACD/BOLL)。"
+    ),
+)
+async def get_etf_fact_pack(
+    symbol: str,
+) -> Dict[str, Any]:
+    try:
+        logger.info("API: get_etf_fact_pack", symbol=symbol)
+        result = await Container.market_gateway().get_etf_fact_pack(symbol=symbol)
+        return rest_response(data=result, symbol=symbol, source="akshare")
+    except Exception as e:
+        logger.error(f"API error in get_etf_fact_pack: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get ETF fact pack: {str(e)}",
+        )
+
+
+# ------------------------------------------------------------------
+# get_index_fact_pack (COL-171)
+# ------------------------------------------------------------------
+@router.get(
+    "/index/{symbol}",
+    summary="获取指数事实包",
+    description=(
+        "聚合全维度指数结构化事实数据: 指数主档、PE/PB估值与历史分位、"
+        "行情表现、成分股、技术信号(RSI/MACD/BOLL)。"
+    ),
+)
+async def get_index_fact_pack(
+    symbol: str,
+) -> Dict[str, Any]:
+    try:
+        logger.info("API: get_index_fact_pack", symbol=symbol)
+        result = await Container.market_gateway().get_index_fact_pack(symbol=symbol)
+        return rest_response(data=result, symbol=symbol, source="akshare")
+    except Exception as e:
+        logger.error(f"API error in get_index_fact_pack: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get index fact pack: {str(e)}",
         )
