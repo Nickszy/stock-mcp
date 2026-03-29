@@ -789,3 +789,197 @@ class TestFactMarkdownContract:
         ]
         for field in required_fields:
             assert field in result, f"Contract field '{field}' missing from fact pack"
+
+
+# =====================================================================
+# fact_markdown Contract Tests for all entity types (COL-182)
+# =====================================================================
+
+
+class TestAllFactPackMarkdownContracts:
+    """Verify every fact-pack entity type returns fact_markdown from adapter."""
+
+    def _make_mock_pack(self, entity_type: str, entity: dict, facts: dict) -> dict:
+        """Build a minimal mock fact pack with fact_markdown."""
+        return {
+            "source": "akshare",
+            "entity": entity,
+            "facts": facts,
+            "source_trace": {},
+            "coverage": {},
+            "missing_fields": [],
+            "categories_fetched": len(facts),
+            "categories_total": len(facts),
+            "elapsed_seconds": 0.1,
+            "fact_markdown": f"# {entity_type} test markdown with real content",
+        }
+
+    def test_fund_mcp_uses_adapter_markdown(self, mock_cache):
+        """Fund fact pack MCP tool uses adapter's fact_markdown."""
+        from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
+        from src.server.core.dependencies import Container
+
+        mock_pack = self._make_mock_pack(
+            "基金",
+            {"fund_code": "110011", "type": "fund"},
+            {"master": {"基金简称": "测试基金"}},
+        )
+        mock_gw = MagicMock()
+        mock_gw.get_fund_fact_pack = AsyncMock(return_value=mock_pack)
+
+        with patch.object(Container, "market_gateway", return_value=mock_gw):
+            captured = {}
+            class MockMCP:
+                def tool(self, **kwargs):
+                    def decorator(fn):
+                        captured[frozenset(kwargs.get("tags", set()))] = fn
+                        return fn
+                    return decorator
+            register_fact_pack_tools(MockMCP())
+
+            tool_fn = None
+            for key, fn in captured.items():
+                if "fund" in key:
+                    tool_fn = fn
+                    break
+            assert tool_fn is not None
+            result = _run(tool_fn(fund_code="110011"))
+
+        md = result["artifact"]["content"].get("markdown", "")
+        assert "基金 test markdown with real content" in md
+
+    def test_market_mcp_uses_adapter_markdown(self, mock_cache):
+        """Market fact pack MCP tool uses adapter's fact_markdown."""
+        from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
+        from src.server.core.dependencies import Container
+
+        mock_pack = self._make_mock_pack(
+            "行情",
+            {"symbol": "600519", "type": "market"},
+            {"master": {"pe": 30.5}},
+        )
+        mock_gw = MagicMock()
+        mock_gw.get_market_fact_pack = AsyncMock(return_value=mock_pack)
+
+        with patch.object(Container, "market_gateway", return_value=mock_gw):
+            captured = {}
+            class MockMCP:
+                def tool(self, **kwargs):
+                    def decorator(fn):
+                        captured[frozenset(kwargs.get("tags", set()))] = fn
+                        return fn
+                    return decorator
+            register_fact_pack_tools(MockMCP())
+
+            tool_fn = None
+            for key, fn in captured.items():
+                if "market" in key and "fact-pack" in key:
+                    tool_fn = fn
+                    break
+            assert tool_fn is not None
+            result = _run(tool_fn(symbol="600519"))
+
+        md = result["artifact"]["content"].get("markdown", "")
+        assert "行情 test markdown with real content" in md
+
+    def test_etf_mcp_uses_adapter_markdown(self, mock_cache):
+        """ETF fact pack MCP tool uses adapter's fact_markdown."""
+        from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
+        from src.server.core.dependencies import Container
+
+        mock_pack = self._make_mock_pack(
+            "ETF",
+            {"symbol": "510300", "type": "etf"},
+            {"master": {"名称": "沪深300ETF"}},
+        )
+        mock_gw = MagicMock()
+        mock_gw.get_etf_fact_pack = AsyncMock(return_value=mock_pack)
+
+        with patch.object(Container, "market_gateway", return_value=mock_gw):
+            captured = {}
+            class MockMCP:
+                def tool(self, **kwargs):
+                    def decorator(fn):
+                        captured[frozenset(kwargs.get("tags", set()))] = fn
+                        return fn
+                    return decorator
+            register_fact_pack_tools(MockMCP())
+
+            tool_fn = None
+            for key, fn in captured.items():
+                if "etf" in key:
+                    tool_fn = fn
+                    break
+            assert tool_fn is not None
+            result = _run(tool_fn(symbol="510300"))
+
+        md = result["artifact"]["content"].get("markdown", "")
+        assert "ETF test markdown with real content" in md
+
+    def test_index_mcp_uses_adapter_markdown(self, mock_cache):
+        """Index fact pack MCP tool uses adapter's fact_markdown."""
+        from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
+        from src.server.core.dependencies import Container
+
+        mock_pack = self._make_mock_pack(
+            "指数",
+            {"symbol": "000300", "type": "index"},
+            {"master": {"index_name": "沪深300"}},
+        )
+        mock_gw = MagicMock()
+        mock_gw.get_index_fact_pack = AsyncMock(return_value=mock_pack)
+
+        with patch.object(Container, "market_gateway", return_value=mock_gw):
+            captured = {}
+            class MockMCP:
+                def tool(self, **kwargs):
+                    def decorator(fn):
+                        captured[frozenset(kwargs.get("tags", set()))] = fn
+                        return fn
+                    return decorator
+            register_fact_pack_tools(MockMCP())
+
+            tool_fn = None
+            for key, fn in captured.items():
+                if "index" in key:
+                    tool_fn = fn
+                    break
+            assert tool_fn is not None
+            result = _run(tool_fn(symbol="000300"))
+
+        md = result["artifact"]["content"].get("markdown", "")
+        assert "指数 test markdown with real content" in md
+
+    def test_us_stock_mcp_uses_adapter_markdown(self, mock_cache):
+        """US stock fact pack MCP tool uses adapter's fact_markdown."""
+        from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
+        from src.server.core.dependencies import Container
+
+        mock_pack = self._make_mock_pack(
+            "美股",
+            {"symbol": "AAPL", "type": "us_stock"},
+            {"profile": {"company_name": "Apple Inc."}},
+        )
+        mock_gw = MagicMock()
+        mock_gw.get_us_stock_fact_pack = AsyncMock(return_value=mock_pack)
+
+        with patch.object(Container, "market_gateway", return_value=mock_gw):
+            captured = {}
+            class MockMCP:
+                def tool(self, **kwargs):
+                    def decorator(fn):
+                        captured[frozenset(kwargs.get("tags", set()))] = fn
+                        return fn
+                    return decorator
+            register_fact_pack_tools(MockMCP())
+
+            tool_fn = None
+            for key, fn in captured.items():
+                if "us-fundamental" in key:
+                    tool_fn = fn
+                    break
+            assert tool_fn is not None
+            result = _run(tool_fn(ticker="AAPL"))
+
+        md = result["artifact"]["content"].get("markdown", "")
+        assert "美股 test markdown with real content" in md

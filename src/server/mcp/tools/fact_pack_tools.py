@@ -167,101 +167,12 @@ def register_fact_pack_tools(mcp: FastMCP):
                 f"(耗时 {elapsed:.1f}s)"
             )
 
-            # Build structured Markdown fact view
-            md = f"# 基金事实包: {name}({fund_code})\n\n"
-            md += f"**已获取**: {categories_fetched}/{categories_total} 类"
-            md += f" | **耗时**: {elapsed:.1f}s\n\n"
-
-            if coverage:
-                complete = sum(1 for v in coverage.values() if v == "complete")
-                partial = sum(1 for v in coverage.values() if v == "partial")
-                md += f"**覆盖率**: {complete}完整 + {partial}部分 / {categories_total}类\n\n"
-
-            facts = result.get("facts", {})
-
-            # Master
-            mst = facts.get("master", {})
-            if mst:
-                md += "## 基金主档\n\n"
-                for k, v in mst.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # NAV & Performance
-            nav_facts = facts.get("nav", {})
-            if nav_facts:
-                md += "## 净值与收益\n\n"
-                for k, v in nav_facts.items():
-                    if isinstance(v, (dict, list)):
-                        md += f"- **{k}**: {v}\n"
-                    else:
-                        md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Holdings
-            hld = facts.get("holdings", {})
-            if hld:
-                md += "## 持仓穿透\n\n"
-                hld_data = hld.get("data", [])
-                if hld_data:
-                    md += f"**重仓股数**: {hld.get('total', 0)}\n\n"
-                    md += "| 股票代码 | 股票名称 | 持仓占比 |\n"
-                    md += "|---------|---------|----------|\n"
-                    for s in hld_data[:10]:
-                        if isinstance(s, dict):
-                            md += (
-                                f"| {s.get('股票代码', '')} "
-                                f"| {s.get('股票名称', '')} "
-                                f"| {s.get('占净值比例', '-')} |\n"
-                            )
-                        else:
-                            md += f"| {s} |\n"
-                md += "\n"
-
-            # Manager
-            mgr = facts.get("manager", [])
-            if mgr:
-                md += "## 基金经理\n\n"
-                for m in mgr[:5]:
-                    if isinstance(m, dict):
-                        md += f"- {m.get('姓名', m.get('基金经理', ''))}"
-                        md += f" (任职: {m.get('任职日期', '-')})"
-                        md += f" 管理规模: {m.get('管理规模', '-')}\n"
-                    else:
-                        md += f"- {m}\n"
-                md += "\n"
-
-            # Scale
-            scl = facts.get("scale", {})
-            if scl:
-                md += "## 规模份额\n\n"
-                for k, v in scl.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Allocation
-            alloc = facts.get("allocation", {})
-            if alloc:
-                md += "## 资产配置\n\n"
-                if isinstance(alloc, list):
-                    for a in alloc[:10]:
-                        md += f"- {a}\n"
-                else:
-                    md += f"{alloc}\n"
-                md += "\n"
-
-            # Source trace
-            trace = result.get("source_trace", {})
-            if trace:
-                md += "## 数据溯源\n\n"
-                md += "| 类别 | 详情 |\n"
-                md += "|------|------|\n"
-                for cat, info in trace.items():
-                    md += f"| {cat} | {info} |\n"
-                md += "\n"
-
-            if missing:
-                md += f"## 缺失字段\n\n> {', '.join(missing)}\n"
+            # Use adapter-generated fact_markdown (COL-182: single source of truth)
+            md = result.get("fact_markdown", "")
+            if not md:
+                md = f"# 基金事实包: {name}({fund_code})\n\n"
+                md += f"**已获取**: {categories_fetched}/{categories_total} 类"
+                md += f" | **耗时**: {elapsed:.1f}s\n\n"
 
             return create_standard_artifact_response(
                 summary=summary,
@@ -332,141 +243,12 @@ def register_fact_pack_tools(mcp: FastMCP):
                 f"(耗时 {elapsed:.1f}s)"
             )
 
-            md = f"# 行情事实包: {symbol}\n\n"
-            md += f"**已获取**: {categories_fetched}/{categories_total} 类"
-            md += f" | **耗时**: {elapsed:.1f}s\n\n"
-
-            if coverage:
-                complete = sum(1 for v in coverage.values() if v == "complete")
-                partial = sum(1 for v in coverage.values() if v == "partial")
-                md += f"**覆盖率**: {complete}完整 + {partial}部分 / {categories_total}类\n\n"
-
-            facts = result.get("facts", {})
-
-            # Master (valuation)
-            mst = facts.get("master", {})
-            if mst:
-                md += "## 估值指标\n\n"
-                for k, v in mst.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Snapshot (technical)
-            snap = facts.get("snapshot", {})
-            if snap:
-                md += "## 技术快照\n\n"
-                for k, v in snap.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Kline
-            kl = facts.get("kline", {})
-            if kl:
-                md += "## K线因子\n\n"
-                fac = kl.get("factors", {})
-                if isinstance(fac, dict):
-                    for k, v in fac.items():
-                        md += f"- **{k}**: {v}\n"
-                else:
-                    md += f"{fac}\n"
-                md += "\n"
-
-            # Money Flow
-            mf = facts.get("money_flow", {})
-            if mf:
-                md += "## 资金流\n\n"
-                if isinstance(mf, dict):
-                    for k, v in mf.items():
-                        if isinstance(v, list) and v:
-                            md += f"- **{k}**: {len(v)}条记录\n"
-                        else:
-                            md += f"- **{k}**: {v}\n"
-                else:
-                    md += f"{mf}\n"
-                md += "\n"
-
-            # Breadth
-            br = facts.get("breadth", {})
-            if br:
-                md += "## 市场广度\n\n"
-                for k, v in br.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Index/Sector
-            idx = facts.get("index", {})
-            if idx:
-                md += "## 指数/板块行情\n\n"
-                for k, v in idx.items():
-                    if isinstance(v, list) and v:
-                        md += f"- **{k}**: {len(v)}条记录\n"
-                    else:
-                        md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Derivative
-            drv = facts.get("derivative", {})
-            if drv:
-                md += "## 衍生行情\n\n"
-                for k, v in drv.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Relative
-            rs = facts.get("relative", {})
-            if rs:
-                md += "## 相对强弱\n\n"
-                for k, v in rs.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # North Bound
-            nb = facts.get("north_bound", {})
-            if nb:
-                md += "## 北向资金\n\n"
-                inflow = nb.get("latest_net_inflow")
-                date_val = nb.get("latest_date")
-                if inflow is not None:
-                    md += f"- **最新净买入**: {inflow}\n"
-                if date_val:
-                    md += f"- **日期**: {date_val}\n"
-                trend = nb.get("trend", [])
-                if trend:
-                    md += "\n### 近期趋势\n\n"
-                    for t in trend[-5:]:
-                        if isinstance(t, dict):
-                            md += f"- {t.get('date', t.get('日期', ''))}: 净买入 {t.get('north_net_inflow', t.get('净买入', '-'))}\n"
-                    md += "\n"
-
-            # Margin
-            mg = facts.get("margin", {})
-            if mg:
-                md += "## 融资融券\n\n"
-                summary_mg = mg.get("summary", {})
-                if summary_mg:
-                    mb = summary_mg.get("latest_margin_balance")
-                    sb = summary_mg.get("latest_short_balance")
-                    if mb is not None:
-                        md += f"- **融资余额**: {mb}\n"
-                    if sb is not None:
-                        md += f"- **融券余额**: {sb}\n"
-                exchange = mg.get("exchange", "")
-                if exchange:
-                    md += f"- **交易所**: {exchange}\n"
-                md += "\n"
-
-            # Source trace
-            trace = result.get("source_trace", {})
-            if trace:
-                md += "## 数据溯源\n\n"
-                md += "| 类别 | 详情 |\n"
-                md += "|------|------|\n"
-                for cat, info in trace.items():
-                    md += f"| {cat} | {info} |\n"
-                md += "\n"
-
-            if missing:
-                md += f"## 缺失字段\n\n> {', '.join(missing)}\n"
+            # Use adapter-generated fact_markdown (COL-182: single source of truth)
+            md = result.get("fact_markdown", "")
+            if not md:
+                md = f"# 行情事实包: {symbol}\n\n"
+                md += f"**已获取**: {categories_fetched}/{categories_total} 类"
+                md += f" | **耗时**: {elapsed:.1f}s\n\n"
 
             return create_standard_artifact_response(
                 summary=summary,
@@ -542,126 +324,12 @@ def register_fact_pack_tools(mcp: FastMCP):
                 f"(耗时 {elapsed:.1f}s)"
             )
 
-            # Build structured Markdown fact view
-            md = f"# 美股事实包: {name}({ticker})\n\n"
-            md += f"**已获取**: {categories_fetched}/{categories_total} 类"
-            md += f" | **耗时**: {elapsed:.1f}s\n\n"
-
-            if coverage:
-                complete = sum(1 for v in coverage.values() if v == "complete")
-                partial = sum(1 for v in coverage.values() if v == "partial")
-                md += f"**覆盖率**: {complete}完整 + {partial}部分 / {categories_total}类\n\n"
-
-            # Profile
-            if profile:
-                md += "## 公司档案\n\n"
-                for k, v in profile.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Valuation
-            val = facts.get("valuation", {})
-            if val:
-                md += "## 估值指标\n\n"
-                for k, v in val.items():
-                    if isinstance(v, dict):
-                        md += f"- **{k}**:\n"
-                        for sk, sv in v.items():
-                            md += f"  - {sk}: {sv}\n"
-                    else:
-                        md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Financials
-            fin = facts.get("financials", {})
-            if fin:
-                md += "## 财务健康\n\n"
-                for k, v in fin.items():
-                    if isinstance(v, dict):
-                        md += f"- **{k}**:\n"
-                        for sk, sv in v.items():
-                            md += f"  - {sk}: {sv}\n"
-                    elif isinstance(v, list):
-                        md += f"- **{k}**: {len(v)}条记录\n"
-                    else:
-                        md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Ownership
-            own = facts.get("ownership", {})
-            if own:
-                md += "## 机构持仓与内部人\n\n"
-                inst = own.get("institutional_holders", [])
-                if inst:
-                    md += f"### 机构持仓前{min(len(inst), 10)}名\n\n"
-                    md += "| 机构 | 持仓市值 | 比例 |\n"
-                    md += "|------|---------|------|\n"
-                    for h in inst[:10]:
-                        if isinstance(h, dict):
-                            md += (
-                                f"| {h.get('holder', '')} "
-                                f"| {h.get('value', '-')} "
-                                f"| {h.get('pct_held', '-')} |\n"
-                            )
-                    md += "\n"
-                insider = own.get("insider_trades", [])
-                if insider:
-                    md += f"### 内部人交易 (最近{min(len(insider), 5)}笔)\n\n"
-                    for t in insider[:5]:
-                        if isinstance(t, dict):
-                            md += (
-                                f"- {t.get('insider', '')} "
-                                f"{t.get('transaction', '')} "
-                                f"{t.get('shares', '-')}股\n"
-                            )
-                    md += "\n"
-                for k, v in own.items():
-                    if k not in ("institutional_holders", "insider_trades"):
-                        md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Analyst
-            ana = facts.get("analyst", {})
-            if ana:
-                md += "## 分析师与收入\n\n"
-                for k, v in ana.items():
-                    if isinstance(v, dict):
-                        md += f"- **{k}**:\n"
-                        for sk, sv in v.items():
-                            md += f"  - {sk}: {sv}\n"
-                    elif isinstance(v, list):
-                        md += f"- **{k}**: {len(v)}条记录\n"
-                    else:
-                        md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Technical
-            tech = facts.get("technical", {})
-            if tech:
-                md += "## 量价技术\n\n"
-                for k, v in tech.items():
-                    if isinstance(v, dict):
-                        md += f"- **{k}**:\n"
-                        for sk, sv in v.items():
-                            md += f"  - {sk}: {sv}\n"
-                    elif isinstance(v, list):
-                        md += f"- **{k}**: {len(v)}条记录\n"
-                    else:
-                        md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Source trace
-            trace = result.get("source_trace", {})
-            if trace:
-                md += "## 数据溯源\n\n"
-                md += "| 类别 | 详情 |\n"
-                md += "|------|------|\n"
-                for cat, info in trace.items():
-                    md += f"| {cat} | {info} |\n"
-                md += "\n"
-
-            if missing:
-                md += f"## 缺失类别\n\n> {', '.join(missing)}\n"
+            # Use adapter-generated fact_markdown (COL-182: single source of truth)
+            md = result.get("fact_markdown", "")
+            if not md:
+                md = f"# 美股事实包: {name}({ticker})\n\n"
+                md += f"**已获取**: {categories_fetched}/{categories_total} 类"
+                md += f" | **耗时**: {elapsed:.1f}s\n\n"
 
             return create_standard_artifact_response(
                 summary=summary,
@@ -737,80 +405,12 @@ def register_fact_pack_tools(mcp: FastMCP):
                 f"(耗时 {elapsed:.1f}s)"
             )
 
-            # Build structured Markdown fact view
-            md = f"# ETF事实包: {name}({symbol})\n\n"
-            md += f"**已获取**: {categories_fetched}/{categories_total} 类"
-            md += f" | **耗时**: {elapsed:.1f}s\n\n"
-
-            if coverage:
-                complete = sum(1 for v in coverage.values() if v == "complete")
-                partial = sum(1 for v in coverage.values() if v == "partial")
-                md += f"**覆盖率**: {complete}完整 + {partial}部分 / {categories_total}类\n\n"
-
-            # Master
-            if master:
-                md += "## ETF主档\n\n"
-                for k, v in master.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Realtime
-            if rt:
-                md += "## 实时行情\n\n"
-                for k, v in rt.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Performance
-            perf = facts.get("performance", {})
-            if perf:
-                md += "## 历史表现\n\n"
-                for k, v in perf.items():
-                    if k == "history":
-                        md += f"- **近10日行情**: {len(v)}条\n"
-                    else:
-                        md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Flow
-            flow = facts.get("flow", {})
-            if flow:
-                md += "## 资金流/申赎\n\n"
-                if isinstance(flow, dict):
-                    for k, v in flow.items():
-                        md += f"- **{k}**: {v}\n"
-                elif isinstance(flow, list):
-                    for item in flow[:5]:
-                        md += f"- {item}\n"
-                md += "\n"
-
-            # Technical
-            tech = facts.get("technical", {})
-            if tech:
-                md += "## 技术信号\n\n"
-                signals = tech.get("signals", {})
-                if signals:
-                    for indicator, signal in signals.items():
-                        md += f"- **{indicator}**: {signal}\n"
-                md += f"- **RSI(14)**: {tech.get('rsi14', '-')}\n"
-                md += f"- **MACD DIF**: {tech.get('macd_dif', '-')}\n"
-                md += f"- **MACD DEA**: {tech.get('macd_dea', '-')}\n"
-                md += f"- **BOLL上轨**: {tech.get('boll_upper', '-')}\n"
-                md += f"- **BOLL下轨**: {tech.get('boll_lower', '-')}\n"
-                md += "\n"
-
-            # Source trace
-            trace = result.get("source_trace", {})
-            if trace:
-                md += "## 数据溯源\n\n"
-                md += "| 类别 | 详情 |\n"
-                md += "|------|------|\n"
-                for cat, info in trace.items():
-                    md += f"| {cat} | {info} |\n"
-                md += "\n"
-
-            if missing:
-                md += f"## 缺失类别\n\n> {', '.join(missing)}\n"
+            # Use adapter-generated fact_markdown (COL-182: single source of truth)
+            md = result.get("fact_markdown", "")
+            if not md:
+                md = f"# ETF事实包: {name}({symbol})\n\n"
+                md += f"**已获取**: {categories_fetched}/{categories_total} 类"
+                md += f" | **耗时**: {elapsed:.1f}s\n\n"
 
             return create_standard_artifact_response(
                 summary=summary,
@@ -885,89 +485,12 @@ def register_fact_pack_tools(mcp: FastMCP):
                 f"(耗时 {elapsed:.1f}s)"
             )
 
-            # Build structured Markdown fact view
-            md = f"# 指数事实包: {name}({symbol})\n\n"
-            md += f"**已获取**: {categories_fetched}/{categories_total} 类"
-            md += f" | **耗时**: {elapsed:.1f}s\n\n"
-
-            if coverage:
-                complete = sum(1 for v in coverage.values() if v == "complete")
-                partial = sum(1 for v in coverage.values() if v == "partial")
-                md += f"**覆盖率**: {complete}完整 + {partial}部分 / {categories_total}类\n\n"
-
-            # Master
-            if master:
-                md += "## 指数主档\n\n"
-                for k, v in master.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Valuation
-            val = facts.get("valuation", {})
-            if val:
-                md += "## PE/PB估值\n\n"
-                md += f"- **最新日期**: {val.get('latest_date', '-')}\n"
-                md += f"- **PE**: {val.get('pe', '-')}\n"
-                md += f"- **PB**: {val.get('pb', '-')}\n"
-                md += f"- **PE历史分位**: {val.get('pe_percentile', '-')}%\n"
-                md += f"- **PB历史分位**: {val.get('pb_percentile', '-')}%\n"
-                md += f"- **数据点数**: {val.get('data_points', 0)}\n"
-                md += "\n"
-
-            # Performance
-            perf = facts.get("performance", {})
-            if perf:
-                md += "## 行情表现\n\n"
-                md += f"- **最新日期**: {perf.get('latest_date', '-')}\n"
-                md += f"- **最新收盘**: {perf.get('latest_close', '-')}\n"
-                md += f"- **日涨跌幅**: {perf.get('change_pct_1d', '-')}%\n"
-                md += f"- **5日涨跌幅**: {perf.get('change_pct_5d', '-')}%\n"
-                md += f"- **20日涨跌幅**: {perf.get('change_pct_20d', '-')}%\n"
-                md += f"- **数据点数**: {perf.get('data_points', 0)}\n"
-                md += "\n"
-
-            # Constituents
-            cons = facts.get("constituents", {})
-            if cons:
-                md += f"## 成分股 (共{cons.get('total', 0)}只)\n\n"
-                top10 = cons.get("top10", [])
-                if top10:
-                    md += "| 股票代码 | 股票名称 |\n"
-                    md += "|---------|--------|\n"
-                    for c in top10[:10]:
-                        if isinstance(c, dict):
-                            code = c.get("index_code", c.get("constituent_code", ""))
-                            cname = c.get("index_name", c.get("constituent_name", ""))
-                            md += f"| {code} | {cname} |\n"
-                md += "\n"
-
-            # Technical
-            tech = facts.get("technical", {})
-            if tech:
-                md += "## 技术信号\n\n"
-                signals = tech.get("signals", {})
-                if signals:
-                    for indicator, signal in signals.items():
-                        md += f"- **{indicator}**: {signal}\n"
-                md += f"- **RSI(14)**: {tech.get('rsi14', '-')}\n"
-                md += f"- **MACD DIF**: {tech.get('macd_dif', '-')}\n"
-                md += f"- **MACD DEA**: {tech.get('macd_dea', '-')}\n"
-                md += f"- **BOLL上轨**: {tech.get('boll_upper', '-')}\n"
-                md += f"- **BOLL下轨**: {tech.get('boll_lower', '-')}\n"
-                md += "\n"
-
-            # Source trace
-            trace = result.get("source_trace", {})
-            if trace:
-                md += "## 数据溯源\n\n"
-                md += "| 类别 | 详情 |\n"
-                md += "|------|------|\n"
-                for cat, info in trace.items():
-                    md += f"| {cat} | {info} |\n"
-                md += "\n"
-
-            if missing:
-                md += f"## 缺失类别\n\n> {', '.join(missing)}\n"
+            # Use adapter-generated fact_markdown (COL-182: single source of truth)
+            md = result.get("fact_markdown", "")
+            if not md:
+                md = f"# 指数事实包: {name}({symbol})\n\n"
+                md += f"**已获取**: {categories_fetched}/{categories_total} 类"
+                md += f" | **耗时**: {elapsed:.1f}s\n\n"
 
             return create_standard_artifact_response(
                 summary=summary,
