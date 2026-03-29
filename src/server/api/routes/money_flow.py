@@ -11,7 +11,7 @@ from src.server.core.use_cases import money_flow as money_flow_use_cases
 from src.server.core.dependencies import Container
 from src.server.domain.response_contract import rest_response
 
-router = APIRouter(prefix="/api/v1/money-flow", tags=["Money Flow Analysis"])
+router = APIRouter(prefix="/api/v1/money-flow", tags=["宏观 Macro"])
 
 
 

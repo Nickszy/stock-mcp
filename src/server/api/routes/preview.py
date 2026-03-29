@@ -33,41 +33,64 @@ class PreviewQueryRequest(BaseModel):
 # --- Category grouping ---
 
 _METHOD_CATEGORIES: Dict[str, List[str]] = {
-    "Fundamental": [
+    "宏观 Macro": [
+        # 市场宏观
+        "get_north_bound_flow", "get_money_supply", "get_inflation_data",
+        "get_pmi_data", "get_gdp_data", "get_social_financing",
+        "get_interest_rates", "get_market_liquidity", "get_market_money_flow",
+        "get_bond_yield", "get_style_rotation",
+        # 衍生品/跨境
+        "get_ggt_daily", "get_futures_basis", "get_futures_main",
+        "get_option_summary", "get_commodity_inventory",
+        # 市场广度/情绪
+        "get_market_breadth", "get_dragon_tiger_list", "get_block_trade",
+        "get_margin_trading", "get_convertible_bond",
+    ],
+    "行业 Sector": [
+        # 行业数据
+        "get_industry_ranking", "get_concept_ranking",
+        "get_sector_trend", "get_sector_money_flow_history",
+        "get_sector_pe_pb_historical", "get_sector_valuation_metrics",
+        "get_sector_trend", "resolve_sector",
+    ],
+    "A股个股 A-Share": [
+        # 基本面
         "get_financials", "get_financial_statements", "get_mainbz_info",
         "get_shareholder_info", "get_dividend_info", "get_forecast_info",
         "get_valuation_metrics",
+        # 行情/技术
+        "calculate_technical_indicators", "get_technical_signals",
+        # 资金流/筹码
+        "get_money_flow", "get_chip_distribution",
+        "get_stock_northbound_holdings", "get_stock_top10_shareholders",
+        "get_stock_shareholder_changes", "get_stock_institutional_research",
+        "get_relative_strength", "calculate_risk_metrics",
+        "get_restricted_release", "get_repurchase_info",
+        # 事实包
+        "get_stock_fact_pack", "get_market_fact_pack",
     ],
-    "US Fundamental": [
+    "美股个股 US Stock": [
+        # 美股基本面
         "get_earnings_history", "get_cash_flow_quality",
         "get_us_valuation_metrics", "get_us_institutional_holdings",
         "get_us_company_profile", "get_us_analyst_recommendations",
         "get_us_revenue_segments", "get_us_insider_trading",
         "get_us_share_statistics", "get_us_financial_health",
-    ],
-    "US Technical": [
+        # 美股行情
         "get_us_price_history", "get_us_volume_analysis",
+        # 美股行业
+        "get_us_sector_etf_analysis",
+        # 事实包
+        "get_us_stock_fact_pack",
     ],
-    "Money Flow": [
-        "get_money_flow", "get_chip_distribution",
-        "get_stock_northbound_holdings", "get_stock_top10_shareholders",
-        "get_stock_shareholder_changes",
+    "基金 Fund": [
+        "get_fund_holdings", "get_fund_nav",
+        "get_fund_fact_pack",
     ],
-    "Macro": [
-        "get_north_bound_flow", "get_money_supply", "get_inflation_data",
-        "get_pmi_data", "get_gdp_data", "get_social_financing",
-        "get_interest_rates", "get_market_liquidity", "get_market_money_flow",
-        "get_ggt_daily", "get_dragon_tiger_list", "get_block_trade",
-        "get_margin_trading",
-    ],
-    "Sector": [
-        "resolve_sector", "get_sector_trend",
-        "get_sector_money_flow_history", "get_sector_valuation_metrics",
-        "get_industry_ranking", "get_concept_ranking", "get_style_rotation",
-    ],
-    "Factor": [
-        "get_stock_factors", "get_stock_correlation",
-        "get_factor_ranking", "get_stock_factor_screen",
+    "指数与ETF Index & ETF": [
+        "get_etf_flow",
+        "get_index_constituents", "get_index_constituent_weights",
+        "get_etf_fact_pack", "get_index_fact_pack",
     ],
 }
 

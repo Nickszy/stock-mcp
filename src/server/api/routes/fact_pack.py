@@ -22,7 +22,7 @@ from src.server.utils.logger import logger
 from src.server.core.dependencies import Container
 from src.server.domain.response_contract import rest_response, maybe_markdown_response
 
-router = APIRouter(prefix="/api/v1/fact-pack", tags=["Fact Pack"])
+router = APIRouter(prefix="/api/v1/fact-pack")
 
 
 def _wants_md(fmt: str, accept: str) -> bool:
@@ -35,6 +35,7 @@ def _wants_md(fmt: str, accept: str) -> bool:
 @router.get(
     "/stock/{symbol}",
     summary="获取股票事实包",
+    tags=["A股个股 A-Share"],
     description=(
         "聚合全维度股票结构化事实数据: 证券主档、财务、市场估值、公司治理、"
         "事件(分红/回购/解禁)、业务结构。"
@@ -67,6 +68,7 @@ async def get_stock_fact_pack(
 @router.get(
     "/fund/{fund_code}",
     summary="获取基金事实包",
+    tags=["基金 Fund"],
     description=(
         "聚合全维度基金结构化事实数据: 基金主档、净值收益、持仓穿透、基金经理、"
         "规模份额、资产配置、费率分红、同类比较。"
@@ -99,6 +101,7 @@ async def get_fund_fact_pack(
 @router.get(
     "/market/{symbol}",
     summary="获取行情事实包",
+    tags=["A股个股 A-Share"],
     description=(
         "聚合全维度行情结构化事实数据: 标的估值、技术快照、K线因子、资金流、"
         "市场广度、指数板块、衍生行情、相对强弱。"
@@ -131,6 +134,7 @@ async def get_market_fact_pack(
 @router.get(
     "/us-stock/{ticker}",
     summary="获取美股事实包",
+    tags=["美股个股 US Stock"],
     description=(
         "聚合全维度美股结构化事实数据: 公司档案、估值指标、财务健康、"
         "机构持仓与内部人交易、分析师评级与收入结构、量价技术分析。"
@@ -163,6 +167,7 @@ async def get_us_stock_fact_pack(
 @router.get(
     "/etf/{symbol}",
     summary="获取ETF事实包",
+    tags=["指数与ETF Index & ETF"],
     description=(
         "聚合全维度ETF结构化事实数据: ETF主档、实时行情、历史表现、"
         "资金流/申赎、技术信号(RSI/MACD/BOLL)。"
@@ -195,6 +200,7 @@ async def get_etf_fact_pack(
 @router.get(
     "/index/{symbol}",
     summary="获取指数事实包",
+    tags=["指数与ETF Index & ETF"],
     description=(
         "聚合全维度指数结构化事实数据: 指数主档、PE/PB估值与历史分位、"
         "行情表现、成分股、技术信号(RSI/MACD/BOLL)。"

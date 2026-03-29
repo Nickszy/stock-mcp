@@ -14,7 +14,7 @@ from src.server.utils.logger import logger
 from src.server.core.dependencies import Container
 from src.server.domain.response_contract import rest_response
 
-router = APIRouter(prefix="/api/v1/corporate-action", tags=["Corporate Action"])
+router = APIRouter(prefix="/api/v1/corporate-action", tags=["A股个股 A-Share"])
 
 
 # ------------------------------------------------------------------

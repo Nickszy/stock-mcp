@@ -39,7 +39,7 @@ from src.server.core.use_cases import (
     technical as technical_use_cases,
 )
 
-router = APIRouter(prefix="/api/v1/sector-research", tags=["Sector Research"])
+router = APIRouter(prefix="/api/v1/sector-research", tags=["行业 Sector"])
 
 
 # ---------------------------------------------------------------------------

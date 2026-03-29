@@ -6,7 +6,7 @@ from src.server.core.use_cases import filings as filings_use_cases
 from src.server.domain.response_contract import rest_response
 
 
-router = APIRouter(prefix="/filings", tags=["filings"])
+router = APIRouter(prefix="/filings", tags=["A股个股 A-Share"])
 
 # --- Request Models ---
 

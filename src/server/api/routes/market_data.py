@@ -27,7 +27,7 @@ from src.server.api.models.requests import (
     CalculateSupportResistanceRequest,
 )
 
-router = APIRouter(prefix="/api/v1/market", tags=["Market Data"])
+router = APIRouter(prefix="/api/v1/market", tags=["A股个股 A-Share"])
 
 
 @router.post(
