@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, Optional
 
 from src.server.core.dependencies import Container
+from src.server.domain.field_translator import translate_financial_payload
 from src.server.domain.response_contract import create_data_response
 from src.server.utils.logger import logger
 
@@ -138,12 +139,15 @@ async def get_stock_financial_statements(
     if isinstance(source, dict):
         source = source.get("provider", "unknown")
 
+    # Translate raw coded/abbreviated fields into human-readable form
+    translated = translate_financial_payload({
+        "income_statement": raw.get("income_statement", {}),
+        "balance_sheet": raw.get("balance_sheet", {}),
+        "cash_flow": raw.get("cash_flow", {}),
+    })
+
     return create_data_response(
-        data={
-            "income_statement": raw.get("income_statement", {}),
-            "balance_sheet": raw.get("balance_sheet", {}),
-            "cash_flow": raw.get("cash_flow", {}),
-        },
+        data=translated,
         symbol=raw.get("ts_code") or raw.get("ticker") or symbol,
         source=source,
         period=period,
