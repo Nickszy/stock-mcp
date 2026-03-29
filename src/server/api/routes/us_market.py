@@ -34,7 +34,7 @@ async def get_us_company_profile(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_us_company_profile", ticker=ticker)
-        result = await Container.market_gateway().get_us_company_profile(ticker=ticker)
+        result = await Container.market_gateway().get_us_company_profile(ticker)
         return rest_response(data=result, symbol=ticker, source="yahoo")
     except Exception as e:
         logger.error(f"API error in get_us_company_profile: {e}", exc_info=True)
@@ -56,7 +56,7 @@ async def get_earnings_history(
     try:
         logger.info("API: get_earnings_history", ticker=ticker)
         result = await Container.market_gateway().get_earnings_history(
-            ticker=ticker, quarters=quarters,
+            ticker, quarters=quarters,
         )
         return rest_response(data=result, symbol=ticker, source="yahoo")
     except Exception as e:
@@ -77,7 +77,7 @@ async def get_cash_flow_quality(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_cash_flow_quality", ticker=ticker)
-        result = await Container.market_gateway().get_cash_flow_quality(ticker=ticker)
+        result = await Container.market_gateway().get_cash_flow_quality(ticker)
         return rest_response(data=result, symbol=ticker, source="yahoo")
     except Exception as e:
         logger.error(f"API error in get_cash_flow_quality: {e}", exc_info=True)
@@ -97,7 +97,7 @@ async def get_us_valuation_metrics(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_us_valuation_metrics", ticker=ticker)
-        result = await Container.market_gateway().get_us_valuation_metrics(ticker=ticker)
+        result = await Container.market_gateway().get_us_valuation_metrics(ticker)
         return rest_response(data=result, symbol=ticker, source="yahoo")
     except Exception as e:
         logger.error(f"API error in get_us_valuation_metrics: {e}", exc_info=True)
@@ -117,7 +117,7 @@ async def get_us_institutional_holdings(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_us_institutional_holdings", ticker=ticker)
-        result = await Container.market_gateway().get_us_institutional_holdings(ticker=ticker)
+        result = await Container.market_gateway().get_us_institutional_holdings(ticker)
         return rest_response(data=result, symbol=ticker, source="yahoo")
     except Exception as e:
         logger.error(f"API error in get_us_institutional_holdings: {e}", exc_info=True)
@@ -137,7 +137,7 @@ async def get_us_analyst_recommendations(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_us_analyst_recommendations", ticker=ticker)
-        result = await Container.market_gateway().get_us_analyst_recommendations(ticker=ticker)
+        result = await Container.market_gateway().get_us_analyst_recommendations(ticker)
         return rest_response(data=result, symbol=ticker, source="yahoo")
     except Exception as e:
         logger.error(f"API error in get_us_analyst_recommendations: {e}", exc_info=True)
@@ -157,7 +157,7 @@ async def get_us_revenue_segments(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_us_revenue_segments", ticker=ticker)
-        result = await Container.market_gateway().get_us_revenue_segments(ticker=ticker)
+        result = await Container.market_gateway().get_us_revenue_segments(ticker)
         return rest_response(data=result, symbol=ticker, source="yahoo")
     except Exception as e:
         logger.error(f"API error in get_us_revenue_segments: {e}", exc_info=True)
@@ -177,7 +177,7 @@ async def get_us_insider_trading(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_us_insider_trading", ticker=ticker)
-        result = await Container.market_gateway().get_us_insider_trading(ticker=ticker)
+        result = await Container.market_gateway().get_us_insider_trading(ticker)
         return rest_response(data=result, symbol=ticker, source="yahoo")
     except Exception as e:
         logger.error(f"API error in get_us_insider_trading: {e}", exc_info=True)
@@ -197,7 +197,7 @@ async def get_us_share_statistics(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_us_share_statistics", ticker=ticker)
-        result = await Container.market_gateway().get_us_share_statistics(ticker=ticker)
+        result = await Container.market_gateway().get_us_share_statistics(ticker)
         return rest_response(data=result, symbol=ticker, source="yahoo")
     except Exception as e:
         logger.error(f"API error in get_us_share_statistics: {e}", exc_info=True)
@@ -217,7 +217,7 @@ async def get_us_financial_health(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_us_financial_health", ticker=ticker)
-        result = await Container.market_gateway().get_us_financial_health(ticker=ticker)
+        result = await Container.market_gateway().get_us_financial_health(ticker)
         return rest_response(data=result, symbol=ticker, source="yahoo")
     except Exception as e:
         logger.error(f"API error in get_us_financial_health: {e}", exc_info=True)
@@ -244,7 +244,7 @@ async def get_us_price_history(
     try:
         logger.info("API: get_us_price_history", ticker=ticker)
         result = await Container.market_gateway().get_us_price_history(
-            ticker=ticker, days=days, interval=interval,
+            ticker, days=days, interval=interval,
         )
         return rest_response(data=result, symbol=ticker, source="yahoo")
     except Exception as e:
@@ -267,7 +267,7 @@ async def get_us_volume_analysis(
     try:
         logger.info("API: get_us_volume_analysis", ticker=ticker)
         result = await Container.market_gateway().get_us_volume_analysis(
-            ticker=ticker, days=days,
+            ticker, days=days,
         )
         return rest_response(data=result, symbol=ticker, source="yahoo")
     except Exception as e:

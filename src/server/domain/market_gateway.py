@@ -401,7 +401,7 @@ class MarketGateway:
                     if adapter is not primary:
                         with self._cache_lock:
                             self._ticker_cache[ticker] = adapter
-                    return result
+                    return self._sanitize_na(result)
                 logger.warning(
                     f"{adapter.source.value}.{method}({ticker}) returned None, trying next"
                 )
@@ -438,7 +438,7 @@ class MarketGateway:
                     timeout=self._provider_timeout_seconds,
                 )
                 if result is not None:
-                    return result
+                    return self._sanitize_na(result)
             except NotImplementedError:
                 continue
             except asyncio.TimeoutError:

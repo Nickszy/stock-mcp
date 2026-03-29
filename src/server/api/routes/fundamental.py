@@ -153,7 +153,7 @@ async def get_main_business(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_mainbz_info", symbol=symbol)
-        result = await Container.market_gateway().get_mainbz_info(ticker=symbol)
+        result = await Container.market_gateway().get_mainbz_info(symbol)
         return rest_response(data=result, symbol=symbol, source="akshare")
     except Exception as e:
         logger.error(f"API error in get_mainbz_info: {e}", exc_info=True)
@@ -173,7 +173,7 @@ async def get_shareholder_info(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_shareholder_info", symbol=symbol)
-        result = await Container.market_gateway().get_shareholder_info(ticker=symbol)
+        result = await Container.market_gateway().get_shareholder_info(symbol)
         return rest_response(data=result, symbol=symbol, source="akshare")
     except Exception as e:
         logger.error(f"API error in get_shareholder_info: {e}", exc_info=True)
@@ -193,7 +193,7 @@ async def get_dividend_info(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_dividend_info", symbol=symbol)
-        result = await Container.market_gateway().get_dividend_info(ticker=symbol)
+        result = await Container.market_gateway().get_dividend_info(symbol)
         return rest_response(data=result, symbol=symbol, source="akshare")
     except Exception as e:
         logger.error(f"API error in get_dividend_info: {e}", exc_info=True)
@@ -213,7 +213,7 @@ async def get_valuation_metrics(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_valuation_metrics", symbol=symbol)
-        result = await Container.market_gateway().get_valuation_metrics(ticker=symbol)
+        result = await Container.market_gateway().get_valuation_metrics(symbol)
         return rest_response(data=result, symbol=symbol, source="akshare")
     except Exception as e:
         logger.error(f"API error in get_valuation_metrics: {e}", exc_info=True)
