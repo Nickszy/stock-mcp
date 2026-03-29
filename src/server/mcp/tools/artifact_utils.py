@@ -302,6 +302,19 @@ def create_standard_artifact_response(
         ``start_date``, ``end_date``, ``interval``, ``limit``, ``date``).
     """
     from src.server.domain.response_contract import create_data_response
+    from src.server.domain.field_translator import translate_records
+
+    # Auto-translate list-of-dict data for AI readability
+    if isinstance(data, dict):
+        translated_data: Dict[str, Any] = {}
+        for k, v in data.items():
+            if isinstance(v, list) and v and isinstance(v[0], dict):
+                translated_data[k] = translate_records(v)
+            else:
+                translated_data[k] = v
+        data = translated_data
+    elif isinstance(data, list) and data and isinstance(data[0], dict):
+        data = translate_records(data)
 
     contract_data = create_data_response(
         data, symbol=symbol, source=source, **contract_kwargs
