@@ -118,7 +118,7 @@ async def get_fund_manager(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get fund manager: {str(e)}",
-        }
+        )
 
 
 # ------------------------------------------------------------------
@@ -141,7 +141,7 @@ async def get_fund_valuation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get fund valuation: {str(e)}",
-        }
+        )
 
 
 # ------------------------------------------------------------------
@@ -185,6 +185,7 @@ async def get_fund_scale() -> Dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get fund scale: {str(e)}",
+        )
 
 
 
@@ -232,3 +233,4 @@ async def get_fund_holdings(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get fund holdings: {str(e)}",
+        )

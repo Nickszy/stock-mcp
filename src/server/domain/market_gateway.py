@@ -152,12 +152,6 @@ _MARKET_METHODS: Set[str] = {
     "get_stock_factors",
     "get_stock_correlation",
     "get_factor_ranking",
-    # Fact pack (COL-148)
-    "get_stock_fact_pack",
-    # Fund fact pack (COL-150)
-    "get_fund_fact_pack",
-    # Market fact pack (COL-152)
-    "get_market_fact_pack",
 }
 
 
@@ -697,6 +691,50 @@ class MarketGateway:
         if last_not_found is not None:
             return last_not_found
         raise ValueError(f"No adapter supports resolve_sector: {last_error}")
+
+    # =========================================================================
+    # Fact Pack methods — always route to AkshareAdapter
+    # =========================================================================
+
+    def _akshare_adapter(self) -> BaseDataAdapter:
+        """Get the AkshareAdapter, raising if unavailable."""
+        adapter = self.adapters.get(DataSource.AKSHARE)
+        if adapter is None:
+            raise ValueError("AkshareAdapter is not registered")
+        return adapter
+
+    @staticmethod
+    def _sanitize_na(obj: Any) -> Any:
+        """Recursively convert pandas NA / NaN / Nat to None for JSON."""
+        import pandas as pd
+        import numpy as np
+        if isinstance(obj, dict):
+            return {k: MarketGateway._sanitize_na(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [MarketGateway._sanitize_na(v) for v in obj]
+        if isinstance(obj, float) and (np.isnan(obj) or pd.isna(obj)):
+            return None
+        try:
+            if pd.isna(obj):
+                return None
+        except (TypeError, ValueError):
+            pass
+        return obj
+
+    async def get_stock_fact_pack(self, symbol: str) -> Dict[str, Any]:
+        """Get aggregated stock fact pack (AkshareAdapter only)."""
+        result = await self._akshare_adapter().get_stock_fact_pack(symbol)
+        return self._sanitize_na(result)
+
+    async def get_fund_fact_pack(self, fund_code: str) -> Dict[str, Any]:
+        """Get aggregated fund fact pack (AkshareAdapter only)."""
+        result = await self._akshare_adapter().get_fund_fact_pack(fund_code)
+        return self._sanitize_na(result)
+
+    async def get_market_fact_pack(self, symbol: str) -> Dict[str, Any]:
+        """Get aggregated market fact pack (AkshareAdapter only)."""
+        result = await self._akshare_adapter().get_market_fact_pack(symbol)
+        return self._sanitize_na(result)
 
     # =========================================================================
     # __getattr__: synthesize ticker-scoped and market-wide methods
