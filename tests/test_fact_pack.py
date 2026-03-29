@@ -300,8 +300,8 @@ class TestFactPackRegistry:
     def test_total_tool_count(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        # 110 + 1(stock) + 1(fund) + 1(market) = 113
-        assert total == 113, f"Expected 113, got {total}"
+        # 110 + 1(stock) + 1(fund) + 1(market) + 1(us_stock) = 114
+        assert total == 114, f"Expected 114, got {total}"
 
     def test_fact_pack_group_present(self):
         from src.server.mcp.registry import TOOL_GROUPS
@@ -312,7 +312,7 @@ class TestFactPackRegistry:
         from src.server.mcp.registry import TOOL_GROUPS
         fp = [g for g in TOOL_GROUPS if g.name == "fact-pack"]
         assert len(fp) == 1
-        assert fp[0].count == 3  # stock + fund + market
+        assert fp[0].count == 4  # stock + fund + market + us_stock
         assert fp[0].enabled is True
 
 

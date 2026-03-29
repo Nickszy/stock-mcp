@@ -182,8 +182,8 @@ TOOL_GROUPS: List[ToolGroup] = [
         name="fact-pack",
         register=register_fact_pack_tools,
         enabled=True,
-        description="事实包聚合 (股票事实包/基金事实包/行情事实包)",
-        count=3,
+        description="事实包聚合 (股票/基金/行情/美股事实包)",
+        count=4,
     ),
 ]
 

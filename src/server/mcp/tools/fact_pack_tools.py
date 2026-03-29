@@ -540,3 +540,198 @@ def register_fact_pack_tools(mcp: FastMCP):
                 source="akshare",
                 description=f"获取行情事实包失败: {e}",
             )
+
+    # ------------------------------------------------------------------
+    # get_us_stock_fact_pack — 美股事实包 (COL-168)
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"fact-pack", "us-fundamental"})
+    async def get_us_stock_fact_pack(
+        ticker: str,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取美股事实包(Fact Pack)：一次调用聚合全维度美股结构化事实数据。
+
+        聚合 6 大事实类别: 公司档案、估值指标、财务健康、
+        机构持仓与内部人交易、分析师评级与收入结构、量价技术分析。
+        返回统一结构: entity + facts + source_trace + coverage。
+
+        Typical use cases:
+        - "给我 AAPL 的完整美股事实包"
+        - "Apple 的最新全维度结构化数据"
+        - "查一下 TSLA 的估值+财务健康+机构持仓"
+
+        Args:
+            ticker: 美股代码 (如 AAPL, TSLA, MSFT)
+            ctx: FastMCP Context.
+
+        Returns:
+            美股事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        """
+        if ctx:
+            await ctx.info(f"获取美股事实包: {ticker}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_us_stock_fact_pack", ticker=ticker)
+
+            gateway = Container.market_gateway()
+            result = await gateway.get_us_stock_fact_pack(ticker=ticker)
+
+            elapsed = time.perf_counter() - t0
+            categories_fetched = result.get("categories_fetched", 0)
+            categories_total = result.get("categories_total", 6)
+            coverage = result.get("coverage", {})
+            missing = result.get("missing_fields", [])
+            facts = result.get("facts", {})
+
+            # Get company name from profile
+            profile = facts.get("profile", {})
+            name = profile.get("company_name", ticker)
+
+            summary = (
+                f"美股事实包: {name}({ticker}) "
+                f"[{categories_fetched}/{categories_total}类] "
+                f"(耗时 {elapsed:.1f}s)"
+            )
+
+            # Build structured Markdown fact view
+            md = f"# 美股事实包: {name}({ticker})\n\n"
+            md += f"**已获取**: {categories_fetched}/{categories_total} 类"
+            md += f" | **耗时**: {elapsed:.1f}s\n\n"
+
+            if coverage:
+                complete = sum(1 for v in coverage.values() if v == "complete")
+                partial = sum(1 for v in coverage.values() if v == "partial")
+                md += f"**覆盖率**: {complete}完整 + {partial}部分 / {categories_total}类\n\n"
+
+            # Profile
+            if profile:
+                md += "## 公司档案\n\n"
+                for k, v in profile.items():
+                    md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Valuation
+            val = facts.get("valuation", {})
+            if val:
+                md += "## 估值指标\n\n"
+                for k, v in val.items():
+                    if isinstance(v, dict):
+                        md += f"- **{k}**:\n"
+                        for sk, sv in v.items():
+                            md += f"  - {sk}: {sv}\n"
+                    else:
+                        md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Financials
+            fin = facts.get("financials", {})
+            if fin:
+                md += "## 财务健康\n\n"
+                for k, v in fin.items():
+                    if isinstance(v, dict):
+                        md += f"- **{k}**:\n"
+                        for sk, sv in v.items():
+                            md += f"  - {sk}: {sv}\n"
+                    elif isinstance(v, list):
+                        md += f"- **{k}**: {len(v)}条记录\n"
+                    else:
+                        md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Ownership
+            own = facts.get("ownership", {})
+            if own:
+                md += "## 机构持仓与内部人\n\n"
+                inst = own.get("institutional_holders", [])
+                if inst:
+                    md += f"### 机构持仓前{min(len(inst), 10)}名\n\n"
+                    md += "| 机构 | 持仓市值 | 比例 |\n"
+                    md += "|------|---------|------|\n"
+                    for h in inst[:10]:
+                        if isinstance(h, dict):
+                            md += (
+                                f"| {h.get('holder', '')} "
+                                f"| {h.get('value', '-')} "
+                                f"| {h.get('pct_held', '-')} |\n"
+                            )
+                    md += "\n"
+                insider = own.get("insider_trades", [])
+                if insider:
+                    md += f"### 内部人交易 (最近{min(len(insider), 5)}笔)\n\n"
+                    for t in insider[:5]:
+                        if isinstance(t, dict):
+                            md += (
+                                f"- {t.get('insider', '')} "
+                                f"{t.get('transaction', '')} "
+                                f"{t.get('shares', '-')}股\n"
+                            )
+                    md += "\n"
+                for k, v in own.items():
+                    if k not in ("institutional_holders", "insider_trades"):
+                        md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Analyst
+            ana = facts.get("analyst", {})
+            if ana:
+                md += "## 分析师与收入\n\n"
+                for k, v in ana.items():
+                    if isinstance(v, dict):
+                        md += f"- **{k}**:\n"
+                        for sk, sv in v.items():
+                            md += f"  - {sk}: {sv}\n"
+                    elif isinstance(v, list):
+                        md += f"- **{k}**: {len(v)}条记录\n"
+                    else:
+                        md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Technical
+            tech = facts.get("technical", {})
+            if tech:
+                md += "## 量价技术\n\n"
+                for k, v in tech.items():
+                    if isinstance(v, dict):
+                        md += f"- **{k}**:\n"
+                        for sk, sv in v.items():
+                            md += f"  - {sk}: {sv}\n"
+                    elif isinstance(v, list):
+                        md += f"- **{k}**: {len(v)}条记录\n"
+                    else:
+                        md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # Source trace
+            trace = result.get("source_trace", {})
+            if trace:
+                md += "## 数据溯源\n\n"
+                md += "| 类别 | 详情 |\n"
+                md += "|------|------|\n"
+                for cat, info in trace.items():
+                    md += f"| {cat} | {info} |\n"
+                md += "\n"
+
+            if missing:
+                md += f"## 缺失类别\n\n> {', '.join(missing)}\n"
+
+            return create_standard_artifact_response(
+                summary=summary,
+                component_type=ComponentType.TABLE,
+                name=f"美股事实包: {name}({ticker})",
+                data=result,
+                source="yahoo",
+                description=summary,
+                markdown=md,
+                symbol=ticker,
+            )
+
+        except Exception as e:
+            logger.error(f"get_us_stock_fact_pack failed: {e}")
+            return create_standard_artifact_response(
+                summary=f"获取美股事实包失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="美股事实包错误",
+                data={"error": str(e)},
+                source="yahoo",
+                description=f"获取美股事实包失败: {e}",
+            )
