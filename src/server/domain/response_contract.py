@@ -119,7 +119,26 @@ def rest_response(
     When *data* is a dict its keys are spread directly into the payload
     alongside metadata.  When *data* is a list or scalar it is placed under
     a ``"data"`` key (since it can't be spread).
+
+    Dict values that are lists of dicts are automatically translated using
+    the authoritative field dictionaries (Tushare-sourced).  This adds
+    ``_label``, ``_name``, and ``report_period`` annotations to every row
+    that contains known coded fields — no per-endpoint code needed.
     """
+    # Auto-translate known coded fields in list-of-dict values
+    if isinstance(data, dict):
+        from src.server.domain.field_translator import translate_records
+        translated_data: Dict[str, Any] = {}
+        for k, v in data.items():
+            if isinstance(v, list) and v and isinstance(v[0], dict):
+                translated_data[k] = translate_records(v)
+            elif isinstance(v, dict):
+                # Nested dict: also translate if it contains coded fields
+                translated_data[k] = v
+            else:
+                translated_data[k] = v
+        data = translated_data
+
     payload: Dict[str, Any] = {}
 
     # Metadata fields
