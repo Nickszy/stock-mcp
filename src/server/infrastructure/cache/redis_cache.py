@@ -5,7 +5,7 @@ All services can use `cache.get/set` without worrying about client details.
 
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 import aiocache
@@ -14,6 +14,52 @@ from aiocache.serializers import BaseSerializer
 from src.server.infrastructure.connections.redis_connection import RedisConnection
 
 logger = logging.getLogger(__name__)
+
+_CST = timezone(timedelta(hours=8))  # A-stock market timezone (UTC+8)
+
+
+def market_aware_ttl(trading_ttl: int = 300, max_ttl: int = 86400) -> int:
+    """Calculate smart TTL based on A-stock market hours (CST/UTC+8).
+
+    - Trading hours (weekday 9:30-15:00 CST): use ``trading_ttl`` for freshness
+    - After market close on weekday: cache until next 9:15 CST
+    - Weekend: cache until Monday 9:15 CST
+    - Chinese public holidays are NOT handled (data stays short-TTL)
+
+    Returns:
+        TTL in seconds, capped at ``max_ttl`` (default 24h).
+    """
+    now = datetime.now(_CST)
+    weekday = now.weekday()  # 0=Mon .. 6=Sun
+
+    def _seconds_until(target_hour: int, target_min: int, days_ahead: int = 0) -> int:
+        target = (now + timedelta(days=days_ahead)).replace(
+            hour=target_hour, minute=target_min, second=0, microsecond=0
+        )
+        return int((target - now).total_seconds())
+
+    # Weekend → cache until Monday 9:15
+    if weekday >= 5:
+        days_to_mon = 7 - weekday
+        ttl = _seconds_until(9, 15, days_to_mon)
+        return min(max(ttl, 3600), max_ttl)
+
+    # Before market open → cache until 9:30
+    if now.hour < 9 or (now.hour == 9 and now.minute < 30):
+        ttl = _seconds_until(9, 30)
+        return min(max(ttl, 300), max_ttl)
+
+    # During trading hours → short TTL
+    if now.hour < 15 or (now.hour == 15 and now.minute == 0):
+        return trading_ttl
+
+    # After market close on weekday
+    if weekday == 4:  # Friday → cache until Monday 9:15
+        ttl = _seconds_until(9, 15, 3)
+    else:
+        ttl = _seconds_until(9, 15, 1)
+
+    return min(max(ttl, 3600), max_ttl)
 
 
 class DateAwareJsonSerializer(BaseSerializer):
@@ -69,7 +115,8 @@ class AsyncRedisCache:
 
     async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
         try:
-            await self._cache.set(key, value, ttl=ttl or self._ttl_default)
+            cache_ttl = ttl if ttl is not None else self._ttl_default
+            await self._cache.set(key, value, ttl=cache_ttl)
             return True
         except Exception as e:
             logger.error(f"❌ Cache set error for {key}: {e}")

@@ -16,6 +16,7 @@ import akshare as ak
 import pandas as pd
 
 from src.server.domain.adapters.base import BaseDataAdapter
+from src.server.infrastructure.cache.redis_cache import market_aware_ttl
 from src.server.domain.cninfo_helper import (
     _normalize_stock_code,
     fetch_cninfo_data,
@@ -4372,7 +4373,7 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.warning(f"fact_markdown generation failed: {e}")
 
-        await self.cache.set(cache_key, result, ttl=600)
+        await self.cache.set(cache_key, result, ttl=market_aware_ttl(300))
         return result
 
     async def _get_valuation_raw(self, symbol: str) -> Optional[Dict[str, Any]]:
@@ -5537,6 +5538,11 @@ class AkshareAdapter(BaseDataAdapter):
             symbol: ETF code (e.g. '510300', '159919')
         """
         symbol = self._to_ak_code(symbol)
+        cache_key = f"akshare:etf_fact_pack:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
         import asyncio as _asyncio
 
         entity = {"symbol": symbol, "type": "etf", "source": "akshare"}
@@ -5740,6 +5746,8 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.warning(f"fact_markdown generation failed: {e}")
 
+        await self.cache.set(cache_key, result, ttl=market_aware_ttl(300))
+
         return result
 
     # ------------------------------------------------------------------
@@ -5761,6 +5769,11 @@ class AkshareAdapter(BaseDataAdapter):
         Args:
             symbol: Index code (e.g. '000300', '000001')
         """
+        cache_key = f"akshare:index_fact_pack:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
         import asyncio as _asyncio
 
         entity = {"symbol": symbol, "type": "index", "source": "akshare"}
@@ -5986,6 +5999,7 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.warning(f"fact_markdown generation failed: {e}")
 
+        await self.cache.set(cache_key, result, ttl=market_aware_ttl(300))
         return result
 
     # ------------------------------------------------------------------
@@ -6554,7 +6568,7 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.warning(f"fact_markdown generation failed: {e}")
 
-        await self.cache.set(cache_key, result, ttl=600)
+        await self.cache.set(cache_key, result, ttl=market_aware_ttl(300))
         return result
 
     # ------------------------------------------------------------------
@@ -6810,7 +6824,7 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.warning(f"fact_markdown generation failed: {e}")
 
-        await self.cache.set(cache_key, result, ttl=600)
+        await self.cache.set(cache_key, result, ttl=market_aware_ttl(300))
         return result
 
     # ------------------------------------------------------------------
@@ -6963,6 +6977,6 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             self.logger.warning(f"fact_markdown generation failed: {e}")
 
-        await self.cache.set(cache_key, result, ttl=600)
+        await self.cache.set(cache_key, result, ttl=market_aware_ttl(300))
         return result
 

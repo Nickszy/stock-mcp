@@ -802,7 +802,8 @@ class MarketGateway:
 
     async def get_sector_fact_pack(self, sector_name: str) -> Dict[str, Any]:
         """Get aggregated sector fact pack (AkshareAdapter only)."""
-        return await self._ak_adapter().get_sector_fact_pack(sector_name)
+        result = await self._akshare_adapter().get_sector_fact_pack(sector_name)
+        return self._sanitize_na(result)
 
     # =========================================================================
     # __getattr__: synthesize ticker-scoped and market-wide methods
