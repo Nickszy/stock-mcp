@@ -607,6 +607,28 @@ _PLACEHOLDER_HTML = """<!DOCTYPE html>
 <html><head><title>Stock MCP Preview</title></head>
 <body><h1>Loading...</h1></body></html>"""
 
+_SCALAR_HTML = """<!DOCTYPE html>
+<html>
+<head>
+  <title>Stock MCP API Reference</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { margin: 0; }
+  </style>
+</head>
+<body>
+  <script id="api-reference" data-url="/openapi.json"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+</body>
+</html>"""
+
+
+@router.get("/api-docs", response_class=HTMLResponse, include_in_schema=False)
+async def scalar_api_docs():
+    """Serve the Scalar API reference page (reads from /openapi.json)."""
+    return HTMLResponse(content=_SCALAR_HTML)
+
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def preview_page():

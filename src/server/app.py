@@ -233,8 +233,10 @@ def create_app():
     logger.info("   - RESTful API: http://localhost:9898/api/v1")
     logger.info("   - MCP Protocol: http://localhost:9898/mcp")
     logger.info("📖 Documentation:")
+    logger.info("   - Scalar API Docs: http://localhost:9898/api-docs")
     logger.info("   - Swagger UI: http://localhost:9898/docs")
     logger.info("   - ReDoc: http://localhost:9898/redoc")
+    logger.info("   - Preview Workbench: http://localhost:9898/")
     logger.info("💚 Health Check: http://localhost:9898/health")
     logger.info("=" * 70)
 
