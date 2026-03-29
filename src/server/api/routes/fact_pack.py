@@ -5,6 +5,7 @@ Provides RESTful HTTP endpoints for aggregated fact pack data:
 - Stock fact pack (COL-148)
 - Fund fact pack (COL-150)
 - Market fact pack (COL-152)
+- US Stock fact pack (COL-164)
 """
 
 from fastapi import APIRouter, HTTPException, status, Query
@@ -92,4 +93,30 @@ async def get_market_fact_pack(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get market fact pack: {str(e)}",
+        )
+
+
+# ------------------------------------------------------------------
+# get_us_stock_fact_pack (COL-164)
+# ------------------------------------------------------------------
+@router.get(
+    "/us-stock/{ticker}",
+    summary="获取美股事实包",
+    description=(
+        "聚合全维度美股结构化事实数据: 公司档案、估值指标、财务健康、"
+        "机构持仓与内部人交易、分析师评级与收入结构、量价技术分析。"
+    ),
+)
+async def get_us_stock_fact_pack(
+    ticker: str,
+) -> Dict[str, Any]:
+    try:
+        logger.info("API: get_us_stock_fact_pack", ticker=ticker)
+        result = await Container.market_gateway().get_us_stock_fact_pack(ticker=ticker)
+        return rest_response(data=result, symbol=ticker, source="yahoo")
+    except Exception as e:
+        logger.error(f"API error in get_us_stock_fact_pack: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get US stock fact pack: {str(e)}",
         )

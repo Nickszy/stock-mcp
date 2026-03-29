@@ -2289,3 +2289,151 @@ class YahooAdapter(BaseDataAdapter):
             self.logger.error(f"get_us_market_overview failed: {e}")
             return {"error": str(e), "indices": [], "sectors": [], "source": "yahoo"}
 
+    # ------------------------------------------------------------------
+    # US Stock Fact Pack (COL-164)
+    # ------------------------------------------------------------------
+
+    async def get_us_stock_fact_pack(self, ticker: str) -> Dict[str, Any]:
+        """Aggregate US stock fact pack: profile, valuation, financials,
+        ownership, analyst, technical — 6 categories with error isolation."""
+        t0 = time.perf_counter()
+        cache_key = f"yahoo:us_fact_pack:{ticker}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        entity = {"symbol": ticker, "asset_type": "us_stock"}
+        facts: Dict[str, Any] = {}
+        source_trace: Dict[str, Any] = {}
+        coverage: Dict[str, str] = {}
+        missing_fields: list = []
+
+        async def _cat(name: str, coro):
+            """Fetch one category; never lets a single failure cascade."""
+            try:
+                result = await coro
+                if result and not (isinstance(result, dict) and result.get("error")):
+                    facts[name] = result
+                    coverage[name] = "complete"
+                    source_trace[name] = {"provider": "yahoo"}
+                else:
+                    coverage[name] = "empty"
+                    missing_fields.append(name)
+            except Exception as e:
+                self.logger.warning(f"US fact pack '{name}' failed for {ticker}: {e}")
+                coverage[name] = "error"
+                source_trace[name] = {"provider": "yahoo", "error": str(e)}
+                missing_fields.append(name)
+
+        # Run all 6 categories concurrently for speed
+        await asyncio.gather(
+            _cat("profile", self._us_fp_profile(ticker)),
+            _cat("valuation", self._us_fp_valuation(ticker)),
+            _cat("financials", self._us_fp_financials(ticker)),
+            _cat("ownership", self._us_fp_ownership(ticker)),
+            _cat("analyst", self._us_fp_analyst(ticker)),
+            _cat("technical", self._us_fp_technical(ticker)),
+        )
+
+        elapsed = time.perf_counter() - t0
+        result = {
+            "source": "yahoo",
+            "entity": entity,
+            "facts": facts,
+            "source_trace": source_trace,
+            "coverage": coverage,
+            "missing_fields": missing_fields,
+            "categories_fetched": sum(1 for v in coverage.values() if v == "complete"),
+            "categories_total": 6,
+            "elapsed_seconds": round(elapsed, 2),
+        }
+        await self.cache.set(cache_key, result, ttl=600)
+        return result
+
+    # -- helper: safe float --
+    def _sf(self, val) -> Optional[float]:
+        if val is None:
+            return None
+        try:
+            f = float(val)
+            return None if (math.isnan(f) or math.isinf(f)) else f
+        except Exception:
+            return None
+
+    # -- category helpers (private) --
+
+    async def _us_fp_profile(self, ticker: str) -> Dict[str, Any]:
+        profile = await self.get_us_company_profile(ticker)
+        if not profile:
+            return {}
+        return {
+            "company_name": profile.get("companyName"),
+            "exchange": profile.get("exchange"),
+            "industry": profile.get("industry"),
+            "sector": profile.get("sector"),
+            "country": profile.get("country"),
+            "employees": self._sf(profile.get("fullTimeEmployees")),
+            "website": profile.get("website"),
+            "business_summary": (profile.get("longBusinessSummary") or "")[:500],
+            "market_cap": self._sf(profile.get("marketCap")),
+            "price": self._sf(profile.get("currentPrice")),
+            "currency": profile.get("currency", "USD"),
+        }
+
+    async def _us_fp_valuation(self, ticker: str) -> Dict[str, Any]:
+        val = await self.get_us_valuation_metrics(ticker)
+        if not val:
+            return {}
+        return val
+
+    async def _us_fp_financials(self, ticker: str) -> Dict[str, Any]:
+        health, cashflow, earnings = await asyncio.gather(
+            self.get_us_financial_health(ticker),
+            self.get_cash_flow_quality(ticker),
+            self.get_earnings_history(ticker, quarters=4),
+        )
+        result: Dict[str, Any] = {}
+        if health:
+            result["health_score"] = health
+        if cashflow:
+            result["cashflow_quality"] = cashflow
+        if earnings:
+            result["earnings_history"] = earnings
+        return result
+
+    async def _us_fp_ownership(self, ticker: str) -> Dict[str, Any]:
+        inst, insider = await asyncio.gather(
+            self.get_us_institutional_holdings(ticker),
+            self.get_us_insider_trading(ticker),
+        )
+        result: Dict[str, Any] = {}
+        if inst:
+            result["institutional"] = inst
+        if insider:
+            result["insider"] = insider
+        return result
+
+    async def _us_fp_analyst(self, ticker: str) -> Dict[str, Any]:
+        rec, segments = await asyncio.gather(
+            self.get_us_analyst_recommendations(ticker),
+            self.get_us_revenue_segments(ticker),
+        )
+        result: Dict[str, Any] = {}
+        if rec:
+            result["recommendations"] = rec
+        if segments:
+            result["revenue_segments"] = segments
+        return result
+
+    async def _us_fp_technical(self, ticker: str) -> Dict[str, Any]:
+        price, volume = await asyncio.gather(
+            self.get_us_price_history(ticker, days=60),
+            self.get_us_volume_analysis(ticker, days=30),
+        )
+        result: Dict[str, Any] = {}
+        if price:
+            result["price_history"] = price
+        if volume:
+            result["volume_analysis"] = volume
+        return result
+

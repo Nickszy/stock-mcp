@@ -736,6 +736,22 @@ class MarketGateway:
         result = await self._akshare_adapter().get_market_fact_pack(symbol)
         return self._sanitize_na(result)
 
+    # ------------------------------------------------------------------
+    # US Stock Fact Pack (COL-164)
+    # ------------------------------------------------------------------
+    def _yahoo_adapter(self) -> "BaseDataAdapter":
+        """Get the YahooAdapter, raising if unavailable."""
+        from src.server.domain.types import DataSource
+        adapter = self.adapters.get(DataSource.YAHOO)
+        if adapter is None:
+            raise ValueError("YahooAdapter is not registered")
+        return adapter
+
+    async def get_us_stock_fact_pack(self, ticker: str) -> Dict[str, Any]:
+        """Get aggregated US stock fact pack (YahooAdapter only)."""
+        result = await self._yahoo_adapter().get_us_stock_fact_pack(ticker)
+        return self._sanitize_na(result)
+
     # =========================================================================
     # __getattr__: synthesize ticker-scoped and market-wide methods
     # =========================================================================
