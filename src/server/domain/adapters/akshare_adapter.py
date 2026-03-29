@@ -2889,7 +2889,7 @@ class AkshareAdapter(BaseDataAdapter):
         try:
             if fund_code:
                 df = await self._run(
-                    ak.fund_open_fund_info_em, fund=fund_code, indicator="单位净值走势"
+                    ak.fund_open_fund_info_em, symbol=fund_code, indicator="单位净值走势"
                 )
                 if df is not None and not df.empty:
                     data = df.tail(days).to_dict(orient="records")

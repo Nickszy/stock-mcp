@@ -414,7 +414,7 @@ class MarketGateway:
                 logger.warning(
                     f"{adapter.source.value}.{method}({ticker}) returned None, trying next"
                 )
-            except NotImplementedError:
+            except (NotImplementedError, AttributeError):
                 logger.debug(
                     f"{adapter.source.value} does not support {method}, skipping"
                 )
@@ -450,7 +450,7 @@ class MarketGateway:
                 )
                 if result is not None:
                     return self._sanitize_na(self._validate_adapter_result(result))
-            except NotImplementedError:
+            except (NotImplementedError, AttributeError):
                 continue
             except AdapterErrorResult:
                 raise  # upstream data error — don't try fallbacks
@@ -692,7 +692,7 @@ class MarketGateway:
                     last_not_found = result
                     continue
                 return result
-            except NotImplementedError:
+            except (NotImplementedError, AttributeError):
                 continue
             except asyncio.TimeoutError:
                 last_error = TimeoutError(f"timeout after {self._provider_timeout_seconds}s")
