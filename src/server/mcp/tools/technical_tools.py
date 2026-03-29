@@ -567,3 +567,93 @@ def register_technical_tools(mcp: FastMCP):
                     f"❌ 成交量分布分析失败: {symbol}", extra={"error": str(e)}
                 )
             return {"error": str(e)}
+
+    @mcp.tool(tags={"technical"})
+    async def get_technical_signals(
+        symbol: str,
+        output_format: OutputFormat = "markdown",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """Get deterministic technical signals (RSI, MACD, Bollinger Band state).
+
+        Returns mechanical threshold-based signals, not trading recommendations.
+
+        Args:
+            symbol: Asset ticker. Format: EXCHANGE:SYMBOL
+                - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
+                - 美股: NASDAQ:AAPL, NYSE:TSLA
+            output_format: Output format - "markdown" (default) or "json"
+            ctx: FastMCP Context for logging
+
+        Returns:
+            Deterministic signal states for RSI, MACD, Bollinger Bands
+        """
+        if ctx:
+            await ctx.info(f"🔧 获取技术信号: {symbol}", extra={"symbol": symbol})
+
+        try:
+            logger.info("MCP tool called: get_technical_signals", symbol=symbol)
+            result = await technical_use_cases.get_technical_signals(symbol=symbol)
+            ts_code = await _resolve_ts_code(symbol)
+
+            if isinstance(result, dict) and result.get("error"):
+                if ctx:
+                    await ctx.error(f"❌ 技术信号获取失败: {symbol}", extra={"error": result["error"]})
+                return result
+
+            signals = result.get("signals", {})
+            signal_parts = []
+            for name, info in signals.items():
+                sig = info.get("signal", "N/A") if isinstance(info, dict) else "N/A"
+                signal_parts.append(f"{name.upper()}={sig}")
+            summary = f"{ts_code} 技术信号: {', '.join(signal_parts)}" if signal_parts else f"{ts_code} 技术信号: 无可用数据"
+
+            if ctx:
+                await ctx.info(f"✅ 技术信号获取完成: {symbol}", extra={"signals": list(signals.keys())})
+
+            if output_format == "json":
+                artifact = create_artifact_envelope(
+                    component_type="technical_signals",
+                    name=f"技术信号: {ts_code}",
+                    content=result,
+                    description=summary,
+                    metadata={"type": "technical_signals", "ts_code": ts_code},
+                )
+                return create_artifact_response(summary=summary, artifact=artifact)
+
+            # Markdown format
+            md_parts = [f"## {ts_code} 技术信号\n"]
+            md_parts.append(f"**摘要**: {summary}\n")
+            if signals:
+                rows = []
+                for name, info in signals.items():
+                    if isinstance(info, dict):
+                        row = {"信号": name.upper()}
+                        row.update({k: v for k, v in info.items() if k != "signal" and not isinstance(v, (dict, list))})
+                        row["状态"] = info.get("signal", "")
+                        rows.append(row)
+                if rows:
+                    md_parts.append(_format_table_markdown(rows, "信号明细"))
+
+            md_output = "\n".join(md_parts)
+            artifact = create_artifact_envelope(
+                component_type="technical_signals_markdown",
+                name=f"技术信号: {ts_code}",
+                content={"markdown": md_output, "format": "markdown"},
+                description=summary,
+                metadata={"output_format": "markdown", "ts_code": ts_code},
+                visible_to_llm=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except SymbolResolutionError as e:
+            if ctx:
+                await ctx.warning(f"⚠️ 符号解析失败: {symbol}", extra=e.to_dict())
+            return create_symbol_error_response(
+                e, component_type="technical_signals", name=f"{symbol} 技术信号"
+            )
+        except Exception as e:
+            logger.error(f"Get technical signals failed: {e}")
+            if ctx:
+                await ctx.error(f"❌ 技术信号获取失败: {symbol}", extra={"error": str(e)})
+            return {"error": str(e)}

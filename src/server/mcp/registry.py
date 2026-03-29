@@ -62,8 +62,8 @@ TOOL_GROUPS: List[ToolGroup] = [
         name="technical",
         register=register_technical_tools,
         enabled=True,
-        description="技术分析",
-        count=1,
+        description="技术分析 (技术指标/确定性信号)",
+        count=2,
     ),
     ToolGroup(
         name="money-flow",
