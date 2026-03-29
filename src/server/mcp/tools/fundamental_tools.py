@@ -363,10 +363,16 @@ def register_fundamental_tools(mcp: FastMCP):
         output_format: OutputFormat = "markdown",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get revenue/net-income trend charts for the given ticker.
+        """获取营收/净利润趋势图 (轻量版财务入口).
 
-        This tool is intentionally narrow: it focuses on trend charts and does
-        not represent a complete fundamental analysis package.
+        WHEN TO USE: 用户问 "近几年营收和利润怎么走"、"收入利润趋势如何"、
+            "先看一个财务概览图"、"revenue/net income trend".
+        CONCEPT: 用少量核心指标(营收、净利润)看公司经营趋势, 适合快速判断
+            增长/放缓/拐点, 但不展开完整三表.
+        DIFFERENTIATION: 这是**轻量趋势图工具**. 若要完整利润表/资产负债表/
+            现金流量表及同比环比, 用 get_stock_financial_statements.
+            若要主营结构, 用 get_mainbz_info.
+        next_recommended_tools: get_stock_financial_statements → get_valuation_metrics
 
         Args:
             symbol: Asset ticker. Format: EXCHANGE:SYMBOL
@@ -427,7 +433,17 @@ def register_fundamental_tools(mcp: FastMCP):
         ts_code: str | None = None,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get main business composition for the given ticker."""
+        """获取主营业务构成 (按产品/地区/行业拆分).
+
+        WHEN TO USE: 用户问 "公司靠什么业务赚钱"、"收入主要来自哪些产品或地区"、
+            "主营结构是否集中"、"白酒/海外业务占比多少".
+        CONCEPT: 主营构成将营收按产品、地区、行业等维度拆解, 用于判断收入来源、
+            业务集中度、区域依赖和第二增长曲线.
+        DIFFERENTIATION: 这是**业务结构拆分**工具, 不看利润率与完整三表.
+            若想看营收和净利润时间趋势, 用 get_financial_reports;
+            若想看完整财报, 用 get_stock_financial_statements.
+        next_recommended_tools: get_financial_reports → get_stock_financial_statements
+        """
         if not symbol and not ts_code:
             return {"error": "symbol or ts_code is required"}
 
@@ -1072,11 +1088,16 @@ def register_fundamental_tools(mcp: FastMCP):
     async def get_valuation_metrics(
         symbol: str, days: int = 250, ctx: Context = None
     ) -> Dict[str, Any]:
-        """Get valuation metrics with historical percentile ranking.
+        """获取A股估值指标 + 历史百分位.
 
-        Fetches PE/PB/PS and other valuation indicators for the given stock,
-        calculates where the current value sits in its historical range
-        (percentile), and provides an overall valuation level assessment.
+        WHEN TO USE: 用户问 "现在估值高不高"、"PE在历史上什么位置"、
+            "是否低估/高估"、"给我一个带分位的估值判断".
+        CONCEPT: 估值不仅看当前PE/PB/PS绝对值, 更要看其在自身历史区间中的百分位.
+            同一只股票 PE=20x 可能在某些行业偏低, 在另一些行业偏高.
+        DIFFERENTIATION: 这是**A股估值核心工具**, 自带历史分位. 与 get_financial_ratios
+            不同: 那个偏财务比率快照(盈利能力/偿债能力/运营能力), 本工具专注估值.
+            与美股 get_us_valuation_metrics 不同: 这里强调历史百分位.
+        next_recommended_tools: get_financial_ratios → get_stock_financial_statements
 
         Args:
             symbol: Asset ticker. Format: EXCHANGE:SYMBOL
@@ -1277,9 +1298,16 @@ def register_fundamental_tools(mcp: FastMCP):
         periods: int | None = None,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get complete financial statements (Income, Balance Sheet, Cash Flow) with YoY/QoQ.
+        """获取完整财报三表 (利润表/资产负债表/现金流量表).
 
-        获取完整财报三大表（利润表、资产负债表、现金流量表），包含同比/环比计算。
+        WHEN TO USE: 用户问 "给我完整财报"、"想看三大报表"、"收入利润现金流分别怎样"、
+            "需要同比/环比地分析财务质量".
+        CONCEPT: 财报三表是基本面分析核心. 利润表看赚不赚钱, 资产负债表看家底和杠杆,
+            现金流量表看利润是否兑现成现金. 同比/环比帮助识别趋势与拐点.
+        DIFFERENTIATION: 这是**最完整的基本面底座工具**. 与 get_financial_reports
+            不同: 那个只给轻量趋势图; 与 get_financial_ratios 不同: 那个是指标提炼结果,
+            本工具给原始三表明细; 与 get_valuation_metrics 不同: 那个看市场定价.
+        next_recommended_tools: get_financial_ratios → get_valuation_metrics
 
         Args:
             symbol: Asset ticker. Format: EXCHANGE:SYMBOL

@@ -77,21 +77,25 @@ def register_money_flow_tools(mcp: FastMCP):
         output_format: OutputFormat = "markdown",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取个股资金流向数据
+        """获取个股资金流向数据。
 
-        分析主力资金和散户资金的流入流出情况，帮助判断资金动向。
+        WHEN TO USE:
+        - 用户问“主力资金这几天是流入还是流出？”
+        - 需要看单只股票近N日主力/散户净流方向
+        - 想结合价格走势判断个股是否有资金承接
 
-        Args:
-            symbol: 股票代码. Format: EXCHANGE:SYMBOL
-                - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
-                - 美股: NASDAQ:AAPL, NYSE:TSLA
-            days: 获取最近 N 天数据 (默认 20 天)
-            output_format: 输出格式 - "markdown" (默认, 易读) 或 "json" (结构化)
-            ctx: FastMCP Context for logging
+        CONCEPT:
+        个股资金流向通常按大单/超大单、散户等口径统计净流入，用于观察短线资金偏好与交易拥挤度。
 
-        Returns:
-            If output_format="markdown": 返回易读的 Markdown 表格
-            If output_format="json": 返回 artifact 结构化数据
+        DIFFERENTIATION:
+        - 这是“个股级”资金流工具；看全市场外资请用 get_north_bound_flow
+        - 看板块级资金热度请用 get_sector_money_flow_history 或 get_market_money_flow
+        - 看持仓成本密集区而非资金流，请用 get_chip_distribution
+
+        next_recommended_tools:
+        - get_chip_distribution
+        - get_relative_strength
+        - get_margin_trading
         """
         if ctx:
             await ctx.info(
@@ -218,17 +222,25 @@ def register_money_flow_tools(mcp: FastMCP):
     async def get_north_bound_flow(
         days: int = 30, ctx: Context = None
     ) -> Dict[str, Any]:
-        """获取北向资金(沪深港通)流向数据
+        """获取北向资金(沪深港通)流向数据。
 
-        追踪外资通过沪股通、深股通流入A股市场的资金情况。
-        北向资金被视为"聪明钱"，其流向对市场有重要参考价值。
+        WHEN TO USE:
+        - 用户问“今天/近一段时间外资是净流入还是净流出？”
+        - 需要判断A股是否有北向资金持续加仓或撤离
+        - 想看市场级“聪明钱”风险偏好，而不是单只股票
 
-        Args:
-            days: 获取最近 N 天数据 (默认 30 天)
-            ctx: FastMCP Context for logging
+        CONCEPT:
+        北向资金指通过沪股通、深股通流入A股的境外资金，常被视为外资风险偏好与市场情绪的代表性观察口径。
 
-        Returns:
-            ArtifactEnvelope containing north bound flow data
+        DIFFERENTIATION:
+        - 这是“市场级外资总流量”；看单股北向持仓请用 get_stock_northbound_holdings
+        - 看个股主力/散户资金请用 get_money_flow
+        - 看A股板块整体热度而非外资单一通道，请用 get_market_money_flow
+
+        next_recommended_tools:
+        - get_market_liquidity
+        - get_market_money_flow
+        - get_stock_northbound_ranking
         """
         if ctx:
             await ctx.info(f"🔧 获取北向资金流向", extra={"days": days})
@@ -303,37 +315,25 @@ def register_money_flow_tools(mcp: FastMCP):
         price_bins: int = 50,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取筹码分布数据
+        """获取筹码分布数据。
 
-        基于历史成交量和价格数据，估算当前筹码分布情况。
-        筹码分布可以帮助判断股票的支撑位、压力位和主力成本区间。
+        WHEN TO USE:
+        - 用户问“这只股票的主力成本区/套牢区在哪里？”
+        - 需要识别支撑位、压力位、平均成本、获利盘比例
+        - 想判断当前价格相对筹码峰的位置
 
-        Args:
-            symbol: 股票代码. Format: EXCHANGE:SYMBOL
-                - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
-                - 美股: NASDAQ:AAPL, NYSE:TSLA
-            period_days: 回溯天数 (默认 120 天，越长越准确)
-            price_bins: 价格区间数量 (默认 50)
-            ctx: FastMCP Context for logging
+        CONCEPT:
+        筹码分布用历史成交量与价格估算不同价位的持仓密集区，可辅助理解成本结构、套牢盘和潜在抛压/支撑。
 
-        Returns:
-            {
-                "symbol": "600519.SH",
-                "component_type": "chip_distribution",
-                "current_price": 1800.0,
-                "data": {
-                    "price_levels": [1700, 1710, 1720, ...],
-                    "chip_percent": [0.05, 0.12, 0.08, ...],
-                    "profit_chip": [0.05, 0.12, ...],
-                    "loss_chip": [0.0, 0.0, 0.08, ...]
-                },
-                "summary": {
-                    "profit_ratio": 0.65,
-                    "avg_cost": 1650.5,
-                    "concentration_90": 150.0,
-                    "main_peak_price": 1720.0
-                }
-            }
+        DIFFERENTIATION:
+        - 这是“成本结构/筹码位置”工具，不直接回答资金今天流入多少；短线资金流请用 get_money_flow
+        - 看外资流量请用 get_north_bound_flow
+        - 看个股相对指数强弱请用 get_relative_strength
+
+        next_recommended_tools:
+        - get_money_flow
+        - get_relative_strength
+        - calculate_risk_metrics
         """
         if not symbol and not ts_code:
             return {"error": "symbol or ts_code is required"}
@@ -442,7 +442,26 @@ def register_money_flow_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"money-flow"})
     async def get_money_supply(months: int = 60, ctx: Context = None) -> Dict[str, Any]:
-        """获取中国货币流动性 (M1/M2)."""
+        """获取中国货币流动性 (M1/M2)。
+
+        WHEN TO USE:
+        - 用户问“当前国内货币环境偏宽松还是偏收紧？”
+        - 需要看M1、M2同比及剪刀差变化
+        - 想做中观/宏观流动性背景判断，而不是股票级分析
+
+        CONCEPT:
+        M1更偏企业活期与交易性资金，M2覆盖更广。M1-M2剪刀差常被用来观察实体活跃度与资金沉淀程度。
+
+        DIFFERENTIATION:
+        - 这是货币供给口径；看社融信用扩张请用 get_social_financing
+        - 看利率价格信号请用 get_interest_rates
+        - 看A股市场层面的交易流动性请用 get_market_liquidity
+
+        next_recommended_tools:
+        - get_social_financing
+        - get_interest_rates
+        - get_gdp_data
+        """
         if ctx:
             await ctx.info("🔧 获取货币供应量", extra={"months": months})
 
@@ -521,7 +540,25 @@ def register_money_flow_tools(mcp: FastMCP):
     async def get_inflation_data(
         months: int = 60, ctx: Context = None
     ) -> Dict[str, Any]:
-        """获取中国月度通胀指标 (CPI/PPI)."""
+        """获取中国月度通胀指标 (CPI/PPI)。
+
+        WHEN TO USE:
+        - 用户问"通胀情况如何""CPI/PPI最新数据""有没有通缩压力"
+        - 需要判断消费端和工业端价格走势，辅助宏观环境判断
+
+        CONCEPT:
+        CPI反映消费端价格水平，PPI反映工业品出厂价格。CPI-PPI剪刀差可观察上下游利润分配格局。
+
+        DIFFERENTIATION:
+        - 这是价格/通胀口径；看货币量口径请用 get_money_supply
+        - 看实体经济景气请用 get_pmi_data；看经济增长请用 get_gdp_data
+        - 看利率政策信号请用 get_interest_rates
+
+        next_recommended_tools:
+        - get_money_supply
+        - get_pmi_data
+        - get_interest_rates
+        """
         if ctx:
             await ctx.info("🔧 获取通胀指标", extra={"months": months})
 
@@ -615,7 +652,24 @@ def register_money_flow_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"money-flow"})
     async def get_pmi_data(months: int = 60, ctx: Context = None) -> Dict[str, Any]:
-        """获取中国官方 PMI 数据."""
+        """获取中国官方 PMI 数据。
+
+        WHEN TO USE:
+        - 用户问"制造业景气度如何""PMI最新多少""经济在扩张还是收缩"
+        - 需要判断实体经济短期景气方向（制造业/非制造业/综合）
+
+        CONCEPT:
+        PMI以50为荣枯线，>50表示扩张，<50表示收缩。制造业PMI、非制造业PMI和综合PMI共同勾勒景气全貌。
+
+        DIFFERENTIATION:
+        - 这是景气/实体经济口径；看通胀请用 get_inflation_data
+        - 看经济增长总量请用 get_gdp_data；看信用扩张请用 get_social_financing
+
+        next_recommended_tools:
+        - get_gdp_data
+        - get_inflation_data
+        - get_social_financing
+        """
         if ctx:
             await ctx.info("🔧 获取 PMI", extra={"months": months})
 
@@ -730,7 +784,24 @@ def register_money_flow_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"money-flow"})
     async def get_gdp_data(quarters: int = 20, ctx: Context = None) -> Dict[str, Any]:
-        """获取中国季度 GDP 增长数据."""
+        """获取中国季度 GDP 增长数据。
+
+        WHEN TO USE:
+        - 用户问"GDP增速多少""经济增长情况""三产结构如何"
+        - 需要判断宏观经济整体增速和产业结构
+
+        CONCEPT:
+        GDP是衡量经济体总产出的核心指标。分一产(农业)/二产(工业)/三产(服务业)，可观察增长结构。
+
+        DIFFERENTIATION:
+        - 这是经济增长总量口径；看短期景气请用 get_pmi_data
+        - 看通胀请用 get_inflation_data；看信用环境请用 get_social_financing
+
+        next_recommended_tools:
+        - get_pmi_data
+        - get_inflation_data
+        - get_money_supply
+        """
         if ctx:
             await ctx.info("🔧 获取 GDP", extra={"quarters": quarters})
 
@@ -806,7 +877,25 @@ def register_money_flow_tools(mcp: FastMCP):
     async def get_social_financing(
         months: int = 60, ctx: Context = None
     ) -> Dict[str, Any]:
-        """获取中国社会融资总量."""
+        """获取中国社会融资总量。
+
+        WHEN TO USE:
+        - 用户问"社融数据怎么样""信用环境偏宽松还是偏紧""新增信贷情况"
+        - 需要判断实体信用扩张力度和金融对经济的支持程度
+
+        CONCEPT:
+        社融(社会融资规模)衡量实体从金融体系获得资金总量。存量同比增速是判断信用周期的核心指标。
+        >9%偏强扩张，<8%偏弱。
+
+        DIFFERENTIATION:
+        - 这是信用/融资口径；看货币供给请用 get_money_supply
+        - 看利率价格请用 get_interest_rates；看经济增长请用 get_gdp_data
+
+        next_recommended_tools:
+        - get_money_supply
+        - get_interest_rates
+        - get_pmi_data
+        """
         if ctx:
             await ctx.info("🔧 获取社会融资总量", extra={"months": months})
 
@@ -927,7 +1016,24 @@ def register_money_flow_tools(mcp: FastMCP):
     async def get_interest_rates(
         shibor_days: int = 252, lpr_months: int = 60, ctx: Context = None
     ) -> Dict[str, Any]:
-        """获取中国利率数据 (SHIBOR + LPR)."""
+        """获取中国利率数据 (SHIBOR + LPR)。
+
+        WHEN TO USE:
+        - 用户问"利率水平如何""央行有没有降息/加息""Shibor走势"
+        - 需要判断货币政策宽松/收紧方向和资金价格水平
+
+        CONCEPT:
+        SHIBOR是银行间拆借利率(短端)，LPR是贷款基准利率(中长端)。两者结合可观察利率曲线形态和政策信号。
+
+        DIFFERENTIATION:
+        - 这是利率/资金价格口径；看货币量口径请用 get_money_supply
+        - 看信用扩张请用 get_social_financing；看国债收益率曲线请用 get_bond_yield
+
+        next_recommended_tools:
+        - get_money_supply
+        - get_social_financing
+        - get_bond_yield
+        """
         if ctx:
             await ctx.info(
                 "🔧 获取利率数据",
@@ -1081,7 +1187,25 @@ def register_money_flow_tools(mcp: FastMCP):
     async def get_market_liquidity(
         days: int = 60, ctx: Context = None
     ) -> Dict[str, Any]:
-        """获取 A 股市场流动性指标."""
+        """获取 A 股市场流动性指标。
+
+        WHEN TO USE:
+        - 用户问"市场流动性怎么样""融资融券余额多少""北向+两融整体情况"
+        - 需要同时看北向资金和融资融券余额的组合流动性画面
+
+        CONCEPT:
+        综合展示北向净流入趋势和融资融券余额趋势，是A股两大核心增量资金的概览。
+
+        DIFFERENTIATION:
+        - 这是"多维度市场流动性概览"；仅看北向资金请用 get_north_bound_flow
+        - 看个股融资融券请用 get_margin_trading
+        - 看板块资金排名请用 get_market_money_flow
+
+        next_recommended_tools:
+        - get_north_bound_flow
+        - get_margin_trading
+        - get_market_money_flow
+        """
         if ctx:
             await ctx.info("🔧 获取市场流动性", extra={"days": days})
 
@@ -1176,7 +1300,26 @@ def register_money_flow_tools(mcp: FastMCP):
         include_outflow: bool = True,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取板块资金流向统计（含净流入TopN与数据新鲜度门禁）."""
+        """获取板块资金流向统计（含净流入TopN与数据新鲜度门禁）。
+
+        WHEN TO USE:
+        - 用户问"今天哪些板块资金流入最多""板块资金排名""主力在买什么板块"
+        - 需要全市场板块维度的资金排名和热力概览
+
+        CONCEPT:
+        按板块统计当日资金净流入/流出排名，含新鲜度门禁（判断数据是否可用于趋势结论）。
+        TopN排名可快速定位当日资金关注焦点。
+
+        DIFFERENTIATION:
+        - 这是"板块排名"视角；看单个板块的资金流历史请用 get_sector_money_flow_history
+        - 看板块走势(价格)请用 get_sector_trend；看板块估值请用 get_sector_valuation_metrics
+        - 看个股资金流请用 get_money_flow
+
+        next_recommended_tools:
+        - get_sector_money_flow_history
+        - get_sector_trend
+        - get_sector_valuation_metrics
+        """
         if ctx:
             await ctx.info(
                 "🔧 获取板块资金流向",
@@ -1347,7 +1490,24 @@ def register_money_flow_tools(mcp: FastMCP):
         intent: str = "trend",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """解析板块查询词，返回稳定 sector_id（resolved/ambiguous/not_found）."""
+        """解析板块查询词，返回稳定 sector_id。
+
+        WHEN TO USE:
+        - 用户用模糊/别名称呼板块（如"白酒"而非"白酒Ⅱ"），需要先解析再查询
+        - 其他板块工具返回"ambiguous"时，可用于确认精确名称
+
+        CONCEPT:
+        板块名称在数据源中可能有多种写法（如"银行"/"银行Ⅰ"/"银行Ⅱ"），本工具将模糊输入映射为
+        稳定的sector_id，返回resolved/ambiguous/not_found三种状态。
+
+        DIFFERENTIATION:
+        - 这是辅助工具，不直接返回数据；获取板块走势请用 get_sector_trend
+        - 获取板块资金流请用 get_sector_money_flow_history
+
+        next_recommended_tools:
+        - get_sector_trend
+        - get_sector_money_flow_history
+        """
         if ctx:
             await ctx.info(
                 "🔧 解析板块名称",
@@ -1423,7 +1583,26 @@ def register_money_flow_tools(mcp: FastMCP):
         sector_id: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取板块近 N 天游势与累计涨跌幅."""
+        """获取板块近 N 天走势与累计涨跌幅。
+
+        WHEN TO USE:
+        - 用户问"某某板块最近走势怎么样""白酒板块涨了多少"
+        - 需要看板块价格走势和区间涨跌幅
+
+        CONCEPT:
+        以板块对应指数的日线收盘价为基础，展示近N天走势和累计涨跌幅。
+        板块名称模糊匹配时会返回候选列表。
+
+        DIFFERENTIATION:
+        - 这是"板块价格走势"；看板块资金流请用 get_sector_money_flow_history
+        - 看板块估值PE/PB请用 get_sector_valuation_metrics
+        - 看全市场板块排名请用 get_market_money_flow
+
+        next_recommended_tools:
+        - get_sector_money_flow_history
+        - get_sector_valuation_metrics
+        - get_market_money_flow
+        """
         if ctx:
             await ctx.info(
                 "🔧 获取板块走势",
@@ -1502,7 +1681,23 @@ def register_money_flow_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"money-flow"})
     async def get_ggt_daily(days: int = 60, ctx: Context = None) -> Dict[str, Any]:
-        """获取港股通每日成交统计."""
+        """获取港股通每日成交统计。
+
+        WHEN TO USE:
+        - 用户问"港股通成交情况""南向资金流向""港股通净买入"
+        - 需要跟踪内地资金通过港股通投资港股的动态
+
+        CONCEPT:
+        港股通(南向资金)是内地投资者投资港股的通道。每日成交统计反映南向资金的活跃度和方向。
+
+        DIFFERENTIATION:
+        - 这是"南向(港股通)"口径；看北向(A股)请用 get_north_bound_flow
+        - 看A股市场流动性请用 get_market_liquidity
+
+        next_recommended_tools:
+        - get_north_bound_flow
+        - get_market_liquidity
+        """
         if ctx:
             await ctx.info("🔧 获取港股通每日成交统计", extra={"days": days})
 
@@ -1561,19 +1756,26 @@ def register_money_flow_tools(mcp: FastMCP):
         sector_id: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取板块资金流向历史数据
+        """获取板块资金流向历史数据。
 
-        查询指定行业板块近 N 个交易日的行情走势及主力/散户资金
-        净流入情况，帮助判断行业板块的资金动向和热度变化。
+        WHEN TO USE:
+        - 用户问"白酒板块近期资金流怎么样""半导体板块主力资金进出情况"
+        - 需要特定板块近N日的行情走势+资金流(主力/散户)组合数据
 
-        Args:
-            sector_name: 板块名称 (如 "白酒", "半导体", "新能源",
-                "光伏", "医药", "银行")
-            days: 获取最近 N 个交易日数据 (默认 20)
-            ctx: FastMCP Context for logging
+        CONCEPT:
+        查询指定行业板块近N个交易日的行情走势及主力/散户资金净流入，帮助判断板块资金动向和热度。
+        板块名称模糊匹配时会返回候选列表。
 
-        Returns:
-            ArtifactEnvelope containing sector money flow history
+        DIFFERENTIATION:
+        - 这是"单板块资金流历史"；看全市场板块排名请用 get_market_money_flow
+        - 看板块价格走势(不含资金流)请用 get_sector_trend
+        - 看板块估值PE/PB请用 get_sector_valuation_metrics
+        - 看个股资金流请用 get_money_flow
+
+        next_recommended_tools:
+        - get_sector_trend
+        - get_sector_valuation_metrics
+        - get_market_money_flow
         """
         if ctx:
             await ctx.info(
@@ -1737,10 +1939,25 @@ def register_money_flow_tools(mcp: FastMCP):
         sector_id: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取板块估值指标与历史分位（PE/PB）.
+        """获取板块估值指标与历史分位（PE/PB）。
 
-        基于板块成分股聚合计算板块层面的 PE(TTM)/PB，并给出历史分位，
-        用于判断板块估值安全边际（低估/合理/高估）。
+        WHEN TO USE:
+        - 用户问"银行板块估值高不高""白酒PE在历史什么分位""某某板块便宜还是贵"
+        - 需要判断板块估值安全边际（低估/合理/高估）
+
+        CONCEPT:
+        基于板块成分股聚合计算板块层面的PE(TTM)/PB，并给出历史分位。
+        分位<30%通常视为低估，>70%视为高估。
+
+        DIFFERENTIATION:
+        - 这是"板块估值PE/PB"；看板块价格走势请用 get_sector_trend
+        - 看板块资金流请用 get_sector_money_flow_history
+        - 看行业PE/PB历史(另一实现)请用 get_sector_pe_pb_historical
+
+        next_recommended_tools:
+        - get_sector_trend
+        - get_sector_money_flow_history
+        - get_sector_pe_pb_historical
         """
         if ctx:
             await ctx.info(
@@ -1897,20 +2114,24 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 20,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取A股市场广度指标
+        """获取A股市场广度指标。
 
-        市场广度指标反映整体市场参与度和健康程度：
-        - 上涨/下跌家数：衡量市场情绪
-        - 涨跌比(AD Ratio)：>1表示多头占优
-        - 20日新高/新低：突破动能
-        - 中位数收益：剔除权重股影响的真实市场表现
+        WHEN TO USE:
+        - 用户问"市场广度怎么样""涨跌家数""今天是普涨还是普跌""市场参与度"
+        - 需要判断市场整体参与度和健康程度
 
-        Args:
-            days: 回溯天数 (默认 20)
-            ctx: FastMCP Context
+        CONCEPT:
+        市场广度指标包括上涨/下跌家数、涨跌比(AD Ratio)、20日新高/新低、中位数收益。
+        AD Ratio>1表示多头占优；新高>新低*2表示突破动能强。
 
-        Returns:
-            市场广度指标数据
+        DIFFERENTIATION:
+        - 这是"全市场广度/情绪"口径；看资金流向请用 get_market_money_flow
+        - 看风格轮动请用 get_style_rotation；看市场流动性请用 get_market_liquidity
+
+        next_recommended_tools:
+        - get_market_money_flow
+        - get_style_rotation
+        - get_market_liquidity
         """
         if ctx:
             await ctx.info("获取市场广度指标", extra={"days": days})
@@ -1990,24 +2211,24 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 60,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取个股相对强弱指标(RS)
+        """获取个股相对强弱指标(RS)。
 
-        计算个股相对于基准指数（默认沪深300）的超额收益。
-        RS > 0 表示跑赢基准，RS < 0 表示跑输基准。
+        WHEN TO USE:
+        - 用户问"这只股票跑赢大盘了吗""相对强弱怎么样""对比沪深300表现"
+        - 需要筛选强势股/弱势股，或判断个股相对指数的超额收益
 
-        用途:
-        - 筛选强势股/弱势股
-        - 判断板块轮动方向
-        - 辅助择时与配对交易
+        CONCEPT:
+        RS = 个股收益率 - 基准收益率。RS>0跑赢基准，RS<0跑输基准。
+        常用于选股和判断板块轮动方向。
 
-        Args:
-            symbol: 股票代码 (如 600519, 000001)
-            benchmark: 基准指数代码 (默认 000300=沪深300, 000016=上证50, 000905=中证500)
-            days: 回溯天数 (默认 60)
-            ctx: FastMCP Context
+        DIFFERENTIATION:
+        - 这是"个股vs指数"相对收益；看绝对资金流请用 get_money_flow
+        - 看筹码分布请用 get_chip_distribution；看风格轮动请用 get_style_rotation
 
-        Returns:
-            相对强弱指标数据
+        next_recommended_tools:
+        - get_money_flow
+        - get_chip_distribution
+        - calculate_risk_metrics
         """
         if ctx:
             await ctx.info(
@@ -2094,17 +2315,22 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取个股融资融券数据
+        """获取个股融资融券数据。
 
-        查询指定股票的融资融券余额、买入偿还等数据，用于判断杠杆资金动向。
+        WHEN TO USE:
+        - 用户问"这只股票融资余额多少""融资买入情况""杠杆资金动向"
+        - 需要判断个股杠杆资金的增减趋势
 
-        Args:
-            symbol: 股票代码 (如 SSE:600519, SZSE:000001)
-            days: 获取最近 N 天数据 (默认 30)
-            ctx: FastMCP Context
+        CONCEPT:
+        融资融券余额反映杠杆资金对个股的态度。融资余额上升通常表示看多情绪增强。
 
-        Returns:
-            融资融券数据
+        DIFFERENTIATION:
+        - 这是"个股级"融资融券；看全市场两融趋势请用 get_market_liquidity
+        - 看个股资金流请用 get_money_flow
+
+        next_recommended_tools:
+        - get_money_flow
+        - get_market_liquidity
         """
         if ctx:
             await ctx.info("🔧 获取融资融券数据", extra={"symbol": symbol, "days": days})
@@ -2134,16 +2360,23 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 90,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取限售解禁数据
+        """获取限售解禁数据。
 
-        查询近期限售股解禁计划，包括解禁日期、解禁数量、占总股本比例等。
+        WHEN TO USE:
+        - 用户问"近期有什么解禁""限售股解禁压力""解禁日历"
+        - 需要评估未来N天的解禁抛压风险
 
-        Args:
-            days: 未来 N 天内的解禁计划 (默认 90)
-            ctx: FastMCP Context
+        CONCEPT:
+        限售股解禁后可在二级市场卖出，大规模解禁可能带来短期卖压。
+        解禁量占总股本比例越高，潜在影响越大。
 
-        Returns:
-            限售解禁数据
+        DIFFERENTIATION:
+        - 这是"事件型"解禁日历；看股东持仓变化请用 get_stock_shareholder_changes
+        - 看股东结构请用 get_stock_top10_shareholders
+
+        next_recommended_tools:
+        - get_stock_shareholder_changes
+        - get_stock_top10_shareholders
         """
         if ctx:
             await ctx.info("🔧 获取限售解禁数据", extra={"days": days})
@@ -2170,16 +2403,22 @@ def register_money_flow_tools(mcp: FastMCP):
         symbol: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取股票回购数据
+        """获取股票回购数据。
 
-        查询上市公司回购计划及实施进度，包括回购金额、回购数量、回购目的等。
+        WHEN TO USE:
+        - 用户问"有哪些股票在回购""某某公司回购情况""回购计划进度"
+        - 需要发现回购信号或跟踪回购实施进度
 
-        Args:
-            symbol: 股票代码 (如 600519, 000001), 为空则返回全市场
-            ctx: FastMCP Context
+        CONCEPT:
+        回购通常被视为管理层对公司价值的认可。大规模回购计划可减少流通股、提升EPS。
 
-        Returns:
-            回购数据
+        DIFFERENTIATION:
+        - 这是"回购事件"口径；看股东增减持统计请用 get_stock_shareholder_changes
+        - 看股东结构请用 get_stock_top10_shareholders
+
+        next_recommended_tools:
+        - get_stock_shareholder_changes
+        - get_stock_top10_shareholders
         """
         if ctx:
             await ctx.info("🔧 获取回购数据", extra={"symbol": symbol})
@@ -2206,17 +2445,22 @@ def register_money_flow_tools(mcp: FastMCP):
         index_code: str = "000300",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取指数成分股列表
+        """获取指数成分股列表。
 
-        查询指定指数的成分股列表，包括股票代码、名称、权重等信息。
+        WHEN TO USE:
+        - 用户问"沪深300有哪些股票""指数成分股""某某指数包含什么"
+        - 需要查看指数的成分股明细
 
-        Args:
-            index_code: 指数代码 (如 000300=沪深300, 000905=中证500,
-                000016=上证50, 399006=创业板指)
-            ctx: FastMCP Context
+        CONCEPT:
+        指数成分股是构成该指数的具体股票列表，通常按权重排序。
 
-        Returns:
-            指数成分股数据
+        DIFFERENTIATION:
+        - 这是"成分股列表"；看成分股权重分布请用 get_index_constituent_weights
+        - 看ETF资金流请用 get_etf_flow
+
+        next_recommended_tools:
+        - get_index_constituent_weights
+        - get_etf_flow
         """
         if ctx:
             await ctx.info("🔧 获取指数成分股", extra={"index_code": index_code})
@@ -2245,16 +2489,22 @@ def register_money_flow_tools(mcp: FastMCP):
         index_code: str = "000300",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取指数成分股权重
+        """获取指数成分股权重。
 
-        查询指定指数的成分股权重分布，用于判断指数的行业和个股集中度。
+        WHEN TO USE:
+        - 用户问"沪深300权重分布""指数里什么股票占比最大""集中度如何"
+        - 需要分析指数的行业和个股集中度
 
-        Args:
-            index_code: 指数代码 (如 000300=沪深300)
-            ctx: FastMCP Context
+        CONCEPT:
+        成分股权重反映每只股票对指数涨跌的影响力。高集中度意味着少数个股主导指数表现。
 
-        Returns:
-            成分股权重数据
+        DIFFERENTIATION:
+        - 这是"权重分布"；看成分股列表请用 get_index_constituents
+        - 看ETF资金流请用 get_etf_flow
+
+        next_recommended_tools:
+        - get_index_constituents
+        - get_etf_flow
         """
         if ctx:
             await ctx.info("🔧 获取成分股权重", extra={"index_code": index_code})
@@ -2284,17 +2534,22 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取基金净值数据
+        """获取基金净值数据。
 
-        查询场内基金(ETF/LOF)的最新净值及历史净值走势。
+        WHEN TO USE:
+        - 用户问"某某ETF净值多少""基金净值走势""场内基金行情"
+        - 需要查询ETF/LOF的净值和历史走势
 
-        Args:
-            fund_code: 基金代码 (如 510300=沪深300ETF), 为空返回全市场
-            days: 获取最近 N 天数据 (默认 30)
-            ctx: FastMCP Context
+        CONCEPT:
+        基金净值(NAV)是每份基金的净资产价值。场内基金交易价格可能偏离净值产生折溢价。
 
-        Returns:
-            基金净值数据
+        DIFFERENTIATION:
+        - 这是"基金净值"；看ETF资金流向请用 get_etf_flow
+        - 看基金重仓股请用 get_fund_holdings
+
+        next_recommended_tools:
+        - get_etf_flow
+        - get_fund_holdings
         """
         if ctx:
             await ctx.info("🔧 获取基金净值", extra={"fund_code": fund_code, "days": days})
@@ -2320,16 +2575,22 @@ def register_money_flow_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"money-flow"})
     async def get_bond_yield(ctx: Context = None) -> Dict[str, Any]:
-        """获取国债收益率曲线数据
+        """获取国债收益率曲线数据。
 
-        查询中国国债到期收益率曲线，覆盖短、中、长各期限。
-        用于判断利率水平、期限结构及宏观流动性环境。
+        WHEN TO USE:
+        - 用户问"国债收益率曲线""期限利差""利率曲线形态"
+        - 需要判断利率水平、期限结构及宏观流动性环境
 
-        Args:
-            ctx: FastMCP Context
+        CONCEPT:
+        国债收益率曲线展示不同期限的到期收益率。正常向上倾斜；倒挂可能预示经济衰退风险。
 
-        Returns:
-            国债收益率曲线数据
+        DIFFERENTIATION:
+        - 这是"国债收益率曲线"；看政策利率(SHIBOR/LPR)请用 get_interest_rates
+        - 看货币供给请用 get_money_supply
+
+        next_recommended_tools:
+        - get_interest_rates
+        - get_money_supply
         """
         if ctx:
             await ctx.info("🔧 获取国债收益率曲线")
@@ -2357,17 +2618,22 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 60,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取期货主力合约行情数据
+        """获取期货主力合约行情数据。
 
-        查询股指期货/商品期货主力合约的日级行情数据。
+        WHEN TO USE:
+        - 用户问"股指期货行情""IF主力合约走势""期货主力连续数据"
+        - 需要查看期货(股指/商品)主力合约的日级行情
 
-        Args:
-            symbol: 期货代码 (IF0=沪深300, IC0=中证500, IH0=上证50)
-            days: 获取最近 N 天数据 (默认 60)
-            ctx: FastMCP Context
+        CONCEPT:
+        主力合约是当前持仓量最大的合约月份，连续主力可展示长期价格走势。
 
-        Returns:
-            期货主力合约行情
+        DIFFERENTIATION:
+        - 这是"期货行情"；看期货基差(期现价差)请用 get_futures_basis
+        - 看商品库存请用 get_commodity_inventory
+
+        next_recommended_tools:
+        - get_futures_basis
+        - get_commodity_inventory
         """
         if ctx:
             await ctx.info("🔧 获取期货主力合约", extra={"symbol": symbol, "days": days})
@@ -2393,15 +2659,23 @@ def register_money_flow_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"money-flow"})
     async def get_option_summary(ctx: Context = None) -> Dict[str, Any]:
-        """获取期权市场概览
+        """获取期权市场概览。
 
-        查询ETF期权市场概览数据，包括总成交量和持仓量等统计信息。
+        WHEN TO USE:
+        - 用户问"期权市场情况""ETF期权成交持仓""期权PCR"
+        - 需要快速了解ETF期权市场的整体成交和持仓状况
 
-        Args:
-            ctx: FastMCP Context
+        CONCEPT:
+        期权市场概览包含总成交量、持仓量、PCR(看跌/看涨比率)等关键指标。
+        PCR上升可能反映避险情绪增强。
 
-        Returns:
-            期权市场概览数据
+        DIFFERENTIATION:
+        - 这是"期权概览"；看股指期货请用 get_futures_main
+        - 看期货基差请用 get_futures_basis
+
+        next_recommended_tools:
+        - get_futures_main
+        - get_futures_basis
         """
         if ctx:
             await ctx.info("🔧 获取期权市场概览")
@@ -2433,18 +2707,23 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 250,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取行业PE/PB历史分位数据
+        """获取行业PE/PB历史分位数据。
 
-        计算指定行业的市盈率(PE)和市净率(PB)在历史数据中的分位数，
-        用于判断行业估值水平。
+        WHEN TO USE:
+        - 用户问"银行PE历史分位""某某行业估值在什么水平"
+        - 需要判断行业当前估值在历史中的相对位置
 
-        Args:
-            sector_name: 行业名称 (如 "银行", "白酒", "半导体", "医药")
-            days: 历史回溯天数 (默认 250)
-            ctx: FastMCP Context
+        CONCEPT:
+        计算行业PE/PB在指定历史区间内的分位数。分位越低越"便宜"，越高越"贵"。
 
-        Returns:
-            行业PE/PB历史分位数据，包含当前估值、历史分位、估值水平判定
+        DIFFERENTIATION:
+        - 这是"行业估值历史分位"的另一个实现；更精细的板块估值(含成分股覆盖)请用 get_sector_valuation_metrics
+        - 看板块走势请用 get_sector_trend；看板块资金流请用 get_sector_money_flow_history
+
+        next_recommended_tools:
+        - get_sector_valuation_metrics
+        - get_sector_trend
+        - get_sector_money_flow_history
         """
         if ctx:
             await ctx.info("🔧 获取行业估值分位", extra={"sector_name": sector_name, "days": days})
@@ -2482,17 +2761,23 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取ETF资金流向数据
+        """获取ETF资金流向数据。
 
-        查询指定ETF的资金流向数据，包括实时净值、涨跌幅等信息。
+        WHEN TO USE:
+        - 用户问"沪深300ETF资金流向""ETF申赎情况""ETF净流入"
+        - 需要跟踪特定ETF的资金进出和份额变化
 
-        Args:
-            symbol: ETF代码 (如 510300=沪深300ETF, 510050=上证50ETF)
-            days: 获取最近 N 天数据 (默认 30)
-            ctx: FastMCP Context
+        CONCEPT:
+        ETF资金流向反映资金通过ETF工具进出特定市场/板块的情况。持续净流入表示资金看好。
 
-        Returns:
-            ETF资金流向数据
+        DIFFERENTIATION:
+        - 这是"ETF级"资金流；看基金净值请用 get_fund_nav
+        - 看基金重仓股请用 get_fund_holdings；看板块资金请用 get_sector_money_flow_history
+
+        next_recommended_tools:
+        - get_fund_nav
+        - get_fund_holdings
+        - get_sector_money_flow_history
         """
         if ctx:
             await ctx.info("🔧 获取ETF资金流向", extra={"symbol": symbol, "days": days})
@@ -2516,16 +2801,23 @@ def register_money_flow_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"money-flow"})
     async def get_style_rotation(ctx: Context = None) -> Dict[str, Any]:
-        """获取风格轮动指标
+        """获取风格轮动指标。
 
-        比较大盘股(上证50) vs 小盘股(中证1000) 和 成长股(创业板指) vs 价值股(沪深300) 的近期涨跌幅，
-        用于判断市场风格切换方向。
+        WHEN TO USE:
+        - 用户问"大盘还是小盘强""成长还是价值占优""风格切换了吗"
+        - 需要判断当前市场风格偏好
 
-        Args:
-            ctx: FastMCP Context
+        CONCEPT:
+        比较大盘股(上证50) vs 小盘股(中证1000)和成长股(创业板指) vs 价值股(沪深300)的近期涨跌幅。
+        风格轮动信号帮助投资者在大小盘/成长价值维度上做配置决策。
 
-        Returns:
-            风格轮动指标数据，包含大小盘和成长价值维度的对比信号
+        DIFFERENTIATION:
+        - 这是"市场风格"口径；看市场广度/情绪请用 get_market_breadth
+        - 看个股相对强弱请用 get_relative_strength
+
+        next_recommended_tools:
+        - get_market_breadth
+        - get_relative_strength
         """
         if ctx:
             await ctx.info("🔧 获取风格轮动指标")
@@ -2557,18 +2849,23 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 60,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取期货基差数据
+        """获取期货基差数据。
 
-        计算股指期货与现货指数的基差(期货价格-现货价格)，
-        用于判断市场情绪：正基差=升水(看多), 负基差=贴水(看空)。
+        WHEN TO USE:
+        - 用户问"股指期货升水还是贴水""基差多少""期现价差"
+        - 需要判断期货市场对后市的情绪预期
 
-        Args:
-            index_code: 期货代码 (IF0=沪深300, IC0=中证500, IH0=上证50)
-            days: 获取最近 N 天数据 (默认 60)
-            ctx: FastMCP Context
+        CONCEPT:
+        基差 = 期货价格 - 现货价格。正基差(升水)暗示看多，负基差(贴水)暗示看空。
+        基差率可用于跨品种/跨时间比较。
 
-        Returns:
-            期货基差数据，包含基差值、基差率
+        DIFFERENTIATION:
+        - 这是"期现价差"；看期货行情请用 get_futures_main
+        - 看期权概览请用 get_option_summary
+
+        next_recommended_tools:
+        - get_futures_main
+        - get_option_summary
         """
         if ctx:
             await ctx.info("🔧 获取期货基差", extra={"index_code": index_code, "days": days})
@@ -2603,24 +2900,23 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 120,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """计算量化风险指标
+        """计算量化风险指标。
 
-        基于历史行情计算个股的风险指标，包括：
-        - Beta: 相对沪深300的系统性风险
-        - Sharpe Ratio: 风险调整后收益
-        - Max Drawdown: 最大回撤
-        - VaR (95%): 95%置信度下的在险价值
-        - CVaR (95%): 条件在险价值(尾部风险)
-        - Volatility: 年化波动率
-        - Calmar Ratio: 收益/最大回撤比
+        WHEN TO USE:
+        - 用户问"这只股票波动率多少""最大回撤""Beta值""Sharpe比率"
+        - 需要量化评估个股的风险收益特征
 
-        Args:
-            symbol: 股票代码 (如 600519, 000001)
-            days: 回溯天数 (默认 120)
-            ctx: FastMCP Context
+        CONCEPT:
+        基于历史行情计算Beta(系统性风险)、Sharpe Ratio(风险调整收益)、
+        Max Drawdown(最大回撤)、VaR/CVaR(尾部风险)、Volatility(年化波动率)等。
 
-        Returns:
-            风险指标汇总
+        DIFFERENTIATION:
+        - 这是"风险量化"；看相对强弱请用 get_relative_strength
+        - 看筹码分布(成本结构)请用 get_chip_distribution
+
+        next_recommended_tools:
+        - get_relative_strength
+        - get_chip_distribution
         """
         if ctx:
             await ctx.info("🔧 计算风险指标", extra={"symbol": symbol, "days": days})
@@ -2664,24 +2960,23 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 10,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取龙虎榜每日明细
+        """获取龙虎榜每日明细。
 
-        查询龙虎榜(交易所公开披露的大额买卖信息)数据，包括：
-        买入/卖出营业部、买卖金额、上榜原因等。
+        WHEN TO USE:
+        - 用户问"龙虎榜有什么""游资在买什么""哪些股票上榜了"
+        - 需要跟踪游资/机构大额买卖动向和市场热点
 
-        用途:
-        - 跟踪游资/机构动向
-        - 发现主力资金关注的个股
-        - 判断市场情绪和热点
+        CONCEPT:
+        龙虎榜是交易所公开披露的大额买卖信息，包括买入/卖出营业部、买卖金额、上榜原因。
+        可跟踪游资席位和机构席位的交易行为。
 
-        Args:
-            start_date: 开始日期 YYYYMMDD (可选)
-            end_date: 结束日期 YYYYMMDD (可选)
-            days: 最近N天 (默认10, 当start_date为空时使用)
-            ctx: FastMCP Context
+        DIFFERENTIATION:
+        - 这是"龙虎榜"(交易所公开披露)；看大宗交易请用 get_block_trade
+        - 看个股资金流(常规统计)请用 get_money_flow
 
-        Returns:
-            龙虎榜明细数据
+        next_recommended_tools:
+        - get_block_trade
+        - get_money_flow
         """
         if ctx:
             await ctx.info("🔧 获取龙虎榜数据", extra={"days": days})
@@ -2712,24 +3007,22 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 10,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取大宗交易每日明细
+        """获取大宗交易每日明细。
 
-        查询大宗交易数据，包括成交价、成交量、成交额、折溢价率等。
-        大宗交易通常反映机构/大股东的交易行为。
+        WHEN TO USE:
+        - 用户问"大宗交易情况""大股东减持""折价大宗"
+        - 需要发现机构/大股东的大额交易行为和折溢价信号
 
-        用途:
-        - 跟踪机构/大股东交易动向
-        - 发现大额折价/溢价交易机会
-        - 判断重要股东减持/增持意图
+        CONCEPT:
+        大宗交易是单笔金额较大的场外协商交易。折价率高通常暗示减持意图；溢价交易可能表示看好。
 
-        Args:
-            start_date: 开始日期 YYYYMMDD (可选)
-            end_date: 结束日期 YYYYMMDD (可选)
-            days: 最近N天 (默认10)
-            ctx: FastMCP Context
+        DIFFERENTIATION:
+        - 这是"大宗交易"(场外协商)；看龙虎榜(交易所披露)请用 get_dragon_tiger_list
+        - 看股东增减持统计请用 get_stock_shareholder_changes
 
-        Returns:
-            大宗交易明细数据
+        next_recommended_tools:
+        - get_dragon_tiger_list
+        - get_stock_shareholder_changes
         """
         if ctx:
             await ctx.info("🔧 获取大宗交易数据", extra={"days": days})
@@ -2758,21 +3051,22 @@ def register_money_flow_tools(mcp: FastMCP):
         bond_code: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取可转债实时行情
+        """获取可转债实时行情。
 
-        查询可转债市场实时行情数据，包括转股价值、纯债价值、转股溢价率等。
+        WHEN TO USE:
+        - 用户问"可转债行情""转股溢价率""某某转债怎么样"
+        - 需要分析可转债的转股价值、纯债价值、溢价率等
 
-        用途:
-        - 可转债投资分析
-        - 转股套利机会筛选
-        - 下修博弈/强赎博弈跟踪
+        CONCEPT:
+        可转债兼具债底保护和股性弹性。转股溢价率越低，股性越强；纯债溢价率越低，债底保护越好。
 
-        Args:
-            bond_code: 可转债代码 (如 113050), 为空返回全市场
-            ctx: FastMCP Context
+        DIFFERENTIATION:
+        - 这是"可转债"口径；看正股资金流请用 get_money_flow
+        - 看期货请用 get_futures_main
 
-        Returns:
-            可转债行情数据
+        next_recommended_tools:
+        - get_money_flow
+        - get_futures_main
         """
         if ctx:
             await ctx.info("🔧 获取可转债行情", extra={"bond_code": bond_code})
@@ -2801,22 +3095,23 @@ def register_money_flow_tools(mcp: FastMCP):
         quarter: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取基金重仓股数据
+        """获取基金重仓股数据。
 
-        查询公募基金的前十大重仓股、持仓比例等信息，可以了解基金经理的投资偏好。
+        WHEN TO USE:
+        - 用户问"基金经理买了什么""基金重仓股""机构持仓"
+        - 需要跟踪明星基金经理的持仓变化或发现机构集中持股
 
-        用途:
-        - 跟踪明星基金经理持仓变化
-        - 发现机构集中持有个股
-        - 行业配置分析
+        CONCEPT:
+        公募基金每季度披露前十大重仓股。持仓变化反映基金经理对后市的判断和行业偏好。
 
-        Args:
-            fund_code: 基金代码 (如 110011, 005827)
-            quarter: 季度 (如 20244 表示2024年第4季度)
-            ctx: FastMCP Context
+        DIFFERENTIATION:
+        - 这是"基金持仓"口径；看基金净值请用 get_fund_nav
+        - 看ETF资金流请用 get_etf_flow；看十大流通股东请用 get_stock_top10_shareholders
 
-        Returns:
-            基金持仓数据
+        next_recommended_tools:
+        - get_fund_nav
+        - get_etf_flow
+        - get_stock_top10_shareholders
         """
         if ctx:
             await ctx.info("🔧 获取基金持仓", extra={"fund_code": fund_code, "quarter": quarter})
@@ -2845,23 +3140,23 @@ def register_money_flow_tools(mcp: FastMCP):
         symbol: str = "螺纹钢",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取商品期货库存/仓单数据
+        """获取商品期货库存/仓单数据。
 
-        查询商品期货的仓库库存数据，是判断供需基本面变化的重要指标。
+        WHEN TO USE:
+        - 用户问"螺纹钢库存""铜的库存变化""商品供需"
+        - 需要判断商品的基本面供需格局
 
+        CONCEPT:
+        库存数据是商品基本面分析的核心指标。库存上升暗示供过于求，下降暗示供不应求。
         支持品种: 螺纹钢、铁矿石、铜、铝、锌、镍、锡、黄金、白银、原油等。
 
-        用途:
-        - 判断商品供需格局
-        - 库存变化趋势分析
-        - 期货合约价格辅助判断
+        DIFFERENTIATION:
+        - 这是"商品基本面(库存)"口径；看期货行情请用 get_futures_main
+        - 看期货基差请用 get_futures_basis
 
-        Args:
-            symbol: 商品名称 (如 "螺纹钢", "铁矿石", "铜", "原油")
-            ctx: FastMCP Context
-
-        Returns:
-            商品库存数据
+        next_recommended_tools:
+        - get_futures_main
+        - get_futures_basis
         """
         if ctx:
             await ctx.info("🔧 获取商品库存", extra={"symbol": symbol})
@@ -2894,23 +3189,25 @@ def register_money_flow_tools(mcp: FastMCP):
         days: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取个股北向持股明细
+        """获取个股北向持股明细。
 
-        查询个股被北向资金(沪深港通)持有的详细历史数据，包括持股数量、持股市值、
-        占流通股比例等。是判断外资对个股态度的重要指标。
+        WHEN TO USE:
+        - 用户问"外资持有这只股票多少""北向持股变化""外资在加仓还是减仓"
+        - 需要判断外资对特定个股的态度和持仓趋势
 
-        用途:
-        - 外资对个股的增减持趋势
-        - 北向持股占比变化
-        - 外资偏好分析
+        CONCEPT:
+        北向持股明细展示个股被沪深港通外资持有的数量、市值、占流通股比例的历史变化。
+        持股比例上升=外资加仓，下降=外资减仓。
 
-        Args:
-            symbol: 股票代码 (如 "600519", "000858")
-            days: 回溯天数 (默认30天)
-            ctx: FastMCP Context
+        DIFFERENTIATION:
+        - 这是"个股级"北向持仓；看全市场北向总流量请用 get_north_bound_flow
+        - 看北向持股排名请用 get_stock_northbound_ranking
+        - 看个股资金流请用 get_money_flow
 
-        Returns:
-            个股北向持股历史明细
+        next_recommended_tools:
+        - get_north_bound_flow
+        - get_stock_northbound_ranking
+        - get_money_flow
         """
         if ctx:
             await ctx.info("🔧 获取个股北向持股明细", extra={"symbol": symbol, "days": days})
@@ -2941,22 +3238,23 @@ def register_money_flow_tools(mcp: FastMCP):
         indicator: str = "今日排行",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取北向持股排行榜
+        """获取北向持股排行榜。
 
-        查询北向资金持股排名，支持按不同时间维度排行（今日/5日/10日/1月等）。
+        WHEN TO USE:
+        - 用户问"外资重仓股""北向资金买了哪些股""外资流入Top10"
+        - 需要发现外资整体偏好的个股排名
 
-        用途:
-        - 发现外资重仓股
-        - 北向资金流入/流出Top股
-        - 外资调仓方向判断
+        CONCEPT:
+        北向持股排行榜按不同时间维度(今日/5日/10日/1月)展示外资持股变化排名。
+        可快速定位外资加仓/减仓最集中的个股。
 
-        Args:
-            market: 市场类型 ("北向"/"沪股通"/"深股通")
-            indicator: 排行指标 ("今日排行"/"5日排行"/"10日排行"/"1月排行")
-            ctx: FastMCP Context
+        DIFFERENTIATION:
+        - 这是"排名"视角；看个股北向持仓历史请用 get_stock_northbound_holdings
+        - 看全市场北向总流量请用 get_north_bound_flow
 
-        Returns:
-            北向持股排行数据
+        next_recommended_tools:
+        - get_stock_northbound_holdings
+        - get_north_bound_flow
         """
         if ctx:
             await ctx.info("🔧 获取北向持股排行", extra={"market": market, "indicator": indicator})
@@ -2985,23 +3283,25 @@ def register_money_flow_tools(mcp: FastMCP):
         date: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取十大流通股东
+        """获取十大流通股东。
 
-        查询个股的十大流通股东信息，包括股东名称、持股数量、持股比例、变化情况等。
-        是判断个股筹码集中度和主力动向的重要参考。
+        WHEN TO USE:
+        - 用户问"这只股票谁在持有""十大股东""筹码集中度"
+        - 需要判断个股的机构/外资持仓和筹码集中度变化
 
-        用途:
-        - 筹码集中度分析
-        - 主力持仓变化
-        - 机构/外资进出判断
+        CONCEPT:
+        十大流通股东按持股比例排名，可观察机构、外资、自然人等不同类型股东的进出。
+        筹码集中度提升通常有利于股价稳定。
 
-        Args:
-            symbol: 股票代码 (如 "sh688686", "600519")
-            date: 季度日期 (如 "20240930"，留空取最近)
-            ctx: FastMCP Context
+        DIFFERENTIATION:
+        - 这是"个股级股东结构"；看全市场股东增减持统计请用 get_stock_shareholder_changes
+        - 看个股北向持仓请用 get_stock_northbound_holdings
+        - 看基金重仓股请用 get_fund_holdings
 
-        Returns:
-            十大流通股东数据
+        next_recommended_tools:
+        - get_stock_shareholder_changes
+        - get_stock_northbound_holdings
+        - get_fund_holdings
         """
         if ctx:
             await ctx.info("🔧 获取十大流通股东", extra={"symbol": symbol, "date": date})
@@ -3029,21 +3329,24 @@ def register_money_flow_tools(mcp: FastMCP):
         date: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取股东持股变化统计
+        """获取股东持股变化统计。
 
-        查询全市场股东持股变化统计，包括增持、减持、不变等情况汇总。
+        WHEN TO USE:
+        - 用户问"重要股东在增持还是减持""产业资本动向""高管增减持"
+        - 需要判断全市场重要股东的增减持趋势
 
-        用途:
-        - 市场整体股东增减持趋势
-        - 产业资本动向判断
-        - 重要股东行为分析
+        CONCEPT:
+        重要股东(大股东、董监高)的增减持行为反映内部人对公司价值的判断。
+        产业资本集中增持常出现在市场底部区域。
 
-        Args:
-            date: 日期 (如 "20240930"，留空取最近)
-            ctx: FastMCP Context
+        DIFFERENTIATION:
+        - 这是"全市场股东行为统计"；看个股十大股东请用 get_stock_top10_shareholders
+        - 看限售解禁请用 get_restricted_release；看回购请用 get_repurchase_info
 
-        Returns:
-            股东持股变化统计数据
+        next_recommended_tools:
+        - get_stock_top10_shareholders
+        - get_restricted_release
+        - get_repurchase_info
         """
         if ctx:
             await ctx.info("🔧 获取股东持股变化", extra={"date": date})
@@ -3071,22 +3374,24 @@ def register_money_flow_tools(mcp: FastMCP):
         date: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取机构调研统计
+        """获取机构调研统计。
 
-        查询机构对上市公司的调研统计，包括调研机构数量、调研次数等。
-        机构调研热度是判断个股关注度的重要指标。
+        WHEN TO USE:
+        - 用户问"哪些股票被机构密集调研""机构调研热度排名""这只股票有没有机构调研"
+        - 需要发现机构关注度高的个股
 
-        用途:
-        - 发现机构关注的热门股
-        - 判断个股基本面关注度
-        - 机构调研密集度分析
+        CONCEPT:
+        机构调研指基金公司、券商、资管等实地走访上市公司并出报告。
+        调研密度高 = 机构关注度强，常出现在基本面拐点前。
 
-        Args:
-            date: 日期 (如 "20240630"，留空取最近)
-            ctx: FastMCP Context
+        DIFFERENTIATION:
+        - 看的是"调研行为统计"，不是真实持仓变动
+        - 持仓变动看 get_stock_top10_shareholders 或 get_fund_holdings
+        - 北向动向看 get_stock_northbound_holdings
 
-        Returns:
-            机构调研统计数据
+        next_recommended_tools:
+        - get_stock_top10_shareholders
+        - get_fund_holdings
         """
         if ctx:
             await ctx.info("🔧 获取机构调研统计", extra={"date": date})

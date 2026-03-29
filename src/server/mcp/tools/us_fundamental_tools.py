@@ -50,10 +50,15 @@ def register_us_fundamental_tools(mcp: FastMCP):
         output_format: OutputFormat = "markdown",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get EPS earnings history for a US stock.
+        """获取美股EPS盈利历史 (实际 vs 预期).
 
-        Shows actual EPS vs analyst estimate and surprise % for the last N quarters.
-        Useful for evaluating earnings quality and beat/miss trends.
+        WHEN TO USE: 用户问 "这只美股业绩如何"、"最近几季度财报beat还是miss"、
+            "盈利超预期了吗"、"NVDA earnings history".
+        CONCEPT: EPS(Earnings Per Share)是每股收益. 对比实际EPS与分析师一致预期,
+            计算surprise%(超预期幅度). 连续beat表示盈利质量高.
+        DIFFERENTIATION: 本工具是美股专用, 仅覆盖US市场. A股用 get_financial_reports.
+            与 get_us_valuation_metrics 互补: 本工具看盈利趋势, 那个看估值水平.
+        next_recommended_tools: get_us_valuation_metrics → get_cash_flow_quality
 
         Args:
             symbol: US stock ticker. Format: EXCHANGE:SYMBOL
@@ -183,10 +188,16 @@ def register_us_fundamental_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Analyze cash flow quality for a US stock.
+        """分析美股现金流质量 (经营/自由现金流).
 
-        Returns operating cash flow, capex, free cash flow, and FCF/net-income
-        ratio by year. High FCF ratio (>0.8) indicates strong earnings quality.
+        WHEN TO USE: 用户问 "现金流健康吗"、"利润质量如何"、"自由现金流够不够"、
+            "AAPL cash flow quality"、"赚的是真钱还是纸面利润".
+        CONCEPT: 经营现金流(OCF)→减去资本支出(CapEx)→自由现金流(FCF).
+            FCF/净利润 > 0.8 说明盈利含金量高(利润有真金白银支撑).
+            比率低可能意味着应收账款膨胀或利润操纵风险.
+        DIFFERENTIATION: 专注现金流年度趋势, 不是单季快照. 与 get_earnings_history
+            互补: 那个看EPS trend, 这个看现金流验证盈利质量.
+        next_recommended_tools: get_us_valuation_metrics → get_us_financial_health
 
         Args:
             symbol: US stock ticker. Format: EXCHANGE:SYMBOL
@@ -258,10 +269,16 @@ def register_us_fundamental_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get US stock valuation metrics.
+        """获取美股估值指标快照 (PE/PB/EV_EBITDA/PEG/市值).
 
-        Returns PE (TTM & Forward), PS, PB, EV/EBITDA, PEG ratio,
-        market cap, enterprise value, beta, and dividend yield.
+        WHEN TO USE: 用户问 "这美股贵不贵"、"PE是多少"、"估值高不高"、
+            "TSLA valuation"、"市值多大"、"和同行比估值如何".
+        CONCEPT: PE(TTM)=总市值/最近4季度净利润; PB=市值/净资产; EV/EBITDA剔除了
+            资本结构差异, 适合跨行业比较. PEG<1通常被低估.
+        DIFFERENTIATION: 本工具是估值**快照**(当前时点). A股估值用 get_valuation_metrics
+            (含历史百分位). 本工具不含历史分位, 如需百分位用 get_us_financial_health.
+            与 get_earnings_history 互补: 那个看盈利趋势, 这个看当前估值水平.
+        next_recommended_tools: get_earnings_history → get_us_financial_health
 
         Args:
             symbol: US stock ticker. Format: EXCHANGE:SYMBOL
@@ -325,10 +342,16 @@ def register_us_fundamental_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get institutional holdings for a US stock.
+        """获取美股机构持仓 (前15大机构 + 增减仓).
 
-        Returns top 15 institutional holders with shares held, percentage,
-        and recent change direction. Useful for tracking smart money flows.
+        WHEN TO USE: 用户问 "谁在买这只股票"、"机构怎么看"、"聪明钱在干嘛"、
+            "NVDA institutional holdings"、"被哪些基金重仓".
+        CONCEPT: 13F季报披露前15大机构持仓(BlackRock, Vanguard等). 机构增仓=看好,
+            集中减仓=看空. 注意: 13F数据有45天延迟.
+        DIFFERENTIATION: 美股专用(13F). A股用 get_stock_top10_shareholders 或
+            get_fund_holdings. 与 get_us_insider_trading 互补:
+            机构看基金/资管, 内部人看CEO/CFO等高管.
+        next_recommended_tools: get_us_insider_trading → get_us_share_statistics
 
         Args:
             symbol: US stock ticker. Format: EXCHANGE:SYMBOL
@@ -401,11 +424,16 @@ def register_us_fundamental_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get comprehensive company profile for a US stock.
+        """获取美股公司概况 (公司做什么 + 行业定位).
 
-        Returns company overview including sector, industry, description,
-        employees, CEO, market cap, key financial metrics, and price ranges.
-        Essential for understanding what the company does before deeper analysis.
+        WHEN TO USE: 用户刚开始研究一只美股, 问 "这家公司是干什么的"、"属于什么行业"、
+            "基本情况介绍"、"company profile"、"先给我个概览".
+        CONCEPT: 公司概况是投研入口层信息, 包含 sector、industry、业务描述、管理层、员工数、
+            市值、52周区间等, 用来先建立公司画像.
+        DIFFERENTIATION: 这是**研究起点工具**. 不分析估值、不分析盈利质量、不分析情绪.
+            深入研究应继续用 get_us_valuation_metrics / get_earnings_history /
+            get_us_financial_health.
+        next_recommended_tools: get_us_financial_health → get_us_valuation_metrics
 
         Args:
             symbol: US stock ticker. Format: EXCHANGE:SYMBOL
@@ -470,11 +498,15 @@ def register_us_fundamental_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get analyst recommendations and upgrade/downgrade history for a US stock.
+        """获取美股分析师评级与目标价.
 
-        Returns consensus ratings (strong buy/buy/hold/sell/strong sell), target prices,
-        and recent analyst upgrade/downgrade events. Critical for gauging
-        Wall Street sentiment.
+        WHEN TO USE: 用户问 "华尔街怎么看"、"分析师评级如何"、"目标价是多少"、
+            "upgrade/downgrade history"、"一致预期偏多还是偏空".
+        CONCEPT: 汇总券商分析师的 buy/hold/sell 共识、目标价区间、以及近期升级/降级事件.
+            这是 sell-side sentiment, 不是公司基本面本身.
+        DIFFERENTIATION: 看的是**外部分析师观点**, 不是内部人交易, 也不是机构真实持仓.
+            如需真实资金动作, 用 get_us_institutional_holdings 或 get_us_insider_trading.
+        next_recommended_tools: get_earnings_history → get_us_valuation_metrics
 
         Args:
             symbol: US stock ticker. Format: EXCHANGE:SYMBOL
@@ -556,11 +588,17 @@ def register_us_fundamental_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get revenue breakdown by geography and business segment for a US stock.
+        """获取美股收入构成拆分 (区域 + 业务线).
 
-        Returns geographic revenue distribution (US, Europe, Asia, etc.) and
-        business segment breakdown (Product, Service, etc.) with percentages.
-        Shows how the company generates revenue across regions and segments.
+        WHEN TO USE: 用户问 "这家公司靠什么赚钱"、"收入主要来自哪个地区"、
+            "业务结构集中吗"、"Apple revenue by segment".
+        CONCEPT: 将总营收拆成 geographic segments(美洲/欧洲/亚太等)
+            和 business segments(iPhone/Cloud/Ads等), 用于判断单一市场依赖度
+            与增长驱动来源.
+        DIFFERENTIATION: 这是**营收结构**工具, 不看利润率、不看估值、不看情绪.
+            若想判断公司整体质量, 用 get_us_financial_health; 若想看估值,
+            用 get_us_valuation_metrics.
+        next_recommended_tools: get_us_company_profile → get_us_financial_health
 
         Args:
             symbol: US stock ticker. Format: EXCHANGE:SYMBOL
@@ -635,12 +673,16 @@ def register_us_fundamental_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get recent insider trading activity for a US stock.
+        """获取美股内部人交易 (高管/董事买卖).
 
-        Returns insider purchases and sales with transaction details.
-        Includes net sentiment (buying vs selling pressure).
-        Insiders (CEO, CFO, directors) have information advantage -
-        clusters of insider buying often signal confidence.
+        WHEN TO USE: 用户问 "管理层在买还是卖"、"CEO/CFO最近有没有减持"、
+            "insider buying"、"内部人信号偏多还是偏空".
+        CONCEPT: 内部人交易指CEO、CFO、董事等申报交易. 连续净买入常被视为
+            管理层信心信号, 连续大额减持则可能提示估值高位或兑现动机.
+        DIFFERENTIATION: 看的是**公司内部人真实交易动作**, 不是分析师观点,
+            也不是基金13F持仓. 机构动作用 get_us_institutional_holdings,
+            卖方观点用 get_us_analyst_recommendations.
+        next_recommended_tools: get_us_institutional_holdings → get_us_share_statistics
 
         Args:
             symbol: US stock ticker. Format: EXCHANGE:SYMBOL
@@ -709,11 +751,16 @@ def register_us_fundamental_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get share statistics including short interest for a US stock.
+        """获取美股股份统计与做空数据.
 
-        Returns shares outstanding, float, short interest (% of float),
-        days to cover, institutional ownership %, and insider ownership %.
-        High short interest can indicate bearish sentiment or short squeeze potential.
+        WHEN TO USE: 用户问 "空头多不多"、"有没有轧空风险"、"流通盘多大"、
+            "short interest"、"days to cover"、"机构/内部人持股占比多少".
+        CONCEPT: short interest % of float 衡量空头仓位拥挤度; days to cover
+            衡量按近期成交量回补空头所需天数. 数值越高, squeeze 风险越大.
+        DIFFERENTIATION: 这是**股本结构/空头拥挤度**工具, 不反映公司经营质量.
+            若想看基本面健康, 用 get_us_financial_health; 若想看真实高管动作,
+            用 get_us_insider_trading.
+        next_recommended_tools: get_us_insider_trading → get_us_valuation_metrics
 
         Args:
             symbol: US stock ticker. Format: EXCHANGE:SYMBOL
@@ -791,15 +838,17 @@ def register_us_fundamental_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get comprehensive financial health score for a US stock.
+        """获取美股综合财务健康评分.
 
-        Computes profitability (margins, ROE, ROA), liquidity (current/quick ratio),
-        solvency (debt-to-equity, interest coverage), growth (revenue/earnings growth),
-        and valuation (PE, PEG, PB) metrics. Returns a composite 0-100 health score
-        with letter grade and key findings.
-
-        Use this as the primary tool for answering "Is this stock financially healthy?"
-        or "What is the financial quality of this company?".
+        WHEN TO USE: 用户问 "这家公司财务健康吗"、"基本面质量如何"、
+            "是否值得长期跟踪"、"给我一个综合质量分".
+        CONCEPT: 综合 profitability、liquidity、solvency、growth、valuation
+            五类指标, 输出 0-100 分健康度、等级与关键发现. 适合作为单只股票
+            基本面体检入口.
+        DIFFERENTIATION: 这是**综合评分工具**. 与 get_us_company_profile 不同,
+            那个是业务画像; 与 get_us_valuation_metrics 不同, 那个只看估值快照;
+            与 get_cash_flow_quality 不同, 那个只看现金流含金量.
+        next_recommended_tools: get_us_valuation_metrics → get_cash_flow_quality
 
         Args:
             symbol: US stock ticker. Format: EXCHANGE:SYMBOL
