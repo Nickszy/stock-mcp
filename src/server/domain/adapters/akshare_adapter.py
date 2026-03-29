@@ -8,7 +8,7 @@ the event loop.
 import asyncio
 import logging
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
@@ -32,6 +32,8 @@ from src.server.domain.types import (
     MarketStatus,
 )
 from src.server.utils.logger import logger
+
+_CST = timezone(timedelta(hours=8))
 
 
 class AkshareAdapter(BaseDataAdapter):
@@ -5760,7 +5762,7 @@ class AkshareAdapter(BaseDataAdapter):
         "000300": "沪深300", "000905": "中证500",
         "000852": "中证1000", "399006": "创业板指",
         "399673": "创业板50", "399001": "深证成指",
-        "399005": "中小板指", "399673": "创业板50",
+        "399005": "中小板指",
     }
 
     async def get_index_fact_pack(self, symbol: str) -> Dict[str, Any]:
@@ -6862,7 +6864,7 @@ class AkshareAdapter(BaseDataAdapter):
                     "sector_name": scope.get("sector_name", sector_name),
                     "sector_id": scope.get("sector_id"),
                     "market": scope.get("market", "cn"),
-                    "as_of_date": datetime.utcnow().strftime("%Y-%m-%d"),
+                    "as_of_date": datetime.now(_CST).strftime("%Y-%m-%d"),
                 }
                 coverage["scope"] = "complete"
             else:

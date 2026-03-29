@@ -18,16 +18,17 @@ logger = logging.getLogger(__name__)
 _CST = timezone(timedelta(hours=8))  # A-stock market timezone (UTC+8)
 
 
-def market_aware_ttl(trading_ttl: int = 300, max_ttl: int = 86400) -> int:
+def market_aware_ttl(trading_ttl: int = 300, max_ttl: int = 72 * 3600) -> int:
     """Calculate smart TTL based on A-stock market hours (CST/UTC+8).
 
-    - Trading hours (weekday 9:30-15:00 CST): use ``trading_ttl`` for freshness
+    - Trading hours (weekday 9:30-15:00 CST, excluding 15:00): use ``trading_ttl``
     - After market close on weekday: cache until next 9:15 CST
     - Weekend: cache until Monday 9:15 CST
     - Chinese public holidays are NOT handled (data stays short-TTL)
 
     Returns:
-        TTL in seconds, capped at ``max_ttl`` (default 24h).
+        TTL in seconds, capped at ``max_ttl`` for freshness-oriented windows while
+        allowing closed-market carryover TTLs to span the full closed period.
     """
     now = datetime.now(_CST)
     weekday = now.weekday()  # 0=Mon .. 6=Sun
@@ -36,22 +37,22 @@ def market_aware_ttl(trading_ttl: int = 300, max_ttl: int = 86400) -> int:
         target = (now + timedelta(days=days_ahead)).replace(
             hour=target_hour, minute=target_min, second=0, microsecond=0
         )
-        return int((target - now).total_seconds())
+        return max(int((target - now).total_seconds()), 0)
 
     # Weekend → cache until Monday 9:15
     if weekday >= 5:
         days_to_mon = 7 - weekday
         ttl = _seconds_until(9, 15, days_to_mon)
-        return min(max(ttl, 3600), max_ttl)
+        return max(ttl, 3600)
 
     # Before market open → cache until 9:30
     if now.hour < 9 or (now.hour == 9 and now.minute < 30):
         ttl = _seconds_until(9, 30)
         return min(max(ttl, 300), max_ttl)
 
-    # During trading hours → short TTL
-    if now.hour < 15 or (now.hour == 15 and now.minute == 0):
-        return trading_ttl
+    # During trading hours (9:30-14:59) → short TTL
+    if now.hour < 15:
+        return min(trading_ttl, max_ttl)
 
     # After market close on weekday
     if weekday == 4:  # Friday → cache until Monday 9:15
@@ -59,7 +60,7 @@ def market_aware_ttl(trading_ttl: int = 300, max_ttl: int = 86400) -> int:
     else:
         ttl = _seconds_until(9, 15, 1)
 
-    return min(max(ttl, 3600), max_ttl)
+    return max(ttl, 3600)
 
 
 class DateAwareJsonSerializer(BaseSerializer):
