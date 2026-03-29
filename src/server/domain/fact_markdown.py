@@ -656,3 +656,24 @@ def build_index_fact_markdown(fact_pack: Dict[str, Any]) -> str:
         fact_pack=fact_pack,
         category_titles=_INDEX_CATEGORY_TITLES,
     )
+
+
+_SECTOR_CATEGORY_TITLES = {
+    "scope": "行业定位",
+    "universe": "成分股",
+    "structure_snapshot": "结构快照",
+    "peer_benchmark": "同业对比",
+    "evidence_summary": "证据摘要",
+}
+
+
+def build_sector_fact_markdown(fact_pack: Dict[str, Any]) -> str:
+    """Build a fact-only Markdown view from a sector fact pack."""
+    entity = fact_pack.get("entity", {})
+    sector_name = entity.get("sector_name", "?")
+
+    return _build_fact_markdown(
+        title=f"行业 {sector_name}",
+        fact_pack=fact_pack,
+        category_titles=_SECTOR_CATEGORY_TITLES,
+    )

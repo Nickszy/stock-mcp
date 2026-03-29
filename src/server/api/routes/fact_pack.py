@@ -225,3 +225,33 @@ async def get_index_fact_pack(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get index fact pack: {str(e)}",
         )
+
+
+@router.get(
+    "/sector/{sector_name}",
+    summary="获取行业事实包",
+    tags=["行业 Sector"],
+    description=(
+        "聚合全维度行业结构化事实数据: 行业定位、成分股、结构快照、同业对比、"
+        "证据摘要(资金流/PE-PB历史)。"
+        "\n\n**Content negotiation**: `?format=markdown` 返回 Markdown 格式。"
+    ),
+)
+async def get_sector_fact_pack(
+    sector_name: str,
+    format: str = Query("json", description="输出格式: json | markdown"),
+    accept: Optional[str] = Header(default="", alias="Accept"),
+):
+    try:
+        logger.info("API: get_sector_fact_pack", sector_name=sector_name)
+        result = await Container.market_gateway().get_sector_fact_pack(sector_name=sector_name)
+        md = maybe_markdown_response(result, format, accept or "")
+        if md is not None:
+            return md
+        return rest_response(data=result, source="akshare")
+    except Exception as e:
+        logger.error(f"API error in get_sector_fact_pack: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get sector fact pack: {str(e)}",
+        )

@@ -513,3 +513,71 @@ def register_fact_pack_tools(mcp: FastMCP):
                 source="akshare",
                 description=f"获取指数事实包失败: {e}",
             )
+
+    @mcp.tool(tags={"fact-pack"})
+    async def get_sector_fact_pack(
+        sector_name: str,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取行业事实包(Fact Pack)：一次调用聚合全维度行业结构化事实数据。
+
+        聚合 5 大事实类别: 行业定位、成分股、结构快照、同业对比、证据摘要。
+        返回统一结构: entity + facts + source_trace + coverage。
+
+        Typical use cases:
+        - "给我 白酒 行业的完整事实包"
+        - "半导体行业最新估值+资金流"
+        - "新能源板块的成分股+同业对比"
+
+        Args:
+            sector_name: 行业名称 (如 白酒, 半导体, 新能源, 银行)
+            ctx: FastMCP Context.
+
+        Returns:
+            行业事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        """
+        if ctx:
+            await ctx.info(f"获取行业事实包: {sector_name}", extra={"sector_name": sector_name})
+
+        try:
+            gateway = Container.market_gateway()
+            result = await gateway.get_sector_fact_pack(sector_name=sector_name)
+
+            categories_fetched = result.get("categories_fetched", 0)
+            categories_total = result.get("categories_total", 5)
+            elapsed = result.get("elapsed_seconds", 0)
+            coverage = result.get("coverage", {})
+            missing = result.get("missing_fields", [])
+
+            name = sector_name
+            summary = f"{name} 行业事实包: {categories_fetched}/{categories_total} 类已获取"
+            if missing:
+                summary += f" | 缺失: {', '.join(missing)}"
+            summary += f" | 耗时{elapsed:.1f}s"
+
+            md = result.get("fact_markdown", "")
+            if not md:
+                md = f"# 行业事实包: {name}\n\n"
+                md += f"**已获取**: {categories_fetched}/{categories_total} 类"
+                md += f" | **耗时**: {elapsed:.1f}s\n\n"
+
+            return create_standard_artifact_response(
+                summary=summary,
+                component_type=ComponentType.TABLE,
+                name=f"行业事实包: {name}",
+                data=result,
+                source="akshare",
+                description=summary,
+                markdown=md,
+            )
+
+        except Exception as e:
+            logger.error(f"get_sector_fact_pack failed: {e}")
+            return create_standard_artifact_response(
+                summary=f"获取行业事实包失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="行业事实包错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取行业事实包失败: {e}",
+            )

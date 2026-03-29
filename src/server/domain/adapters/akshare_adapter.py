@@ -6813,3 +6813,156 @@ class AkshareAdapter(BaseDataAdapter):
         await self.cache.set(cache_key, result, ttl=600)
         return result
 
+    # ------------------------------------------------------------------
+    # Sector Fact Pack (COL-179)
+    # ------------------------------------------------------------------
+
+    async def get_sector_fact_pack(self, sector_name: str) -> Dict[str, Any]:
+        """Aggregate sector facts across 5 categories into a single pack.
+
+        Categories: scope, universe, structure_snapshot, peer_benchmark,
+        evidence_summary.
+
+        Args:
+            sector_name: Sector name (e.g. "白酒", "半导体", "新能源")
+        """
+        cache_key = f"akshare:sector_fact_pack:{sector_name}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        import time as _time
+        t0 = _time.perf_counter()
+
+        entity = {"sector_name": sector_name, "type": "sector"}
+        facts: Dict[str, Any] = {}
+        source_trace: Dict[str, Any] = {}
+        coverage: Dict[str, str] = {}
+        missing_fields: List[str] = []
+
+        # --- 1. Scope (行业定位) ---
+        try:
+            scope = await self.resolve_sector(sector_name, intent="overview")
+            if scope and "error" not in scope:
+                facts["scope"] = {
+                    "sector_name": scope.get("sector_name", sector_name),
+                    "sector_id": scope.get("sector_id"),
+                    "market": scope.get("market", "cn"),
+                    "as_of_date": datetime.utcnow().strftime("%Y-%m-%d"),
+                }
+                coverage["scope"] = "complete"
+            else:
+                coverage["scope"] = "missing"
+                missing_fields.append("scope")
+        except Exception as e:
+            coverage["scope"] = f"error: {e}"
+
+        # --- 2. Universe (行业成分股) ---
+        try:
+            df = await self._run(ak.stock_board_industry_cons_em, symbol=sector_name)
+            if df is not None and not df.empty:
+                code_col = "代码" if "代码" in df.columns else None
+                name_col = "名称" if "名称" in df.columns else None
+                chg_col = "涨跌幅" if "涨跌幅" in df.columns else None
+                cap_col = "总市值" if "总市值" in df.columns else None
+                constituents = []
+                for _, row in df.head(15).iterrows():
+                    constituents.append({
+                        "code": str(row.get(code_col, "")) if code_col else "",
+                        "name": str(row.get(name_col, "")) if name_col else "",
+                        "change_pct": self._safe_float(row.get(chg_col)) if chg_col else None,
+                        "market_cap": self._safe_float(row.get(cap_col)) if cap_col else None,
+                    })
+                facts["universe"] = {
+                    "constituents": constituents,
+                    "total_count": len(df),
+                }
+                coverage["universe"] = "complete"
+                source_trace["universe"] = {"provider": "akshare", "api": "stock_board_industry_cons_em"}
+            else:
+                coverage["universe"] = "missing"
+                missing_fields.append("universe")
+        except Exception as e:
+            coverage["universe"] = f"error: {e}"
+
+        # --- 3. Structure Snapshot (行业结构快照) ---
+        snapshot: Dict[str, Any] = {}
+        try:
+            trend = await self.get_sector_trend(sector_name=sector_name, days=10)
+            if trend and "error" not in trend and trend.get("data"):
+                snapshot["price_trend"] = trend.get("data", [])[:5]
+        except Exception:
+            pass
+        try:
+            val = await self.get_sector_valuation_metrics(sector_name=sector_name, days=60)
+            if val and "error" not in val:
+                snapshot["valuation"] = val
+        except Exception:
+            pass
+        if snapshot:
+            facts["structure_snapshot"] = snapshot
+            coverage["structure_snapshot"] = "complete" if len(snapshot) >= 2 else "partial"
+        else:
+            coverage["structure_snapshot"] = "missing"
+            missing_fields.append("structure_snapshot")
+
+        # --- 4. Peer Benchmark (同业对比) ---
+        try:
+            if facts.get("universe", {}).get("constituents"):
+                peers = [c for c in facts["universe"]["constituents"] if c.get("market_cap")][:10]
+                if peers:
+                    facts["peer_benchmark"] = {"peers": peers, "count": len(peers)}
+                    coverage["peer_benchmark"] = "complete"
+                else:
+                    coverage["peer_benchmark"] = "missing"
+                    missing_fields.append("peer_benchmark")
+            else:
+                coverage["peer_benchmark"] = "missing"
+                missing_fields.append("peer_benchmark")
+        except Exception as e:
+            coverage["peer_benchmark"] = f"error: {e}"
+
+        # --- 5. Evidence Summary (证据摘要) ---
+        evidence: Dict[str, Any] = {}
+        try:
+            flow = await self.get_sector_money_flow_history(sector_name=sector_name, days=10)
+            if flow and "error" not in flow and flow.get("data"):
+                evidence["money_flow"] = flow.get("data", [])[:5]
+        except Exception:
+            pass
+        try:
+            pe_pb = await self.get_sector_pe_pb_historical(sector_name=sector_name, days=60)
+            if pe_pb and "error" not in pe_pb and pe_pb.get("data"):
+                evidence["pe_pb_history"] = pe_pb.get("data", [])[:5]
+        except Exception:
+            pass
+        if evidence:
+            facts["evidence_summary"] = evidence
+            coverage["evidence_summary"] = "complete" if len(evidence) >= 2 else "partial"
+        else:
+            coverage["evidence_summary"] = "missing"
+            missing_fields.append("evidence_summary")
+
+        elapsed = _time.perf_counter() - t0
+
+        result = {
+            "source": "akshare",
+            "entity": entity,
+            "facts": facts,
+            "source_trace": source_trace,
+            "coverage": coverage,
+            "missing_fields": missing_fields,
+            "categories_fetched": len([v for v in coverage.values() if v in ("complete", "partial")]),
+            "categories_total": 5,
+            "elapsed_seconds": round(elapsed, 2),
+        }
+
+        try:
+            from src.server.domain.fact_markdown import build_sector_fact_markdown
+            result["fact_markdown"] = build_sector_fact_markdown(result)
+        except Exception as e:
+            self.logger.warning(f"fact_markdown generation failed: {e}")
+
+        await self.cache.set(cache_key, result, ttl=600)
+        return result
+

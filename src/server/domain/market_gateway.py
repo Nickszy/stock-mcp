@@ -170,6 +170,7 @@ _MARKET_METHODS: Set[str] = {
     "get_us_stock_fact_pack",
     "get_etf_fact_pack",
     "get_index_fact_pack",
+    "get_sector_fact_pack",
 }
 
 
@@ -798,6 +799,10 @@ class MarketGateway:
         """Get aggregated US stock fact pack (YahooAdapter only)."""
         result = await self._yahoo_adapter().get_us_stock_fact_pack(ticker)
         return self._sanitize_na(result)
+
+    async def get_sector_fact_pack(self, sector_name: str) -> Dict[str, Any]:
+        """Get aggregated sector fact pack (AkshareAdapter only)."""
+        return await self._ak_adapter().get_sector_fact_pack(sector_name)
 
     # =========================================================================
     # __getattr__: synthesize ticker-scoped and market-wide methods

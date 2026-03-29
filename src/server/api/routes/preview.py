@@ -56,6 +56,7 @@ _METHOD_CATEGORIES: Dict[str, List[str]] = {
         "get_sector_trend", "get_sector_money_flow_history",
         "get_sector_pe_pb_historical", "get_sector_valuation_metrics",
         "resolve_sector", "get_factor_ranking",
+        "get_sector_fact_pack",
     ],
     "A股个股 A-Share": [
         # 基本面
@@ -103,6 +104,7 @@ _METHOD_CATEGORIES: Dict[str, List[str]] = {
         "get_index_list", "get_index_constituents", "get_index_constituent_weights",
         "get_index_pe_pb", "get_index_performance",
         "get_etf_fact_pack", "get_index_fact_pack",
+        "get_sector_fact_pack",
     ],
 }
 
@@ -522,6 +524,16 @@ _METHOD_PARAMS: Dict[str, List[Dict[str, Any]]] = {
             "default": "000300",
             "placeholder": "e.g. 000300, 000905",
             "label": "symbol",
+        },
+    ],
+    "get_sector_fact_pack": [
+        {
+            "name": "sector_name",
+            "type": "text",
+            "required": True,
+            "default": "白酒",
+            "placeholder": "e.g. 白酒, 半导体, 新能源",
+            "label": "sector_name",
         },
     ],
 }
