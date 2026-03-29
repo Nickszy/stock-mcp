@@ -5026,6 +5026,72 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"get_fund_manager failed: {e}")
             return {"results": [], "total": 0, "source": "akshare", "error": str(e)}
 
+    async def get_fund_manager_changes(self, fund_code: str, limit: int = 10) -> Dict[str, Any]:
+        """基金经理变更公告：聘任、解聘、离任等人事变动记录。
+
+        Data source: akshare fund_announcement_personnel_em
+        """
+        cache_key = f"akshare:fund_manager_changes:{fund_code}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.fund_announcement_personnel_em, symbol=fund_code)
+            if df is None or df.empty:
+                return {"fund_code": fund_code, "changes": [], "total": 0, "source": "akshare"}
+
+            col_map = {}
+            for c in df.columns:
+                cl = str(c)
+                if "公告标题" in cl or "标题" in cl:
+                    col_map[c] = "title"
+                elif "公告日期" in cl or "日期" in cl:
+                    col_map[c] = "date"
+                elif "基金简称" in cl or "简称" in cl:
+                    col_map[c] = "fund_name"
+                elif "公告ID" in cl:
+                    col_map[c] = "announcement_id"
+
+            df = df.rename(columns=col_map)
+
+            changes = []
+            for _, row in df.head(min(limit, 50)).iterrows():
+                title = str(row.get("title", ""))
+                date = str(row.get("date", ""))
+
+                # Detect change type from title
+                change_type = "other"
+                if "解聘" in title:
+                    change_type = "dismiss"
+                elif "增聘" in title:
+                    change_type = "appoint"
+                elif "聘任" in title:
+                    change_type = "appoint"
+                elif "离任" in title:
+                    change_type = "resign"
+                elif "新任" in title:
+                    change_type = "appoint"
+
+                changes.append({
+                    "date": date,
+                    "title": title,
+                    "change_type": change_type,
+                    "fund_name": str(row.get("fund_name", "")),
+                    "announcement_id": str(row.get("announcement_id", "")),
+                })
+
+            result = {
+                "fund_code": fund_code,
+                "changes": changes,
+                "total": len(changes),
+                "source": "akshare",
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+        except Exception as e:
+            self.logger.error(f"get_fund_manager_changes failed: {e}")
+            return {"fund_code": fund_code, "changes": [], "total": 0, "source": "akshare", "error": str(e)}
+
     async def get_fund_valuation(self, fund_code: str = "") -> Dict[str, Any]:
         """基金实时估值：估算净值、估算涨跌幅、实际净值、偏差。"""
         cache_key = f"akshare:fund_valuation:{fund_code}"
@@ -6304,6 +6370,24 @@ class AkshareAdapter(BaseDataAdapter):
             else:
                 coverage["manager"] = "missing"
                 missing_fields.append("manager")
+
+            # Manager changes sub-field (COL-161)
+            try:
+                mc = await self.get_fund_manager_changes(fund_code=fund_code, limit=10)
+                if mc and "error" not in mc and mc.get("changes"):
+                    if isinstance(facts.get("manager"), list):
+                        facts["manager"] = {
+                            "current": facts["manager"],
+                            "changes": mc["changes"][:10],
+                            "changes_total": mc.get("total", len(mc["changes"])),
+                        }
+                    else:
+                        facts["manager_changes"] = mc["changes"][:10]
+                    if "manager" not in coverage:
+                        coverage["manager"] = "partial"
+                    source_trace["manager_changes"] = {"provider": "akshare", "api": "fund_announcement_personnel_em"}
+            except Exception as e:
+                source_trace["manager_changes"] = {"error": str(e)}
         except Exception as e:
             coverage["manager"] = f"error: {e}"
 

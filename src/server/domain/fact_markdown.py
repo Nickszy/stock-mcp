@@ -490,6 +490,7 @@ _FUND_CATEGORY_TITLES = {
     "nav": "净值与收益事实",
     "holdings": "持仓与穿透事实",
     "manager": "基金经理与治理事实",
+    "manager_changes": "基金经理变更记录",
     "scale": "规模与份额事实",
     "allocation": "资产配置与风格事实",
     "fees": "费率与分红事实",

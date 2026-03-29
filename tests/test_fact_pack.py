@@ -335,7 +335,8 @@ class TestFundFactPackAdapter:
              patch.object(adapter, "get_fund_valuation", new_callable=AsyncMock) as m_val, \
              patch.object(adapter, "get_fund_holdings", new_callable=AsyncMock) as m_hold, \
              patch.object(adapter, "get_fund_manager", new_callable=AsyncMock) as m_mgr, \
-             patch.object(adapter, "get_fund_scale", new_callable=AsyncMock) as m_scale:
+             patch.object(adapter, "get_fund_scale", new_callable=AsyncMock) as m_scale, \
+             patch.object(adapter, "get_fund_manager_changes", new_callable=AsyncMock) as m_mc:
 
             m_detail.return_value = {
                 "fund_code": "110011", "source": "akshare",
@@ -349,6 +350,7 @@ class TestFundFactPackAdapter:
             m_hold.return_value = {"data": [{"股票代码": "600519", "股票名称": "贵州茅台"}], "total": 10}
             m_mgr.return_value = {"data": [{"姓名": "张坤", "基金代码": "110011"}]}
             m_scale.return_value = {"基金家数": 10000}
+            m_mc.return_value = {"changes": [{"date": "2024-01-01", "title": "关于增聘的公告", "change_type": "appoint"}], "total": 1}
 
             result = _run(adapter.get_fund_fact_pack(fund_code="110011"))
 
@@ -380,6 +382,12 @@ class TestFundFactPackAdapter:
         assert isinstance(result["coverage"], dict)
         assert result["categories_total"] == 8
 
+        # Manager has changes sub-field (COL-161)
+        assert isinstance(facts["manager"], dict)
+        assert "current" in facts["manager"]
+        assert "changes" in facts["manager"]
+        assert facts["manager"]["changes"][0]["change_type"] == "appoint"
+
         # fees has no fee fields in mock detail → missing
         assert result["coverage"]["fees"] in ("missing", "complete")
         # peer needs get_fund_ranking which is not mocked → error or missing
@@ -397,7 +405,8 @@ class TestFundFactPackAdapter:
              patch.object(adapter, "get_fund_valuation", new_callable=AsyncMock) as m_val, \
              patch.object(adapter, "get_fund_holdings", new_callable=AsyncMock) as m_hold, \
              patch.object(adapter, "get_fund_manager", new_callable=AsyncMock) as m_mgr, \
-             patch.object(adapter, "get_fund_scale", new_callable=AsyncMock) as m_scale:
+             patch.object(adapter, "get_fund_scale", new_callable=AsyncMock) as m_scale, \
+             patch.object(adapter, "get_fund_manager_changes", new_callable=AsyncMock) as m_mc:
 
             m_nav.return_value = {"data": []}
             m_perf.return_value = {"fund_code": "110011"}
@@ -405,6 +414,7 @@ class TestFundFactPackAdapter:
             m_hold.return_value = {"data": [], "total": 0}
             m_mgr.return_value = {"data": []}
             m_scale.return_value = {"基金家数": 10000}
+            m_mc.return_value = {"changes": [], "total": 0}
 
             result = _run(adapter.get_fund_fact_pack(fund_code="110011"))
 
