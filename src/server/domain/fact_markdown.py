@@ -323,6 +323,8 @@ _CATEGORY_RENDERERS = {
 _GENERIC_CATEGORIES = {
     "company_master": "公司主档",
     "peers": "同业对比",
+    "restricted_release": "限售解禁",
+    "repurchase": "回购数据",
 }
 
 

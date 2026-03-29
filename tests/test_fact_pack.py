@@ -91,8 +91,8 @@ class TestFactPackAdapter:
             m_top10.return_value = {"data": [{"holder_name": "A", "hold_qty": 100}]}
             m_chg.return_value = {"data": [{"total": 150000}]}
             m_div.return_value = {"dividend_yield": 0.02}
-            m_rep.return_value = None
-            m_rst.return_value = None
+            m_rep.return_value = {"data": [{"symbol": "600519", "progress": "实施中", "amount": 10e8}]}
+            m_rst.return_value = {"data": [{"symbol": "600519", "release_date": "2025-06-01", "release_volume": 1000}]}
             m_biz.return_value = [{"biz": "白酒"}]
 
             result = _run(adapter.get_stock_fact_pack(symbol="600519"))
@@ -119,8 +119,8 @@ class TestFactPackAdapter:
         # Coverage is a dict
         assert isinstance(result["coverage"], dict)
 
-        # categories_total is 8
-        assert result["categories_total"] == 8
+        # categories_total is 10
+        assert result["categories_total"] == 10
 
     def test_handles_sub_method_failure_gracefully(self, mock_cache):
         """When a sub-method fails, fact pack should still return partial data."""

@@ -4308,6 +4308,36 @@ class AkshareAdapter(BaseDataAdapter):
             source_trace["peers"] = {"error": str(e)}
             missing_fields.append("peers")
 
+        # --- Category 9: Restricted Release (限售解禁) ---
+        try:
+            rr = await self.get_restricted_release(symbol=symbol, days=90)
+            if rr and "error" not in rr and rr.get("data"):
+                facts["restricted_release"] = rr
+                coverage["restricted_release"] = "complete"
+                source_trace["restricted_release"] = {"provider": "akshare", "api": "restricted_release_queue"}
+            else:
+                coverage["restricted_release"] = "missing"
+                missing_fields.append("restricted_release")
+        except Exception as e:
+            coverage["restricted_release"] = f"error: {e}"
+            source_trace["restricted_release"] = {"error": str(e)}
+            missing_fields.append("restricted_release")
+
+        # --- Category 10: Repurchase (回购) ---
+        try:
+            rp = await self.get_repurchase_info(symbol=symbol)
+            if rp and "error" not in rp and rp.get("data"):
+                facts["repurchase"] = rp
+                coverage["repurchase"] = "complete"
+                source_trace["repurchase"] = {"provider": "akshare", "api": "stock_repurchase_em"}
+            else:
+                coverage["repurchase"] = "missing"
+                missing_fields.append("repurchase")
+        except Exception as e:
+            coverage["repurchase"] = f"error: {e}"
+            source_trace["repurchase"] = {"error": str(e)}
+            missing_fields.append("repurchase")
+
         elapsed = _time.perf_counter() - t0
 
         result = {
@@ -4318,7 +4348,7 @@ class AkshareAdapter(BaseDataAdapter):
             "coverage": coverage,
             "missing_fields": missing_fields,
             "categories_fetched": len([v for v in coverage.values() if v == "complete" or v == "partial"]),
-            "categories_total": 8,
+            "categories_total": 10,
             "elapsed_seconds": round(elapsed, 2),
         }
 

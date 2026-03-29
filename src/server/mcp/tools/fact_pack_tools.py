@@ -31,8 +31,8 @@ def register_fact_pack_tools(mcp: FastMCP):
     ) -> Dict[str, Any]:
         """获取股票事实包(Fact Pack)：一次调用聚合全维度结构化事实数据。
 
-        聚合 9 大事实类别: 证券主数据、财务、市场估值(含融资融券)、公司治理、
-        事件(分红/回购/解禁)、业务结构(主营构成)、公司主档、同行。
+        聚合 10 大事实类别: 证券主数据、财务、市场估值(含融资融券)、公司治理、
+        事件(分红/回购/解禁)、业务结构(主营构成)、公司主档、同行、限售解禁、回购数据。
         返回统一结构: entity + facts + source_trace + coverage。
 
         Typical use cases:
@@ -165,6 +165,42 @@ def register_fact_pack_tools(mcp: FastMCP):
                         md += f"- {b}\n"
                 else:
                     md += f"{biz}\n"
+                md += "\n"
+
+            # Restricted Release (top-level category)
+            rr = facts.get("restricted_release", {})
+            if rr:
+                md += "## 限售解禁\n\n"
+                rr_data = rr.get("data", rr) if isinstance(rr, dict) else rr
+                if isinstance(rr_data, list):
+                    for item in rr_data[:10]:
+                        if isinstance(item, dict):
+                            md += f"- {item.get('symbol', '')} 解禁日期:{item.get('release_date', item.get('日期', '-'))} 数量:{item.get('release_volume', item.get('解禁数量', '-'))}\n"
+                        else:
+                            md += f"- {item}\n"
+                elif isinstance(rr_data, dict):
+                    for k, v in rr_data.items():
+                        md += f"- **{k}**: {v}\n"
+                else:
+                    md += f"{rr_data}\n"
+                md += "\n"
+
+            # Repurchase (top-level category)
+            rp = facts.get("repurchase", {})
+            if rp:
+                md += "## 回购数据\n\n"
+                rp_data = rp.get("data", rp) if isinstance(rp, dict) else rp
+                if isinstance(rp_data, list):
+                    for item in rp_data[:10]:
+                        if isinstance(item, dict):
+                            md += f"- {item.get('symbol', '')} 进度:{item.get('progress', item.get('实施进度', '-'))} 金额:{item.get('amount', item.get('回购金额', '-'))}\n"
+                        else:
+                            md += f"- {item}\n"
+                elif isinstance(rp_data, dict):
+                    for k, v in rp_data.items():
+                        md += f"- **{k}**: {v}\n"
+                else:
+                    md += f"{rp_data}\n"
                 md += "\n"
 
             # Source trace (dict: category → {provider, error?})
