@@ -246,20 +246,32 @@ curl -X POST "http://localhost:9898/?_tool=get_kline_data" \
 
 ### 🧰 可用工具一览
 
-> 实际启用的工具以 MCP 注册表为准（`src/server/mcp/registry.py`）。
+> 实际启用的工具以 MCP 注册表为准（`src/server/mcp/registry.py`），当前共 **120 个 MCP 工具**。
 
 | 工具名称                         | 描述                                   | 示例参数                                                                         |
 | -------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------- |
 | `search_assets`                  | 通过名称或代码搜索股票、加密货币或 ETF | `{"query": "茅台", "limit": 5}`                                                  |
-| `get_kline_data`          | 获取指定日期范围的 OHLCV 数据          | `{"ticker": "SSE:600519", "start_date": "2024-01-01", "end_date": "2024-12-31"}` |
-| `get_technical_indicators` | 计算技术指标 (RSI, MACD 等)            | `{"symbol": "SSE:600519", "period": "90d", "interval": "1d"}`                    |
+| `get_asset_info`                 | 获取资产基本信息（名称/交易所/行业/市值） | `{"ticker": "SSE:600519"}`                                                       |
+| `get_real_time_price`            | 获取实时价格                           | `{"ticker": "SSE:600519"}`                                                       |
+| `get_multiple_prices`            | 批量获取多个资产实时价格               | `{"tickers": ["SSE:600519", "SZSE:000858"]}`                                     |
+| `get_kline_data`                 | 获取指定日期范围的 OHLCV 数据          | `{"ticker": "SSE:600519", "start_date": "2024-01-01", "end_date": "2024-12-31"}` |
+| `get_technical_indicators`       | 计算技术指标 (RSI, MACD 等)            | `{"symbol": "SSE:600519", "period": "90d", "interval": "1d"}`                    |
+| `get_technical_signals`          | 获取确定性技术信号 (RSI/MACD/布林带)   | `{"symbol": "SSE:600519"}`                                                       |
 | `get_financial_reports`          | 财务图表（营收/净利润）                | `{"symbol": "SSE:600519"}`                                                       |
+| `get_profit_forecast`            | 盈利预测（机构一致预期）               | `{"symbol": "SSE:600519"}`                                                       |
+| `get_financial_ratios`           | 关键财务比率（PE/PB/ROE等）            | `{"symbol": "SSE:600519"}`                                                       |
+| `get_stock_financial_statements` | 财报三表（利润表/资产负债表/现金流量表）| `{"symbol": "SSE:600519"}`                                                       |
 | `get_mainbz_info`                | 主营业务构成                           | `{"symbol": "SSE:600519"}`                                                       |
 | `get_shareholder_info`           | 股东信息                               | `{"symbol": "SSE:600519"}`                                                       |
 | `get_dividend_info`              | 分红送股历史                           | `{"symbol": "SSE:600519"}`                                                       |
 | `get_money_flow`                 | 个股资金流向                           | `{"symbol": "SSE:600519", "days": 20}`                                           |
 | `get_north_bound_flow`           | 北向资金流向                           | `{"days": 30}`                                                                   |
-| `get_macro_data`                 | 宏观数据（CPI/PPI/M2/GDP）             | `{"indicators": "CPI,PPI,M2,GDP"}`                                               |
+| `get_stock_fact_pack`            | 股票事实包（10+类别聚合）              | `{"symbol": "600519"}`                                                           |
+| `get_fund_fact_pack`             | 基金事实包（8类别聚合）                | `{"fund_code": "110011"}`                                                        |
+| `get_market_fact_pack`           | 市场事实包（10类别聚合）               | `{"symbol": "600519"}`                                                           |
+| `get_us_stock_fact_pack`         | 美股事实包（10类别聚合）               | `{"ticker": "AAPL"}`                                                             |
+| `get_etf_fact_pack`              | ETF事实包（10类别聚合）                | `{"symbol": "510300"}`                                                           |
+| `get_index_fact_pack`            | 指数事实包（10类别聚合）               | `{"symbol": "000300"}`                                                           |
 
 > **💡 重要提示**: 
 > - A股股票代码格式：`SSE:600519`（上交所）、`SZSE:000001`（深交所）
@@ -322,18 +334,24 @@ python scripts/mcp2openapi.py
 
 - [x] **多源数据融合**: Adapter Manager 智能路由 + 自动故障转移
 - [x] **实时行情**: OHLCV + 成交量数据
-- [x] **技术分析引擎**: 20+ 技术指标 + K线形态识别
-- [x] **基本面数据**: 财务报表/主营构成/股东信息/分红历史
-- [x] **资金流向**: 个股资金流/北向资金/板块资金流
+- [x] **技术分析引擎**: 20+ 技术指标 + K线形态识别 + 确定性信号
+- [x] **基本面数据**: 财务报表/主营构成/股东信息/分红历史/盈利预测/财务比率
+- [x] **资金流向**: 个股资金流/北向资金/板块资金流/龙虎榜/融资融券
 - [x] **宏观数据**: 中美宏观指标 (CPI/GDP/M2/利率等)
 - [x] **新闻资讯**: 公司新闻/行业动态
 - [x] **完整财报三表**: 利润表/资产负债表/现金流量表 + YoY/QoQ (v1.1, 2026-03-24)
+- [x] **120个MCP工具**: 18个工具组覆盖A股/美股/基金/ETF/指数/行业/宏观全品类 (v2.0)
+- [x] **6类Fact Pack**: 股票/基金/行情/美股/ETF/指数 聚合事实包，AI-ready结构化数据
+- [x] **Markdown输出层**: 所有工具支持 markdown/json 双格式输出
+- [x] **统一REST+MCP双协议**: REST API + MCP 共享业务用例，支持 `?format=markdown`
+- [x] **Preview Workbench**: 可视化数据预览台，按6大类分组（宏观/行业/A股/美股/基金/指数ETF）
+- [x] **API文档**: Swagger UI (`/docs`) + Scalar API Reference (`/api-docs`)
 
 #### 🚧 开发中 (v1.2)
 
-- [ ] **机构与资金行为**: 机构持仓变化/大单追踪/龙虎榜/融资融券数据
-- [ ] **一致预期**: 分析师一致预期/业绩预测/目标价分布
-- [ ] **Markdown-first 输出层**: 优化 LLM 上下文，自动生成结构化报告
+- [ ] **深度行业研究编排**: 行业定位/个股扫描/同业对比/证据收集工作流
+- [ ] **高级形态识别**: 更多K线形态与量价形态
+- [ ] **期权数据**: Greeks/隐含波动率/PCR
 
 #### 📋 计划中 (v1.3+)
 
@@ -400,6 +418,110 @@ src/server/
 
 完整时序图见: [`docs/request-flow-mermaid.md`](docs/request-flow-mermaid.md)
 
+### 🧠 面向个人投资者的 AI 系统架构（规划）
+
+如果将 `stock-mcp` 从通用金融 MCP 底座进一步演进为面向个人投资者的产品内核，推荐采用“**AI 负责判断与调度，你负责设计技能、工具、判断逻辑、记忆与数据环境**”的架构。这样可以避免和通用大模型、通用 Agent 框架正面竞争，把壁垒沉淀在金融垂直能力里。
+
+下图中：
+- `绿色`：你可以重点设计和持续优化的部分
+- `灰色`：由 AI 主导的任务识别、技能选择与调度
+- `蓝色`：外部依赖与数据来源
+
+```mermaid
+flowchart TB
+    subgraph U["用户入口层"]
+        U1["个人投资者"]
+        U2["网页 / App / 聊天入口"]
+    end
+
+    subgraph R["智能决策与调度层（AI主导）"]
+        R1["任务识别<br/>判断当前是哪个场景"]:::ai
+        R2["技能选择<br/>决定调用哪套 Skill / SOP"]:::ai
+        R3["能力编排<br/>决定调用哪些工具 / 数据 / 记忆"]:::ai
+        R4["结果组织<br/>汇总中间结果并生成最终回答"]:::ai
+    end
+
+    subgraph S["场景技能层（你可重点设计）"]
+        S1["场景 Skill 目录<br/>持仓晨报 / 买前检查 / 财报速读 / 交易复盘"]:::mine
+        S2["技能说明与约束<br/>触发条件 / 调用顺序建议 / 停止条件"]:::mine
+    end
+
+    subgraph T["任务与判断层（你可重点设计）"]
+        T1["任务级工具<br/>持仓分析 / 组合监控 / 买前检查 / 财报速读"]:::mine
+        T2["判断引擎<br/>估值 / 财务健康 / 红旗预警 / 事件影响 / 相关性排序"]:::mine
+        T3["输出合同<br/>摘要 / 异常点 / 来源追踪 / 下一步提示"]:::mine
+        T4["用户记忆<br/>持仓 / 关注列表 / 风险偏好 / 交易日志"]:::mine
+        T5["调用护栏<br/>调用预算 / 失败回退 / 输出格式约束"]:::mine
+    end
+
+    subgraph D["数据底座层（你可重点设计）"]
+        D1["统一标识解析<br/>名称 / 代码 / 别名 -> 标准资产"]:::mine
+        D2["多源数据网关<br/>AkShare / Tushare / Yahoo / Baostock / Finnhub"]:::mine
+        D3["特征计算<br/>同比环比 / 分位数 / 风险特征 / 状态标签"]:::mine
+        D4["文本解析<br/>公告 / 财报 / PDF / 新闻"]:::mine
+        D5["缓存与检索<br/>Redis / 研究索引 / 向量库"]:::mine
+    end
+
+    subgraph E["外部依赖层（借力，不是核心壁垒）"]
+        E1["模型平台 / Agent 框架"]:::ext
+        E2["外部金融数据源"]:::ext
+        E3["公告 / 研报 / 新闻 / 社媒"]:::ext
+        E4["用户持仓导入 / 手工输入"]:::ext
+    end
+
+    U1 --> U2 --> R1
+    E1 -.支撑.-> R1
+    R1 --> R2 --> R3 --> R4
+
+    R2 --> S1
+    S1 --> S2
+    S2 --> R3
+
+    R3 --> T1
+    R3 --> T4
+    R3 --> T5
+
+    T4 --> T1
+    T5 --> T1
+    T1 --> T2 --> T3 --> R4
+
+    T2 --> D1
+    T2 --> D3
+    T3 --> D5
+
+    D1 --> D2
+    D3 --> D2
+    D4 --> D5
+
+    D2 --> E2
+    D4 --> E3
+    T4 --> E4
+
+    classDef ai fill:#F2F3F5,stroke:#8B949E,color:#333,stroke-width:1px;
+    classDef mine fill:#E8FFF0,stroke:#1F883D,color:#0B3D20,stroke-width:2px;
+    classDef ext fill:#EAF2FF,stroke:#3B82F6,color:#113366,stroke-width:1px;
+```
+
+**推荐的职责边界**
+
+- `AI 负责`：识别任务场景、选择要走的 Skill、决定调用顺序、组织最终回答。
+- `你负责`：把金融垂直逻辑沉淀成稳定的 Skill、任务级工具、判断引擎、用户记忆结构、统一输出合同与调用护栏。
+- `外部依赖负责`：提供模型能力、原始数据、公告研报和用户输入来源。
+
+**为什么这样设计**
+
+- 避免把系统做成“纯底层数据接口”或“纯通用 Agent 壳子”。
+- 让壁垒沉淀在你真正能控制的部分：数据质量、金融判断逻辑、场景 SOP、输出确定性。
+- 让任何支持 MCP / Skill 的智能体接入后，都更容易“选对工具、调对数据、产出对结论”。
+
+**最值得优先建设的模块**
+
+1. `场景 Skill 目录`：把持仓晨报、买前检查、财报速读、交易复盘写成明确 SOP。
+2. `任务级工具`：不要暴露一堆底层 API，要暴露“持仓分析”“组合监控”这类任务能力。
+3. `判断引擎`：把“贵不贵、有没有雷、这条消息重不重要”前置成稳定逻辑。
+4. `输出合同`：统一摘要、异常点、来源追踪和下一步提示，避免把原始 JSON 直接扔给模型。
+5. `用户记忆`：持仓、关注列表、风险偏好、交易日志，是形成个人投资者留存的关键。
+
 ### 📄 许可证
 
 MIT License
@@ -435,6 +557,7 @@ Built-in quantitative analysis engine providing more than just raw numbers:
 - **Pattern Recognition**: Automatically detects candlestick patterns (Doji, Hammer, Engulfing)
 - **Support & Resistance**: Dynamic calculation of key price levels
 - **Volume Profile**: Analysis of volume distribution to identify value areas
+- **Technical Signals**: Deterministic RSI/MACD/Bollinger signal states (overbought/oversold, golden/death cross)
 
 #### 3. Deep Fundamental Research
 
@@ -443,6 +566,7 @@ Automated financial analyst capabilities:
 - **Financial Statements**: Balance Sheet, Income Statement, Cash Flow
 - **Health Scoring**: 0-100 proprietary health score based on Profitability, Solvency, Growth, and Valuation
 - **Key Ratios**: PE, PB, ROE, ROA, Debt-to-Equity, and more
+- **Earnings Estimates**: Analyst consensus profit forecasts via MCP tool
 
 #### 4. Smart Aggregation Tools
 
@@ -450,6 +574,32 @@ Optimized for LLM context windows:
 
 - `perform_deep_research`: One-shot tool to fetch price, history, fundamentals, and recent news for a symbol
 - `get_market_report`: A comprehensive snapshot of the current market status
+
+#### 5. Fact Pack Aggregation (6 entity types)
+
+AI-ready structured data packs that aggregate 10+ data categories per entity:
+
+- **Stock Fact Pack**: Security master + financials + market + governance + events + earnings estimates + business structure + company master + peers + restricted release + repurchase (11 categories)
+- **Fund Fact Pack**: Master + NAV/performance + holdings + manager + scale + fees + peer comparison (7 categories)
+- **Market Fact Pack**: Valuation + technical snapshot + K-line + money flow + breadth + index/sector + derivatives + relative strength + north bound + margin (10 categories)
+- **US Stock Fact Pack**: Profile + financials + technicals + institutional + analyst + news (6 categories)
+- **ETF Fact Pack**: Master + flow + holdings + performance (4 categories)
+- **Index Fact Pack**: Master + valuation + performance (3 categories)
+
+Each fact pack includes:
+- Structured `facts` dict organized by category
+- `coverage` status (complete/partial/missing) per category
+- `source_trace` for data provenance
+- `fact_markdown` human-readable view optimized for LLM context
+
+#### 6. Dual Protocol Access (MCP + REST)
+
+All 120+ tools are accessible via both MCP (for AI agents) and REST API (for web apps):
+
+- **MCP**: Streamable HTTP or stdio, for Claude/Cursor/other AI agents
+- **REST API**: Standard HTTP JSON at `/api/v1/*`, with Swagger UI at `/docs` and Scalar API Reference at `/api-docs`
+- **Markdown output**: All REST endpoints support `?format=markdown` for human-readable responses
+- **Preview Workbench**: Interactive data explorer at `/` with categorized method catalog
 
 ### 🛠️ Installation
 
@@ -606,20 +756,31 @@ curl -X POST "http://localhost:9898/?_tool=get_kline_data" \
 
 ### 🧰 Available Tools
 
-> The actual enabled tools are defined in the MCP registry (`src/server/mcp/registry.py`).
+> The actual enabled tools are defined in the MCP registry (`src/server/mcp/registry.py`). Currently **120 MCP tools** across 18 tool groups.
 
 | Tool Name                        | Description                                                      | Example Parameters                                                               |
 | -------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `search_assets`                  | Search for stocks, crypto, or ETFs by name or ticker             | `{"query": "Moutai", "limit": 5}`                                               |
-| `get_kline_data`          | Fetch OHLCV data for a specific date range                       | `{"ticker": "SSE:600519", "start_date": "2024-01-01", "end_date": "2024-12-31"}` |
-| `get_technical_indicators` | Compute technical indicators (RSI, MACD, etc.)                   | `{"symbol": "SSE:600519", "period": "90d", "interval": "1d"}`                    |
+| `get_asset_info`                 | Get asset basic info (name/exchange/industry/market_cap)         | `{"ticker": "SSE:600519"}`                                                       |
+| `get_real_time_price`            | Get real-time price                                               | `{"ticker": "SSE:600519"}`                                                       |
+| `get_multiple_prices`            | Batch real-time prices for multiple assets                       | `{"tickers": ["SSE:600519", "SZSE:000858"]}`                                     |
+| `get_kline_data`                 | Fetch OHLCV data for a specific date range                       | `{"ticker": "SSE:600519", "start_date": "2024-01-01", "end_date": "2024-12-31"}` |
+| `get_technical_indicators`       | Compute technical indicators (RSI, MACD, etc.)                   | `{"symbol": "SSE:600519", "period": "90d", "interval": "1d"}`                    |
+| `get_technical_signals`          | Deterministic signals (RSI/MACD/Bollinger states)                | `{"symbol": "SSE:600519"}`                                                       |
 | `get_financial_reports`          | Revenue & net income charts                                      | `{"symbol": "SSE:600519"}`                                                       |
+| `get_profit_forecast`            | Analyst consensus earnings estimates                             | `{"symbol": "SSE:600519"}`                                                       |
+| `get_financial_ratios`           | Key ratios (PE/PB/ROE/ROA etc.)                                  | `{"symbol": "SSE:600519"}`                                                       |
 | `get_mainbz_info`                | Main business composition                                        | `{"symbol": "SSE:600519"}`                                                       |
 | `get_shareholder_info`           | Shareholder information                                          | `{"symbol": "SSE:600519"}`                                                       |
 | `get_dividend_info`              | Dividend history                                                 | `{"symbol": "SSE:600519"}`                                                       |
 | `get_money_flow`                 | Money flow for a stock                                           | `{"symbol": "SSE:600519", "days": 20}`                                           |
 | `get_north_bound_flow`           | Northbound capital flow                                          | `{"days": 30}`                                                                   |
-| `get_macro_data`                 | Macro indicators (CPI/PPI/M2/GDP)                                | `{"indicators": "CPI,PPI,M2,GDP"}`                                               |
+| `get_stock_fact_pack`            | Stock aggregated facts (11 categories)                           | `{"symbol": "600519"}`                                                           |
+| `get_fund_fact_pack`             | Fund aggregated facts (8 categories)                             | `{"fund_code": "110011"}`                                                        |
+| `get_market_fact_pack`           | Market aggregated facts (10 categories)                          | `{"symbol": "600519"}`                                                           |
+| `get_us_stock_fact_pack`         | US stock aggregated facts (10 categories)                        | `{"ticker": "AAPL"}`                                                             |
+| `get_etf_fact_pack`              | ETF aggregated facts (10 categories)                             | `{"symbol": "510300"}`                                                           |
+| `get_index_fact_pack`            | Index aggregated facts (10 categories)                           | `{"symbol": "000300"}`                                                           |
 
 > **💡 Important Note**: 
 > - A-share ticker format: `SSE:600519` (Shanghai), `SZSE:000001` (Shenzhen)
@@ -682,18 +843,24 @@ The generated OpenAPI documentation can be imported into tools like Apifox or Po
 
 - [x] **Multi-Source Data Fusion**: Adapter Manager with smart routing + automatic failover
 - [x] **Real-time Quotes**: OHLCV + volume data
-- [x] **Technical Analysis Engine**: 20+ indicators + candlestick pattern recognition
-- [x] **Fundamental Data**: Financial statements / business composition / shareholder info / dividend history
-- [x] **Money Flow**: Individual stock flow / northbound capital / sector flows
+- [x] **Technical Analysis Engine**: 20+ indicators + candlestick pattern recognition + deterministic signals
+- [x] **Fundamental Data**: Financial statements / business composition / shareholders / dividends / profit forecasts / financial ratios
+- [x] **Money Flow**: Individual stock flow / northbound capital / sector flows / margin trading / dragon-tiger list
 - [x] **Macro Indicators**: China & US macro data (CPI/GDP/M2/rates etc.)
 - [x] **News & Updates**: Company news / industry trends
 - [x] **Complete Financial Statements**: Income/Balance Sheet/Cash Flow + YoY/QoQ (v1.1, 2026-03-24)
+- [x] **120 MCP Tools**: 18 tool groups covering A-shares/US stocks/funds/ETFs/indices/sectors/macro (v2.0)
+- [x] **6 Fact Pack Types**: Stock/Fund/Market/US Stock/ETF/Index aggregated fact packs, AI-ready structured data
+- [x] **Markdown Output**: All tools support markdown/json dual format output
+- [x] **Unified REST+MCP**: REST API + MCP share business use cases, supports `?format=markdown`
+- [x] **Preview Workbench**: Visual data explorer with 6 category tabs
+- [x] **API Docs**: Swagger UI (`/docs`) + Scalar API Reference (`/api-docs`)
 
 #### 🚧 In Development (v1.2)
 
-- [ ] **Institutional & Capital Behavior**: Institutional holdings / large order tracking / dragon-tiger list / margin trading data
-- [ ] **Consensus Estimates**: Analyst consensus / earnings forecasts / target price distribution
-- [ ] **Markdown-first Output Layer**: Optimized for LLM context, auto-generate structured reports
+- [ ] **Deep Sector Research Orchestration**: Sector scoping / stock screening / peer comparison / evidence collection workflow
+- [ ] **Advanced Pattern Recognition**: More candlestick & volume-price patterns
+- [ ] **Options Data**: Greeks / implied volatility / PCR
 
 #### 📋 Planned (v1.3+)
 
