@@ -23,6 +23,15 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
 from src.server.domain.adapters.base import BaseDataAdapter
+
+
+class AdapterErrorResult(Exception):
+    """Raised when an adapter returns a result dict containing an upstream error.
+
+    Unlike NotImplementedError (adapter doesn't support the method),
+    this means the adapter tried and the data source itself failed.
+    The dispatch loop should NOT try fallback adapters — re-raise immediately.
+    """
 from src.server.domain.symbols.errors import SymbolResolutionError
 from src.server.domain.symbols.types import InstrumentRef, ResolutionStatus
 from src.server.domain.types import (
@@ -401,7 +410,7 @@ class MarketGateway:
                     if adapter is not primary:
                         with self._cache_lock:
                             self._ticker_cache[ticker] = adapter
-                    return self._sanitize_na(result)
+                    return self._sanitize_na(self._validate_adapter_result(result))
                 logger.warning(
                     f"{adapter.source.value}.{method}({ticker}) returned None, trying next"
                 )
@@ -409,6 +418,8 @@ class MarketGateway:
                 logger.debug(
                     f"{adapter.source.value} does not support {method}, skipping"
                 )
+            except AdapterErrorResult:
+                raise  # upstream data error — don't try fallbacks
             except asyncio.TimeoutError:
                 last_error = TimeoutError(
                     f"timeout after {self._provider_timeout_seconds}s"
@@ -438,9 +449,11 @@ class MarketGateway:
                     timeout=self._provider_timeout_seconds,
                 )
                 if result is not None:
-                    return self._sanitize_na(result)
+                    return self._sanitize_na(self._validate_adapter_result(result))
             except NotImplementedError:
                 continue
+            except AdapterErrorResult:
+                raise  # upstream data error — don't try fallbacks
             except asyncio.TimeoutError:
                 last_error = TimeoutError(
                     f"timeout after {self._provider_timeout_seconds}s"
@@ -720,6 +733,21 @@ class MarketGateway:
         except (TypeError, ValueError):
             pass
         return obj
+
+    @staticmethod
+    def _validate_adapter_result(result: Any) -> Any:
+        """Raise if adapter silently returned an error dict instead of raising.
+
+        Many adapter methods catch exceptions and return {"error": str(e), "data": []}
+        which then gets wrapped as HTTP 200 success by the route layer.
+        This method detects that pattern and re-raises as a proper exception.
+        """
+        if isinstance(result, dict) and "error" in result:
+            data = result.get("data")
+            if data is None or data == [] or data == {}:
+                err_msg = result["error"]
+                raise AdapterErrorResult(f"Upstream data error: {err_msg}")
+        return result
 
     async def get_stock_fact_pack(self, symbol: str) -> Dict[str, Any]:
         """Get aggregated stock fact pack (AkshareAdapter only)."""
