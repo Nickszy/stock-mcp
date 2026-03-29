@@ -60,6 +60,18 @@ def create_data_response(
     """
     result: Dict[str, Any] = {}
 
+    # Auto-inherit source and symbol from data dict when not explicitly provided.
+    # This prevents provider=unknown when routes call rest_response(data=result)
+    # without passing source= — the adapter result already contains the real source.
+    if source is None and isinstance(data, dict):
+        _src = data.get("source")
+        if isinstance(_src, str) and _src:
+            source = _src
+    if symbol is None and isinstance(data, dict):
+        _sym = data.get("symbol") or data.get("ticker") or data.get("fund_code")
+        if isinstance(_sym, str) and _sym:
+            symbol = _sym
+
     if symbol is not None:
         result["symbol"] = symbol
     if period is not None:
@@ -141,36 +153,132 @@ def maybe_markdown_response(
 
     if not md_content:
         # No markdown available — generate a minimal fallback
-        md_content = _json_to_markdown_fallback(data)
+        md_content = json_to_markdown(data)
 
     from fastapi.responses import Response
     return Response(content=md_content, media_type="text/markdown")
 
 
-def _json_to_markdown_fallback(data: Any) -> str:
-    """Convert a JSON-serialisable dict to a simple Markdown representation."""
+def json_to_markdown(data: Any, title: str = "") -> str:
+    """Convert a JSON-serialisable structure to a rich Markdown representation.
+
+    Handles common REST API response shapes:
+    - list[dict]  → markdown table
+    - dict[dict]  → sectioned sub-tables
+    - dict        → key-value pairs (scalar values) + nested sections
+    - list        → bulleted list
+    """
     if not isinstance(data, dict):
         return str(data)
 
     lines: list[str] = []
+
+    if title:
+        lines.append(f"# {title}\n")
+
+    # Separate scalar fields from nested structures
+    scalar_fields: list[tuple[str, Any]] = []
+    nested_fields: list[tuple[str, Any]] = []
+
     for key, value in data.items():
         if key in ("source_trace", "coverage", "missing_fields", "categories_fetched",
                     "categories_total", "elapsed_seconds", "fact_markdown"):
-            continue  # skip meta fields in fallback
-        if isinstance(value, dict):
-            lines.append(f"## {key}\n")
-            for k, v in value.items():
-                if isinstance(v, (dict, list)):
-                    lines.append(f"- **{k}**: `{type(v).__name__}`\n")
-                else:
-                    lines.append(f"- **{k}**: {v}\n")
-            lines.append("\n")
-        elif isinstance(value, list):
-            lines.append(f"## {key}\n")
-            for item in value[:10]:
-                lines.append(f"- {item}\n")
-            lines.append("\n")
+            continue  # skip internal meta fields
+        if isinstance(value, (dict, list)):
+            nested_fields.append((key, value))
         else:
-            lines.append(f"- **{key}**: {value}\n")
+            scalar_fields.append((key, value))
+
+    # Render scalar fields as a simple table
+    if scalar_fields:
+        lines.append("| Field | Value |")
+        lines.append("|-------|-------|")
+        for k, v in scalar_fields:
+            lines.append(f"| {k} | {v} |")
+        lines.append("")
+
+    # Render nested structures
+    for key, value in nested_fields:
+        lines.append(f"## {_pretty_key(key)}\n")
+
+        if isinstance(value, list):
+            if value and isinstance(value[0], dict):
+                lines.append(_list_of_dicts_to_table(value))
+            else:
+                for item in value[:50]:
+                    lines.append(f"- {item}")
+                if len(value) > 50:
+                    lines.append(f"- ... ({len(value) - 50} more items)")
+            lines.append("")
+
+        elif isinstance(value, dict):
+            # Check if all values are dicts (dict of dicts → sub-tables)
+            sub_values = list(value.values())
+            if sub_values and all(isinstance(v, dict) for v in sub_values):
+                for sub_key, sub_dict in value.items():
+                    lines.append(f"### {sub_key}\n")
+                    if sub_dict:
+                        lines.append(_dict_to_kv_table(sub_dict))
+                    lines.append("")
+            else:
+                lines.append(_dict_to_kv_table(value))
+                lines.append("")
 
     return "\n".join(lines) if lines else "# No data available"
+
+
+def _pretty_key(key: str) -> str:
+    """Convert snake_case key to Title Case."""
+    return key.replace("_", " ").title()
+
+
+def _dict_to_kv_table(d: dict, max_depth: int = 3) -> str:
+    """Render a dict as a key-value markdown table."""
+    lines: list[str] = []
+    lines.append("| Key | Value |")
+    lines.append("|-----|-------|")
+    for k, v in d.items():
+        if isinstance(v, (dict, list)):
+            v_str = f"`{type(v).__name__}({len(v)})`"
+        else:
+            v_str = str(v)
+        # Escape pipe characters
+        v_str = v_str.replace("|", "\\|")
+        lines.append(f"| {k} | {v_str} |")
+    return "\n".join(lines)
+
+
+def _list_of_dicts_to_table(items: list) -> str:
+    """Render a list of dicts as a markdown table."""
+    if not items:
+        return "*No data*"
+
+    # Collect all keys preserving order from first item
+    keys: list[str] = []
+    for item in items[:20]:
+        for k in item:
+            if k not in keys:
+                keys.append(k)
+
+    lines: list[str] = []
+    lines.append("| " + " | ".join(keys) + " |")
+    lines.append("| " + " | ".join("---" for _ in keys) + " |")
+
+    for item in items[:50]:
+        row = []
+        for k in keys:
+            v = item.get(k, "")
+            if isinstance(v, (dict, list)):
+                v = f"`{type(v).__name__}`"
+            else:
+                v = str(v).replace("|", "\\|")
+                # Truncate long values
+                if len(v) > 80:
+                    v = v[:77] + "..."
+            row.append(v)
+        lines.append("| " + " | ".join(row) + " |")
+
+    if len(items) > 50:
+        lines.append(f"\n*... and {len(items) - 50} more rows*")
+
+    return "\n".join(lines)

@@ -4,12 +4,71 @@
 import json
 import logging
 from typing import Callable
+from urllib.parse import parse_qs
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
 logger = logging.getLogger(__name__)
+
+
+class MarkdownNegotiationMiddleware(BaseHTTPMiddleware):
+    """Intercept API responses and convert JSON to Markdown when requested.
+
+    Triggers on ``?format=markdown`` query param or ``Accept: text/markdown``.
+    Only applies to paths starting with ``/api/``.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        # Only consider /api/ paths
+        if not request.url.path.startswith("/api/"):
+            return await call_next(request)
+
+        # Check if client wants markdown
+        fmt_param = request.query_params.get("format", "").lower()
+        accept_header = request.headers.get("accept", "")
+        wants_md = fmt_param == "markdown" or "text/markdown" in accept_header
+
+        if not wants_md:
+            return await call_next(request)
+
+        # Get the original response
+        response = await call_next(request)
+
+        # If already markdown (e.g. fact-pack endpoints), pass through
+        ct = response.headers.get("content-type", "")
+        if "text/markdown" in ct:
+            return response
+
+        # Only convert JSON responses
+        if "application/json" not in ct:
+            return response
+
+        # Read response body
+        body_chunks = []
+        async for chunk in response.body_iterator:
+            body_chunks.append(chunk)
+        body = b"".join(body_chunks)
+
+        try:
+            payload = json.loads(body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            # Not valid JSON, return as-is
+            return Response(content=body, status_code=response.status_code,
+                            headers=dict(response.headers), media_type=ct)
+
+        # Extract data field from REST envelope: {"code": 0, "data": {...}}
+        data = payload.get("data", payload) if isinstance(payload, dict) else payload
+
+        # Build title from endpoint path
+        path_parts = request.url.path.strip("/").split("/")
+        title = " ".join(p.replace("-", " ").title() for p in path_parts[1:] if p)
+
+        from src.server.domain.response_contract import json_to_markdown
+        md_content = json_to_markdown(data, title=title)
+
+        return Response(content=md_content, media_type="text/markdown")
 
 
 class JsonArgumentsFixMiddleware(BaseHTTPMiddleware):

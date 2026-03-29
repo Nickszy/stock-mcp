@@ -40,7 +40,7 @@ from src.server.api.routes import (
     sector_research_router,
 )
 from src.server.utils.logger import logger
-from src.server.middleware import JsonArgumentsFixMiddleware
+from src.server.middleware import JsonArgumentsFixMiddleware, MarkdownNegotiationMiddleware
 
 
 def create_app():
@@ -160,6 +160,10 @@ def create_app():
     )
 
     logger.info("✅ CORS middleware configured")
+
+    # Add Markdown content negotiation middleware for all /api/ endpoints
+    app.add_middleware(MarkdownNegotiationMiddleware)
+    logger.info("✅ Markdown content negotiation middleware configured")
 
     # Add JSON arguments fix middleware for MCP clients like OpenClaw
     app.add_middleware(JsonArgumentsFixMiddleware)
