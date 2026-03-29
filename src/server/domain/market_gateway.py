@@ -90,7 +90,6 @@ _MARKET_METHODS: Set[str] = {
     "get_pmi_data",
     "get_gdp_data",
     "get_social_financing",
-    "get_social_financing",
     "get_interest_rates",
     "get_market_liquidity",
     "get_market_money_flow",
@@ -104,8 +103,6 @@ _MARKET_METHODS: Set[str] = {
     "get_us_inflation_employment",
     "get_us_interest_rates",
     "get_market_breadth",
-    "get_relative_strength",
-    "get_sector_valuation_metrics",
     "calculate_technical_indicators",
     # New: extended data
     "get_margin_trading",
@@ -137,6 +134,8 @@ _MARKET_METHODS: Set[str] = {
     "get_shareholder_holding_detail",
     "get_ipo_calendar",
     "get_ipo_info",
+    # Technical signals
+    "get_technical_signals",
     # Quantitative screener
     "screen_stocks",
     "get_industry_ranking",
@@ -162,6 +161,13 @@ _MARKET_METHODS: Set[str] = {
     # Factor / correlation / ranking (COL-142)
     "get_stock_correlation",
     "get_factor_ranking",
+    # Fact packs (handle symbol resolution internally)
+    "get_stock_fact_pack",
+    "get_fund_fact_pack",
+    "get_market_fact_pack",
+    "get_us_stock_fact_pack",
+    "get_etf_fact_pack",
+    "get_index_fact_pack",
 }
 
 

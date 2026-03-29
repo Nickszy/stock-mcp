@@ -51,7 +51,7 @@ _METHOD_CATEGORIES: Dict[str, List[str]] = {
         "get_industry_ranking", "get_concept_ranking",
         "get_sector_trend", "get_sector_money_flow_history",
         "get_sector_pe_pb_historical", "get_sector_valuation_metrics",
-        "get_sector_trend", "resolve_sector",
+        "resolve_sector",
     ],
     "A股个股 A-Share": [
         # 基本面
@@ -437,6 +437,78 @@ _METHOD_PARAMS: Dict[str, List[Dict[str, Any]]] = {
             "required": True,
             "default": "000300",
             "placeholder": "Index code, e.g. 000300",
+            "label": "symbol",
+        },
+    ],
+    # --- Technical signals ---
+    "get_technical_signals": [
+        {
+            "name": "symbol",
+            "type": "text",
+            "required": True,
+            "default": "600519",
+            "placeholder": "e.g. 600519, 000858",
+            "label": "symbol",
+        },
+    ],
+    # --- Fact Pack methods ---
+    "get_stock_fact_pack": [
+        {
+            "name": "symbol",
+            "type": "text",
+            "required": True,
+            "default": "600519",
+            "placeholder": "e.g. 600519, 000858",
+            "label": "symbol",
+        },
+    ],
+    "get_market_fact_pack": [
+        {
+            "name": "symbol",
+            "type": "text",
+            "required": True,
+            "default": "600519",
+            "placeholder": "e.g. 600519, 000858",
+            "label": "symbol",
+        },
+    ],
+    "get_fund_fact_pack": [
+        {
+            "name": "fund_code",
+            "type": "text",
+            "required": True,
+            "default": "510300",
+            "placeholder": "e.g. 510300, 161725",
+            "label": "fund_code",
+        },
+    ],
+    "get_us_stock_fact_pack": [
+        {
+            "name": "ticker",
+            "type": "text",
+            "required": True,
+            "default": "AAPL",
+            "placeholder": "e.g. AAPL, TSLA",
+            "label": "ticker",
+        },
+    ],
+    "get_etf_fact_pack": [
+        {
+            "name": "symbol",
+            "type": "text",
+            "required": True,
+            "default": "510300",
+            "placeholder": "e.g. 510300, 159915",
+            "label": "symbol",
+        },
+    ],
+    "get_index_fact_pack": [
+        {
+            "name": "symbol",
+            "type": "text",
+            "required": True,
+            "default": "000300",
+            "placeholder": "e.g. 000300, 000905",
             "label": "symbol",
         },
     ],
