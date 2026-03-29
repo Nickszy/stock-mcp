@@ -3,13 +3,13 @@
 Provides asset search, price queries, and asset information retrieval.
 Returns structured data (JSON).
 
-Active Tools (1):
+Active Tools (4):
   - get_kline_data: 获取K线历史价格数据
+  - get_asset_info: 获取资产基本信息 (名称/交易所/行业/市值等)
+  - get_real_time_price: 获取实时价格
+  - get_multiple_prices: 批量获取多个资产实时价格
 
 Disabled Tools:
-  - get_asset_info: 🔇 当前策略仅保留K线原子能力
-  - get_real_time_price: 🔇 由策略层改用 get_kline_data 派生最新价
-  - get_multiple_prices: 🔇 当前策略仅保留K线原子能力
   - get_market_report: 🔇 聚合工具，应由 Agent 层调用原子工具组合
 """
 
@@ -38,6 +38,7 @@ def register_asset_tools(mcp: FastMCP):
     """Register asset-related tools."""
 
 
+    @mcp.tool(tags={"asset"})
     async def get_asset_info(ticker: str, ctx: Context = None) -> Dict[str, Any]:
         """Get detailed asset information.
 
@@ -105,6 +106,7 @@ def register_asset_tools(mcp: FastMCP):
                 )
             return {"error": str(e), "component_type": "asset_info"}
 
+    @mcp.tool(tags={"asset"})
     async def get_real_time_price(ticker: str, ctx: Context = None) -> Dict[str, Any]:
         """Get real-time price for an asset.
 
@@ -176,6 +178,7 @@ def register_asset_tools(mcp: FastMCP):
                 )
             return {"error": str(e), "component_type": "real_time_price"}
 
+    @mcp.tool(tags={"asset"})
     async def get_multiple_prices(tickers: list[str], ctx: Context = None) -> Dict[str, Any]:
         """Get real-time prices for multiple assets.
 
