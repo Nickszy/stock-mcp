@@ -92,6 +92,22 @@ ENDPOINTS: List[Tuple[str, str, dict]] = [
     ("GET", "/api/v1/corporate-action/shareholder-holding", {"symbol": "688235"}),
     ("GET", "/api/v1/corporate-action/ipo-calendar", {}),
     ("GET", "/api/v1/corporate-action/ipo-info/600519", {}),
+    # --- Money Flow (batch 2: COL-177) ---
+    ("GET", "/api/v1/money-flow/market-money-flow", {"days": 10}),
+    ("GET", "/api/v1/money-flow/dragon-tiger", {"days": 5}),
+    ("GET", "/api/v1/money-flow/block-trade", {}),
+    ("GET", "/api/v1/money-flow/money-supply", {}),
+    ("GET", "/api/v1/money-flow/pmi", {}),
+    ("GET", "/api/v1/money-flow/gdp", {}),
+    ("GET", "/api/v1/money-flow/bond-yield", {"days": 30}),
+    ("GET", "/api/v1/money-flow/etf-flow", {}),
+    ("GET", "/api/v1/money-flow/futures-main", {}),
+    ("GET", "/api/v1/money-flow/northbound-holdings", {"symbol": "600519"}),
+    ("GET", "/api/v1/money-flow/top10-shareholders", {"symbol": "600519"}),
+    ("GET", "/api/v1/money-flow/sector-pe-pb", {"sector_name": "白酒", "days": 60}),
+    ("GET", "/api/v1/money-flow/risk-metrics", {"symbol": "600519", "days": 60}),
+    ("GET", "/api/v1/money-flow/index-constituents", {"symbol": "000300"}),
+    ("GET", "/api/v1/money-flow/fund-holdings", {"symbol": "110011"}),
 ]
 
 
