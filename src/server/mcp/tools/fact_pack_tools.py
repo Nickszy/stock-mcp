@@ -31,7 +31,7 @@ def register_fact_pack_tools(mcp: FastMCP):
     ) -> Dict[str, Any]:
         """获取股票事实包(Fact Pack)：一次调用聚合全维度结构化事实数据。
 
-        聚合 8 大事实类别: 证券主数据、财务、市场估值、公司治理、
+        聚合 9 大事实类别: 证券主数据、财务、市场估值(含融资融券)、公司治理、
         事件(分红/回购/解禁)、业务结构(主营构成)、公司主档、同行。
         返回统一结构: entity + facts + source_trace + coverage。
 

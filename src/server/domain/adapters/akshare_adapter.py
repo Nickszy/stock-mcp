@@ -4063,9 +4063,9 @@ class AkshareAdapter(BaseDataAdapter):
     async def get_stock_fact_pack(self, symbol: str) -> Dict[str, Any]:
         """Aggregate stock facts across all categories into a single pack.
 
-        Calls existing adapter methods and organizes results into 8 fact
+        Calls existing adapter methods and organizes results into fact
         categories: security_master, company_master, business_structure,
-        governance, financial, market, events, peers.
+        governance, financial, market (incl. margin), events, peers.
 
         Each category includes: data, source_trace, coverage status.
         The pack also includes top-level missing_fields.
@@ -4137,6 +4137,13 @@ class AkshareAdapter(BaseDataAdapter):
                 flow = await self.get_money_flow(f"SZSE:{symbol}")
             if flow and "error" not in flow:
                 market_data["money_flow"] = flow
+        except Exception:
+            pass
+        try:
+            margin = await self.get_margin_trading(symbol, days=5)
+            if margin and "error" not in margin and margin.get("data"):
+                market_data["margin"] = margin.get("summary", {})
+                source_trace["margin"] = {"provider": "akshare", "api": "margin_detail"}
         except Exception:
             pass
         if market_data:
