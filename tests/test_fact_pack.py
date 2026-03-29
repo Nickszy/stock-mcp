@@ -290,6 +290,66 @@ class TestFactPackMCPTool:
 
 
 # =====================================================================
+# REST Route Contract Tests
+# =====================================================================
+
+
+class TestFactPackRestRoute:
+    """Verify stock fact-pack REST route exposes stable web-friendly fields."""
+
+    def test_stock_fact_pack_rest_includes_web_facts(self):
+        from src.server.api.routes.fact_pack import get_stock_fact_pack
+        from src.server.core.dependencies import Container
+
+        mock_pack = {
+            "source": "akshare",
+            "entity": {"symbol": "600519", "type": "stock"},
+            "facts": {
+                "market": {
+                    "valuation": {"pe": 30.5, "pb": 10.2, "total_mv": 123456789},
+                },
+                "financial": {"roe": 0.31, "gross_margin": 0.92},
+                "governance": {
+                    "top10_shareholders": [{"holder_name": "A", "hold_qty": 100}],
+                },
+                "events": {
+                    "dividends": {"dividend_yield": 0.02},
+                },
+                "business_structure": [{"biz": "白酒", "revenue_pct": 0.95}],
+            },
+            "coverage": {},
+            "source_trace": {},
+            "missing_fields": [],
+            "categories_fetched": 5,
+            "categories_total": 11,
+        }
+
+        mock_gw = MagicMock()
+        mock_gw.get_stock_fact_pack = AsyncMock(return_value=mock_pack)
+
+        with patch.object(Container, "market_gateway", return_value=mock_gw):
+            result = _run(
+                get_stock_fact_pack(
+                    symbol="600519",
+                    format="json",
+                    accept="application/json",
+                )
+            )
+
+        assert result["code"] == 0
+        payload = result["data"]
+        assert payload["symbol"] == "600519"
+        assert "web_facts" in payload
+        assert payload["valuation"]["pe"] == 30.5
+        assert payload["profitability"]["roe"] == 0.31
+        assert payload["dividend"]["dividend_yield"] == 0.02
+        assert payload["shareholder"][0]["holder_name"] == "A"
+        assert payload["revenue_breakdown"][0]["biz"] == "白酒"
+        assert "technical" in payload
+        assert "price" in payload
+
+
+# =====================================================================
 # Registry Tests
 # =====================================================================
 

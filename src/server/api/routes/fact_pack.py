@@ -29,6 +29,46 @@ def _wants_md(fmt: str, accept: str) -> bool:
     return fmt.lower() == "markdown" or "text/markdown" in accept
 
 
+def _safe_first_list_item(value: Any) -> Any:
+    return value[0] if isinstance(value, list) and value else None
+
+
+def _build_stock_web_facts(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a stable web-friendly stock fact view from nested fact-pack data."""
+    facts = result.get("facts", {}) if isinstance(result, dict) else {}
+    market = facts.get("market", {}) if isinstance(facts.get("market"), dict) else {}
+    valuation = market.get("valuation", {}) if isinstance(market.get("valuation"), dict) else {}
+    governance = facts.get("governance", {}) if isinstance(facts.get("governance"), dict) else {}
+    events = facts.get("events", {}) if isinstance(facts.get("events"), dict) else {}
+
+    financial = facts.get("financial")
+    profitability = financial if isinstance(financial, dict) else {}
+
+    business = facts.get("business_structure")
+    if isinstance(business, dict):
+        revenue_breakdown = business.get("data", business)
+    else:
+        revenue_breakdown = business if business is not None else []
+
+    dividend = events.get("dividends")
+    if isinstance(dividend, dict) and "data" in dividend:
+        dividend = dividend.get("data")
+
+    shareholder = governance.get("top10_shareholders")
+    if shareholder is None:
+        shareholder = []
+
+    return {
+        "price": None,
+        "valuation": valuation if valuation else None,
+        "profitability": profitability if profitability else None,
+        "dividend": dividend,
+        "shareholder": shareholder,
+        "revenue_breakdown": revenue_breakdown,
+        "technical": None,
+    }
+
+
 # ------------------------------------------------------------------
 # get_stock_fact_pack
 # ------------------------------------------------------------------
@@ -53,7 +93,13 @@ async def get_stock_fact_pack(
         md = maybe_markdown_response(result, format, accept or "")
         if md is not None:
             return md
-        return rest_response(data=result, symbol=symbol, source="akshare")
+
+        web_facts = _build_stock_web_facts(result)
+        contract = rest_response(data=result, symbol=symbol, source="akshare")
+        payload = contract["data"]
+        payload["web_facts"] = web_facts
+        payload.update(web_facts)
+        return contract
     except Exception as e:
         logger.error(f"API error in get_stock_fact_pack: {e}", exc_info=True)
         raise HTTPException(
