@@ -468,13 +468,26 @@ async def get_market_report(
 # 辅助函数
 # ============================================================
 
+_PERIOD_MAP = {
+    "daily": 365,
+    "weekly": 365,
+    "monthly": 365,
+    "1d": 1,
+}
+
+
 def _parse_period_to_days(period: str) -> int:
     """解析 period 字符串为天数"""
-    if period.endswith("d"):
-        return int(period[:-1])
-    elif period.endswith("m"):
-        return int(period[:-1]) * 30
-    elif period.endswith("y"):
-        return int(period[:-1]) * 365
-    else:
-        return 30  # 默认 30 天
+    period = period.strip().lower()
+    if period in _PERIOD_MAP:
+        return _PERIOD_MAP[period]
+    try:
+        if period.endswith("d"):
+            return int(period[:-1])
+        elif period.endswith("m"):
+            return int(period[:-1]) * 30
+        elif period.endswith("y"):
+            return int(period[:-1]) * 365
+    except ValueError:
+        pass
+    return 30  # 默认 30 天
