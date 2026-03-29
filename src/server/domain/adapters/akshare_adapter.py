@@ -2217,6 +2217,8 @@ class AkshareAdapter(BaseDataAdapter):
         Returns:
             Dict with symbol, benchmark, rs_pct, trend, and history.
         """
+        # Strip exchange prefix (e.g. "SSE:600519" → "600519")
+        symbol = self._to_ak_code(symbol)
         cache_key = f"akshare:rs:{symbol}:{benchmark}:{days}"
         cached = await self.cache.get(cache_key)
         if cached:
@@ -2475,6 +2477,9 @@ class AkshareAdapter(BaseDataAdapter):
         """
         if indicators is None:
             indicators = ["MA", "MACD", "RSI", "BOLL", "KDJ"]
+
+        # Strip exchange prefix (e.g. "SSE:600519" → "600519")
+        symbol = self._to_ak_code(symbol)
 
         cache_key = f"akshare:tech:{symbol}:{','.join(sorted(indicators))}:{days}"
         cached = await self.cache.get(cache_key)
@@ -3314,6 +3319,8 @@ class AkshareAdapter(BaseDataAdapter):
 
         基于历史行情数据计算，不需要额外数据源。
         """
+        # Strip exchange prefix (e.g. "SSE:600519" → "600519")
+        symbol = self._to_ak_code(symbol)
         cache_key = f"akshare:risk_metrics:{symbol}:{indicators}:{days}"
         cached = await self.cache.get(cache_key)
         if cached:
@@ -5414,6 +5421,8 @@ class AkshareAdapter(BaseDataAdapter):
             symbol: 股票代码 (如 '600519')
             days: 计算窗口天数 (default 250 ≈ 1年交易日)
         """
+        # Strip exchange prefix (e.g. "SSE:600519" → "600519")
+        symbol = self._to_ak_code(symbol)
         cache_key = f"stock_factors:{symbol}:{days}"
         try:
             cached = await self.cache.get(cache_key)
@@ -5515,6 +5524,8 @@ class AkshareAdapter(BaseDataAdapter):
             import numpy as np
 
             code_list = [s.strip() for s in symbols.split(",") if s.strip()]
+            # Strip exchange prefixes (e.g. "SSE:600519" → "600519")
+            code_list = [self._to_ak_code(c) for c in code_list]
             if len(code_list) < 2:
                 return {"error": "Need at least 2 symbols", "source": "akshare"}
 
