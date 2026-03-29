@@ -6401,9 +6401,9 @@ class AkshareAdapter(BaseDataAdapter):
     async def get_market_fact_pack(self, symbol: str) -> Dict[str, Any]:
         """Aggregate market/quote facts across all categories into a single pack.
 
-        Calls existing adapter methods and organizes results into 8 fact
+        Calls existing adapter methods and organizes results into 10 fact
         categories: master, snapshot, kline, money_flow, breadth, index,
-        derivative, relative.
+        derivative, relative, north_bound, margin.
 
         Args:
             symbol: Stock code (e.g. 600519, 000001)
@@ -6592,6 +6592,40 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception as e:
             coverage["relative"] = f"error: {e}"
 
+        # --- 9. North Bound Flow (北向资金) ---
+        try:
+            nb = await self.get_north_bound_flow(days=10)
+            if nb and "error" not in nb and nb.get("data"):
+                latest = nb["data"][-1] if nb["data"] else {}
+                facts["north_bound"] = {
+                    "latest_net_inflow": latest.get("north_net_inflow") or latest.get("净买入"),
+                    "latest_date": latest.get("date") or latest.get("日期"),
+                    "trend": nb["data"][-5:] if len(nb.get("data", [])) >= 5 else nb.get("data", []),
+                }
+                coverage["north_bound"] = "complete"
+                source_trace["north_bound"] = {"provider": "akshare", "api": "north_bound_flow"}
+            else:
+                coverage["north_bound"] = "missing"
+                missing_fields.append("north_bound")
+        except Exception as e:
+            coverage["north_bound"] = f"error: {e}"
+
+        # --- 10. Margin (融资融券) ---
+        try:
+            mg = await self.get_margin_trading(symbol, days=5)
+            if mg and "error" not in mg and mg.get("data"):
+                facts["margin"] = {
+                    "summary": mg.get("summary", {}),
+                    "exchange": mg.get("exchange", ""),
+                }
+                coverage["margin"] = "complete"
+                source_trace["margin"] = {"provider": "akshare", "api": "margin_detail"}
+            else:
+                coverage["margin"] = "missing"
+                missing_fields.append("margin")
+        except Exception as e:
+            coverage["margin"] = f"error: {e}"
+
         elapsed = _time.perf_counter() - t0
 
         result = {
@@ -6602,7 +6636,7 @@ class AkshareAdapter(BaseDataAdapter):
             "coverage": coverage,
             "missing_fields": missing_fields,
             "categories_fetched": len([v for v in coverage.values() if v in ("complete", "partial")]),
-            "categories_total": 8,
+            "categories_total": 10,
             "elapsed_seconds": round(elapsed, 2),
         }
 

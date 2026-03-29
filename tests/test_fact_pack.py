@@ -509,7 +509,9 @@ class TestMarketFactPackAdapter:
              patch.object(adapter, "get_market_breadth", new_callable=AsyncMock) as m_br, \
              patch.object(adapter, "get_sector_trend", new_callable=AsyncMock) as m_sec, \
              patch.object(adapter, "get_futures_basis", new_callable=AsyncMock) as m_basis, \
-             patch.object(adapter, "get_relative_strength", new_callable=AsyncMock) as m_rs:
+             patch.object(adapter, "get_relative_strength", new_callable=AsyncMock) as m_rs, \
+             patch.object(adapter, "get_north_bound_flow", new_callable=AsyncMock) as m_nb, \
+             patch.object(adapter, "get_margin_trading", new_callable=AsyncMock) as m_mg:
 
             m_val.return_value = {"pe": 30.5, "pb": 10.2}
             m_tech.return_value = {"MA": [{"date": "2025-01-01", "ma5": 100}], "RSI": [{"date": "2025-01-01", "rsi": 55}]}
@@ -519,6 +521,8 @@ class TestMarketFactPackAdapter:
             m_sec.return_value = {"sector": "白酒", "trend": "up"}
             m_basis.return_value = {"basis": -10.5, "index_code": "IF0"}
             m_rs.return_value = {"rs_pct": 0.03, "benchmark": "000300"}
+            m_nb.return_value = {"data": [{"date": "2025-01-01", "north_net_inflow": 50e8}], "source": "akshare"}
+            m_mg.return_value = {"data": [{"融资余额": 100e8}], "summary": {"latest_margin_balance": 100e8, "latest_short_balance": 10e8}, "exchange": "SSE", "source": "akshare"}
 
             result = _run(adapter.get_market_fact_pack(symbol="600519"))
 
@@ -545,10 +549,12 @@ class TestMarketFactPackAdapter:
         assert "index" in facts
         assert "derivative" in facts
         assert "relative" in facts
+        assert "north_bound" in facts
+        assert "margin" in facts
 
-        # All 8 categories should be fetched
-        assert result["categories_fetched"] == 8
-        assert result["categories_total"] == 8
+        # All 10 categories should be fetched
+        assert result["categories_fetched"] == 10
+        assert result["categories_total"] == 10
 
     def test_handles_sub_method_failure(self, mock_cache):
         from src.server.domain.adapters.akshare_adapter import AkshareAdapter

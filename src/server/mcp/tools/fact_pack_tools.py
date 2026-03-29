@@ -381,8 +381,8 @@ def register_fact_pack_tools(mcp: FastMCP):
     ) -> Dict[str, Any]:
         """获取行情事实包(Fact Pack)：一次调用聚合全维度行情结构化事实数据。
 
-        聚合 8 大事实类别: 标的估值、技术快照、K线因子、资金流、市场广度、
-        指数板块、衍生行情、相对强弱。
+        聚合 10 大事实类别: 标的估值、技术快照、K线因子、资金流、市场广度、
+        指数板块、衍生行情、相对强弱、北向资金、融资融券。
         返回统一结构: entity + facts + source_trace + coverage。
 
         Typical use cases:
@@ -504,6 +504,41 @@ def register_fact_pack_tools(mcp: FastMCP):
                 md += "## 相对强弱\n\n"
                 for k, v in rs.items():
                     md += f"- **{k}**: {v}\n"
+                md += "\n"
+
+            # North Bound
+            nb = facts.get("north_bound", {})
+            if nb:
+                md += "## 北向资金\n\n"
+                inflow = nb.get("latest_net_inflow")
+                date_val = nb.get("latest_date")
+                if inflow is not None:
+                    md += f"- **最新净买入**: {inflow}\n"
+                if date_val:
+                    md += f"- **日期**: {date_val}\n"
+                trend = nb.get("trend", [])
+                if trend:
+                    md += "\n### 近期趋势\n\n"
+                    for t in trend[-5:]:
+                        if isinstance(t, dict):
+                            md += f"- {t.get('date', t.get('日期', ''))}: 净买入 {t.get('north_net_inflow', t.get('净买入', '-'))}\n"
+                    md += "\n"
+
+            # Margin
+            mg = facts.get("margin", {})
+            if mg:
+                md += "## 融资融券\n\n"
+                summary_mg = mg.get("summary", {})
+                if summary_mg:
+                    mb = summary_mg.get("latest_margin_balance")
+                    sb = summary_mg.get("latest_short_balance")
+                    if mb is not None:
+                        md += f"- **融资余额**: {mb}\n"
+                    if sb is not None:
+                        md += f"- **融券余额**: {sb}\n"
+                exchange = mg.get("exchange", "")
+                if exchange:
+                    md += f"- **交易所**: {exchange}\n"
                 md += "\n"
 
             # Source trace
