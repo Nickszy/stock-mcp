@@ -305,20 +305,29 @@ class TestFactPackRestRoute:
             "source": "akshare",
             "entity": {"symbol": "600519", "type": "stock"},
             "facts": {
+                "security_master": {"code": "600519", "name": "贵州茅台"},
                 "market": {
                     "valuation": {"pe": 30.5, "pb": 10.2, "total_mv": 123456789},
                 },
-                "financial": {"roe": 0.31, "gross_margin": 0.92},
+                "financial": {
+                    "financial_indicators": [{"净资产收益率(%)": 31.0, "销售毛利率(%)": 92.0}],
+                    "balance_sheet": [{"资产总计": 1e12}],
+                    "cash_flow": [],
+                },
                 "governance": {
                     "top10_shareholders": [{"holder_name": "A", "hold_qty": 100}],
                 },
                 "events": {
                     "dividends": {"dividend_yield": 0.02},
                 },
-                "business_structure": [{"biz": "白酒", "revenue_pct": 0.95}],
+                "business_structure": {
+                    "rows": [
+                        {"分类类型": "按产品分类", "主营构成": "白酒", "主营收入占比": 95.0},
+                    ],
+                },
             },
-            "coverage": {},
-            "source_trace": {},
+            "coverage": {"market": "complete", "financial": "complete"},
+            "source_trace": {"valuation": {"provider": "akshare"}},
             "missing_fields": [],
             "categories_fetched": 5,
             "categories_total": 11,
@@ -326,6 +335,8 @@ class TestFactPackRestRoute:
 
         mock_gw = MagicMock()
         mock_gw.get_stock_fact_pack = AsyncMock(return_value=mock_pack)
+        mock_gw.get_asset_price = AsyncMock(return_value=None)
+        mock_gw.calculate_technical_indicators = AsyncMock(return_value={"data": {}})
 
         with patch.object(Container, "market_gateway", return_value=mock_gw):
             result = _run(
@@ -338,15 +349,22 @@ class TestFactPackRestRoute:
 
         assert result["code"] == 0
         payload = result["data"]
+        # rest_response wraps: {symbol, source, data: <normalized>}
         assert payload["symbol"] == "600519"
-        assert "web_facts" in payload
-        assert payload["valuation"]["pe"] == 30.5
-        assert payload["profitability"]["roe"] == 0.31
-        assert payload["dividend"]["dividend_yield"] == 0.02
-        assert payload["shareholder"][0]["holder_name"] == "A"
-        assert payload["revenue_breakdown"][0]["biz"] == "白酒"
-        assert "technical" in payload
-        assert "price" in payload
+        inner = payload["data"]
+        assert "entity" in inner
+        assert inner["entity"]["symbol"] == "600519"
+        assert "facts" in inner
+        facts = inner["facts"]
+        assert "valuation" in facts
+        assert facts["valuation"]["pe_ttm"] == 30.5
+        assert "profitability" in facts
+        assert facts["profitability"]["roe"] == 31.0
+        assert "dividend" in facts
+        assert "shareholder" in facts
+        assert "revenue_breakdown" in facts
+        assert "technical" in facts
+        assert "price" in facts
 
 
 # =====================================================================
