@@ -1723,7 +1723,10 @@ class YahooAdapter(BaseDataAdapter):
 
             def _fetch():
                 info = ticker_obj.info
-                shares = ticker_obj.shares
+                try:
+                    shares = ticker_obj.shares
+                except Exception:
+                    shares = None
                 return info, shares
 
             info, shares_df = await self._run(_fetch)
