@@ -56,7 +56,7 @@ async def get_etf_detail(
 ) -> Dict[str, Any]:
     try:
         logger.info("API: get_etf_detail", symbol=symbol)
-        result = await Container.market_gateway().get_etf_detail(symbol)
+        result = await Container.market_gateway().get_etf_detail(symbol=symbol)
         return rest_response(data=result, symbol=symbol)
     except Exception as e:
         logger.error(f"API error in get_etf_detail: {e}", exc_info=True)

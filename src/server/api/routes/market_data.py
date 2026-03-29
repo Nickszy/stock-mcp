@@ -422,7 +422,7 @@ async def get_technical_signals(
     """获取确定性技术信号"""
     try:
         logger.info("API: get_technical_signals called", symbol=symbol)
-        result = await technical_use_cases.get_technical_signals(raw_symbol=symbol)
+        result = await technical_use_cases.get_technical_signals(symbol=symbol)
         return rest_response(data=result, symbol=symbol)
     except Exception as e:
         logger.error(f"API error in get_technical_signals: {e}", exc_info=True)

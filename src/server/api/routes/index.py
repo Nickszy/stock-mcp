@@ -53,7 +53,7 @@ async def get_index_pe_pb(
     try:
         logger.info("API: get_index_pe_pb", symbol=symbol)
         result = await Container.market_gateway().get_index_pe_pb(
-            symbol, limit=limit,
+            symbol=symbol, limit=limit,
         )
         return rest_response(data=result, symbol=symbol, source="akshare")
     except Exception as e:
@@ -79,7 +79,7 @@ async def get_index_performance(
     try:
         logger.info("API: get_index_performance", symbol=symbol)
         result = await Container.market_gateway().get_index_performance(
-            symbol, limit=limit,
+            symbol=symbol, limit=limit,
         )
         return rest_response(data=result, symbol=symbol, source="akshare")
     except Exception as e:

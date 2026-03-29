@@ -152,7 +152,7 @@ async def get_stock_factors(
     try:
         logger.info("API: get_stock_factors", symbol=symbol)
         result = await Container.market_gateway().get_stock_factors(
-            symbol, days=days,
+            symbol=symbol, days=days,
         )
         return rest_response(data=result, symbol=symbol, source="akshare")
     except Exception as e:
@@ -178,7 +178,7 @@ async def get_stock_correlation(
     try:
         logger.info("API: get_stock_correlation", symbols=symbols)
         result = await Container.market_gateway().get_stock_correlation(
-            symbols, days=days,
+            symbols=symbols, days=days,
         )
         return rest_response(data=result, source="akshare")
     except Exception as e:
