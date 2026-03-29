@@ -147,15 +147,7 @@ def create_app():
         version="1.0.0",
         docs_url="/docs",
         redoc_url="/redoc",
-        lifespan=lifespan,  # Use the inner lifespan function
-        openapi_tags=[
-            {
-                "name": "Market Data",
-                "description": "市场数据 API - 价格查询和技术指标计算",
-            },
-            {"name": "Health", "description": "健康检查 - 服务状态监控"},
-            {"name": "Root", "description": "根路径 - 服务信息"},
-        ],
+        lifespan=lifespan,
     )
 
     # 4. Add CORS middleware (允许跨域请求)
@@ -182,21 +174,21 @@ def create_app():
         )
 
     # 5. Register RESTful API routes
-    app.include_router(health_router, tags=["Health"])
-    app.include_router(market_data_router, tags=["Market Data"])
-    app.include_router(filings_router, prefix="/api/v1", tags=["Filings"])
-    app.include_router(news_router, tags=["News"])
-    app.include_router(fundamental_router, tags=["Fundamental"])
-    app.include_router(money_flow_router, tags=["Money Flow"])
-    app.include_router(fact_pack_router, tags=["Fact Pack"])
-    app.include_router(fund_router, tags=["Fund Data"])
-    app.include_router(etf_router, tags=["ETF Data"])
-    app.include_router(index_router, tags=["Index Data"])
-    app.include_router(quantitative_router, tags=["Quantitative Analysis"])
-    app.include_router(us_market_router, tags=["US Market"])
-    app.include_router(corporate_action_router, tags=["Corporate Action"])
-    app.include_router(preview_router, tags=["Preview"])
-    app.include_router(sector_research_router, tags=["Sector Research"])
+    app.include_router(health_router)
+    app.include_router(market_data_router)
+    app.include_router(filings_router, prefix="/api/v1")
+    app.include_router(news_router)
+    app.include_router(fundamental_router)
+    app.include_router(money_flow_router)
+    app.include_router(fact_pack_router)
+    app.include_router(fund_router)
+    app.include_router(etf_router)
+    app.include_router(index_router)
+    app.include_router(quantitative_router)
+    app.include_router(us_market_router)
+    app.include_router(corporate_action_router)
+    app.include_router(preview_router)
+    app.include_router(sector_research_router)
 
     logger.info("✅ RESTful API routes registered")
     logger.info("   - Health check: /health")
