@@ -45,9 +45,12 @@ def register_factor_tools(mcp: FastMCP):
         days: int = 250,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """计算单只股票的量化因子：动量/波动率/换手率/流动性/Amihud非流动性。
+        """获取单只股票量化因子 (动量/波动率/换手率/Amihud非流动性).
 
-        Typical use cases:
+        WHEN TO USE: 用户问"这只股票动量因子如何"、"波动率多少"、"Amihud非流动性指标".
+        CONCEPT: 量化因子是构建alpha策略的基础输入, 包含动量、波动率、换手率、流动性等维度.
+        DIFFERENTIATION: 单股因子画像; 多股相关性用 get_stock_correlation; 因子排名用 get_factor_ranking.
+        next_recommended_tools: get_factor_ranking -> get_stock_correlation
         - "贵州茅台的动量和波动率因子"
         - "600519的1月/3月/6月/12月动量"
         - "比较宁德时代和比亚迪的因子"
@@ -111,9 +114,12 @@ def register_factor_tools(mcp: FastMCP):
         days: int = 60,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """计算多只股票之间的相关系数矩阵。
+        """获取多只股票相关系数矩阵.
 
-        Typical use cases:
+        WHEN TO USE: 用户问"这几只股票相关性高不高"、"组合分散度怎么样".
+        CONCEPT: 相关系数矩阵衡量标的间线性相关程度, 是组合构建/对冲/配对交易的基础.
+        DIFFERENTIATION: 多股相关性; 单股因子用 get_stock_factors; 因子排名用 get_factor_ranking.
+        next_recommended_tools: get_stock_factors -> get_factor_ranking
         - "茅台、五粮液、美的之间的相关性"
         - "白酒板块股票的相关系数"
         - "组合内股票的分散化程度"
@@ -193,13 +199,12 @@ def register_factor_tools(mcp: FastMCP):
         exchange: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取A股全市场因子排名。
+        """获取A股全市场因子排名.
 
-        Typical use cases:
-        - "今日涨幅最大的30只股票"
-        - "换手率最低的大盘股"
-        - "量比最高的股票排名"
-        - "振幅最大的股票"
+        WHEN TO USE: 用户问"涨幅最大的股票"、"换手率排名"、"量比Top30"、"振幅最大".
+        CONCEPT: 按单因子(涨跌幅/换手率/量比/振幅等)对全市场排名, 快速发现极端标的.
+        DIFFERENTIATION: 全市场排名; 单股因子用 get_stock_factors; 多条件筛选用 quantitative screen_stocks.
+        next_recommended_tools: get_stock_factors -> screen_stocks
 
         Args:
             factor: 因子名称 (change_pct=涨跌幅/turnover_rate=换手率/volume_ratio=量比/amplitude=振幅)

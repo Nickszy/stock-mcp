@@ -40,37 +40,12 @@ def register_us_sector_tools(mcp: FastMCP):
         output_format: OutputFormat = "markdown",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Analyze a US sector via its representative ETF.
+        """获取美股行业ETF分析.
 
-        Automatically maps sector name (English or Chinese) to the most
-        representative SPDR/iShares ETF and returns OHLCV bars, period
-        return, and trend summary.
-
-        Supported sectors (partial list):
-          - technology / 科技 → XLK
-          - financials / 金融 → XLF
-          - healthcare / 医疗 → XLV
-          - energy / 能源 → XLE
-          - semiconductor / 半导体 → SOXX
-          - biotech / 生物技术 → XBI
-          - cloud / 云计算 → SKYY
-          - ai / 人工智能 → AIQ
-          - cybersecurity / 网络安全 → HACK
-          - real estate / 房地产 → XLRE
-          (fallback to SPY if sector not recognized)
-
-        Args:
-            sector_name: Sector name in English or Chinese (case-insensitive)
-                Examples: "technology", "半导体", "healthcare", "AI"
-            days: Look-back window in calendar days (default 30)
-            output_format: Output format - "markdown" (default, human-readable)
-                or "json" (structured data for programs)
-            ctx: FastMCP Context
-
-        Returns:
-            If output_format="markdown": Returns markdown tables with Chinese labels
-            If output_format="json": Returns artifact with ETF data
-        """
+        WHEN TO USE: 用户问"美国科技板块表现如何"、"哪个行业最强".
+        CONCEPT: 通过行业ETF(XLK/XLF/XLE等)观察美股板块轮动与强弱.
+        DIFFERENTIATION: 美股行业级视角; A股板块用 get_sector_trend / get_market_money_flow.
+        next_recommended_tools: get_us_valuation_metrics -> get_earnings_history"""
         if ctx:
             await ctx.info(f"🏭 美股板块ETF分析: {sector_name} ({days}d)")
         try:

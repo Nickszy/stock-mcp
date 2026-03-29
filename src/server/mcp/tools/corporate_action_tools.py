@@ -46,9 +46,12 @@ def register_corporate_action_tools(mcp: FastMCP):
         date: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取股东增减持明细数据（十大流通股东维度）。
+        """获取股东增减持明细 (十大流通股东维度).
 
-        查询个股或全市场股东持股变动明细，包括股东名称、持股数量、变动方向、变动数量等。
+        WHEN TO USE: 用户问"最近有哪些股东增减持"、"重要股东买卖明细".
+        CONCEPT: 跟踪重要股东(高管/大股东/机构)的增减持行为, 是判断内部人信心的重要信号.
+        DIFFERENTIATION: 增减持明细; IPO日历用 get_ipo_calendar; IPO详情用 get_ipo_info.
+        next_recommended_tools: get_ipo_calendar -> get_ipo_info
 
         Typical use cases:
         - "查看688235最新的股东增减持明细"
@@ -130,11 +133,12 @@ def register_corporate_action_tools(mcp: FastMCP):
     async def get_ipo_calendar(
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取近期新股IPO/申购/上市日历。
+        """获取近期新股IPO/申购/上市日历.
 
-        查询近期新股申购日期、发行价格、中签率、上市日期等信息。
-
-        Typical use cases:
+        WHEN TO USE: 用户问"最近有什么新股申购"、"下周有哪些上市".
+        CONCEPT: 新股日历包含申购日、发行价、中签率、上市日等关键节点.
+        DIFFERENTIATION: 日历视图; 具体某只IPO详情用 get_ipo_info; 股东增减持用 get_shareholder_holding_detail.
+        next_recommended_tools: get_ipo_info -> get_shareholder_holding_detail
         - "最近有哪些新股申购？"
         - "查看近期IPO上市日历"
         - "下周有哪些新股申购？"
@@ -200,10 +204,12 @@ def register_corporate_action_tools(mcp: FastMCP):
         stock: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取个股IPO详情：发行价、市盈率、中签率、上市日期等。
+        """获取个股IPO详情 (发行价/市盈率/中签率等).
 
-        Typical use cases:
-        - "查看贵州茅台(600519)的IPO信息"
+        WHEN TO USE: 用户问"某只股票IPO信息"、"发行价多少"、"中签率多少".
+        CONCEPT: 查询单只股票的完整IPO档案, 包含发行价、申购上限、中签率、上市日期等.
+        DIFFERENTIATION: 单只IPO详情; 新股日历用 get_ipo_calendar; 股东增减持用 get_shareholder_holding_detail.
+        next_recommended_tools: get_shareholder_holding_detail -> get_ipo_calendar
         - "查看宁德时代(300750)上市时的发行价"
 
         Args:

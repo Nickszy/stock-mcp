@@ -239,19 +239,12 @@ def register_technical_tools(mcp: FastMCP):
         output_format: OutputFormat = "markdown",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get technical indicators in competitor-compatible format.
+        """获取A股技术指标 (MA/RSI/MACD/BOLL等).
 
-        Args:
-            ts_code: Tushare ts_code (e.g. 600519.SH or 600519)
-            limit: 返回最近N个交易日
-            output_format: Output format - "markdown" (default, human-readable)
-                or "json" (structured data for programs)
-            ctx: FastMCP Context for logging
-
-        Returns:
-            If output_format="markdown": Returns markdown tables with Chinese labels
-            If output_format="json": Returns artifact with indicator rows
-        """
+        WHEN TO USE: 用户问"这只A股技术面怎么样"、"RSI超买了吗".
+        CONCEPT: 基于K线计算常用技术指标: 均线、RSI、MACD、布林带等.
+        DIFFERENTIATION: A股专用; 美股技术面用 us_technical_tools.
+        next_recommended_tools: get_technical_signals -> get_money_flow"""
         # 兼容整数输入
         symbol = str(ts_code)
         if ctx:
@@ -574,20 +567,12 @@ def register_technical_tools(mcp: FastMCP):
         output_format: OutputFormat = "markdown",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get deterministic technical signals (RSI, MACD, Bollinger Band state).
+        """获取A股技术信号 (结构化RSI/MACD/BOLL状态).
 
-        Returns mechanical threshold-based signals, not trading recommendations.
-
-        Args:
-            symbol: Asset ticker. Format: EXCHANGE:SYMBOL
-                - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
-                - 美股: NASDAQ:AAPL, NYSE:TSLA
-            output_format: Output format - "markdown" (default) or "json"
-            ctx: FastMCP Context for logging
-
-        Returns:
-            Deterministic signal states for RSI, MACD, Bollinger Bands
-        """
+        WHEN TO USE: 用户只要信号判断, 如"超买还是超卖"、"金叉还是死叉".
+        CONCEPT: 将技术指标转化为明确信号状态.
+        DIFFERENTIATION: 信号版(结论); 原始数值用 get_technical_indicators.
+        next_recommended_tools: get_technical_indicators -> get_money_flow"""
         if ctx:
             await ctx.info(f"🔧 获取技术信号: {symbol}", extra={"symbol": symbol})
 

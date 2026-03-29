@@ -23,7 +23,12 @@ def register_us_macro_tools(mcp: FastMCP):
         quarters: int = 20,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get US real GDP trend and growth rates.
+        """获取美国经济增长数据 (GDP).
+
+        WHEN TO USE: 用户问"美国经济增速如何"、"GDP增长多少"、"衰退风险".
+        CONCEPT: 美国季度实际GDP增速, 判断宏观经济周期(扩张/衰退).
+        DIFFERENTIATION: GDP看总量增长; 通胀+就业看 get_us_inflation_employment; 利率看 get_us_interest_rates.
+        next_recommended_tools: get_us_inflation_employment -> get_us_interest_rates
 
         Args:
             quarters: Number of recent quarters to return (default 20)
@@ -76,7 +81,12 @@ def register_us_macro_tools(mcp: FastMCP):
         months: int = 24,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get US inflation (CPI YoY) and unemployment trend.
+        """获取美国通胀与就业数据 (CPI + 失业率).
+
+        WHEN TO USE: 用户问"美国通胀怎么样"、"失业率多少"、"美联储会不会降息".
+        CONCEPT: CPI同比+失业率是美联储双支柱决策依据; 通胀降温+就业走弱=降息窗口.
+        DIFFERENTIATION: 通胀+就业联合视角; GDP看 get_us_economic_growth; 利率看 get_us_interest_rates.
+        next_recommended_tools: get_us_interest_rates -> get_us_economic_growth
 
         Args:
             months: Number of recent months to return (default 24)
@@ -129,12 +139,12 @@ def register_us_macro_tools(mcp: FastMCP):
         days: int = 180,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get US rates: 2Y/10Y Treasury and Fed Funds.
+        """获取美国利率数据 (联邦基金利率/国债收益率).
 
-        Args:
-            days: Number of recent days to return (default 180)
-            ctx: FastMCP context
-        """
+        WHEN TO USE: 用户问"美联储利率多少"、"10年国债收益率".
+        CONCEPT: 联邦基金利率是货币政策核心工具; 国债收益率曲线反映市场预期.
+        DIFFERENTIATION: 利率/货币政策维度; 通胀看 get_us_cpi.
+        next_recommended_tools: get_us_cpi -> get_us_gdp"""
         if ctx:
             await ctx.info(f"🇺🇸 宏观-利率曲线: 最近{days}天")
         try:

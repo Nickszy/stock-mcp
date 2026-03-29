@@ -65,26 +65,12 @@ def register_fund_tools(mcp: FastMCP):
         limit: int = 20,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """搜索公募基金，支持按名称/代码模糊搜索，返回多周期业绩数据。
+        """搜索基金 (按名称/类型/公司模糊匹配).
 
-        可按不同维度排序：近1周/近1月/近3月/近6月/近1年/近3年/今年来/成立来。
-        支持模糊搜索基金名称和代码。
-
-        Typical use cases:
-        - "搜索名称包含'沪深300'的基金"
-        - "找近1年收益最高的混合型基金"
-        - "搜索代码包含'1100'的基金"
-
-        Args:
-            keyword: 搜索关键词 (名称或代码模糊匹配, 如 '沪深300', '易方达')
-            sort_by: 排序维度 (近1周/近1月/近3月/近6月/近1年/近3年/今年来/成立来, 默认近1年)
-            sort_order: "desc" or "asc"
-            limit: 返回数量 (default 20, max 50)
-            ctx: FastMCP Context.
-
-        Returns:
-            基金列表 with NAV and multi-period returns.
-        """
+        WHEN TO USE: 用户想找某类基金, 如"新能源ETF有哪些"、"张坤管的基金".
+        CONCEPT: 按名称、类型、基金公司等维度搜索公募基金, 返回候选列表.
+        DIFFERENTIATION: 搜索入口; 确认后用 get_fund_detail 深入分析.
+        next_recommended_tools: get_fund_detail -> get_fund_performance"""
         if ctx:
             await ctx.info(f"搜索基金: keyword={keyword}, sort_by={sort_by}")
         try:
@@ -150,19 +136,12 @@ def register_fund_tools(mcp: FastMCP):
         fund_code: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取基金详情：基本信息、费率、资产配置比例。
+        """获取基金详情 (净值/规模/经理/费率等).
 
-        Typical use cases:
-        - "查看易方达中小盘(110011)的详细信息"
-        - "查看基金005827的资产配置"
-
-        Args:
-            fund_code: 基金代码 (如 110011, 005827, 510300)
-            ctx: FastMCP Context.
-
-        Returns:
-            Fund detail with basic info, fees, asset allocation.
-        """
+        WHEN TO USE: 用户选定了一只基金, 要看全面信息.
+        CONCEPT: 返回基金主数据: 净值、规模、基金经理、成立日期、费率、跟踪指数(ETF)等.
+        DIFFERENTIATION: 单只基金完整画像; 若要比较多只用 get_fund_ranking.
+        next_recommended_tools: get_fund_performance -> get_fund_manager"""
         if ctx:
             await ctx.info(f"获取基金详情: {fund_code}")
         try:
@@ -226,23 +205,12 @@ def register_fund_tools(mcp: FastMCP):
         limit: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """基金排行：按类型和业绩周期筛选排序。
+        """基金排名 (按收益/风险/规模排序).
 
-        Typical use cases:
-        - "近1年收益最高的股票型基金"
-        - "近3月表现最好的混合型基金"
-        - "今年来收益最差的指数型基金"
-
-        Args:
-            fund_type: 基金类型 (全部/股票型/混合型/债券型/指数型/QDII/FOF/货币型, 默认全部)
-            sort_by: 排序维度 (近1周/近1月/近3月/近6月/近1年/近3年/今年来/成立来)
-            sort_order: "desc" (默认, 最佳在前) or "asc"
-            limit: 返回数量 (default 30, max 100)
-            ctx: FastMCP Context.
-
-        Returns:
-            Ranked fund list with multi-period performance.
-        """
+        WHEN TO USE: 用户要同类基金排名, 如"近一年收益最高的偏股基金".
+        CONCEPT: 按指定维度对同类基金排名比较.
+        DIFFERENTIATION: 横向比较工具; 深入单只用 get_fund_detail.
+        next_recommended_tools: get_fund_detail -> get_fund_performance"""
         if ctx:
             await ctx.info(f"获取基金排行: type={fund_type}, sort_by={sort_by}")
         try:
@@ -309,22 +277,12 @@ def register_fund_tools(mcp: FastMCP):
         limit: int = 20,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """基金经理信息：从业时间、管理规模、最佳回报、任职基金列表。
+        """获取基金经理信息.
 
-        Typical use cases:
-        - "查看张坤管理的基金"
-        - "搜索易方达基金公司的经理"
-        - "查找管理规模最大的基金经理"
-
-        Args:
-            manager_name: 经理姓名 (模糊匹配, 如 '张坤', '刘彦春')
-            fund_company: 基金公司 (模糊匹配, 如 '易方达', '华夏')
-            limit: 返回数量 (default 20)
-            ctx: FastMCP Context.
-
-        Returns:
-            Fund manager list with tenure, AUM. best return. managed funds.
-        """
+        WHEN TO USE: 用户关注某位基金经理, 如"张坤管理了哪些基金".
+        CONCEPT: 返回基金经理的履历、管理规模、在管基金列表及任职回报.
+        DIFFERENTIATION: 聚焦"人"的维度; 基金产品视角用 get_fund_detail.
+        next_recommended_tools: get_fund_detail -> get_fund_performance"""
         if ctx:
             await ctx.info(f"获取基金经理: {manager_name}")
         try:
@@ -386,22 +344,12 @@ def register_fund_tools(mcp: FastMCP):
         fund_code: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """基金实时估值：估算净值、估算涨跌幅、实际净值、偏差。
+        """获取基金估值 (PE/PB/股息率).
 
-        实时数据，5分钟刷新。不指定fund_code返回全市场估值排行前20。
-
-        Typical use cases:
-        - "查看110011的实时估值"
-        - "今天估算涨幅最大的基金"
-        - "全市场基金估值排行"
-
-        Args:
-            fund_code: 基金代码 (如 110011, 为空返回全市场前20)
-            ctx: FastMCP Context.
-
-        Returns:
-            Fund NAV estimation with actual NAV and deviation.
-        """
+        WHEN TO USE: 用户问"这只指数基金现在贵不贵"、"PE百分位多少".
+        CONCEPT: 指数/ETF基金的估值参考, 基于成分股加权PE/PB及历史百分位.
+        DIFFERENTIATION: 基金级估值; 个股估值用 get_valuation_metrics.
+        next_recommended_tools: get_fund_detail -> get_fund_performance"""
         if ctx:
             await ctx.info(f"获取基金估值: {fund_code or '全市场'}")
         try:
@@ -460,19 +408,12 @@ def register_fund_tools(mcp: FastMCP):
         fund_code: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """基金业绩分析：各周期排名、超额收益、最大回撤、盈利概率。
+        """获取基金历史业绩 (收益率/净值曲线).
 
-        Typical use cases:
-        - "分析110011的历史业绩"
-        - "查看005827的回撤和盈利概率"
-
-        Args:
-            fund_code: 基金代码 (如 110011, 005827)
-            ctx: FastMCP Context.
-
-        Returns:
-            Fund performance analysis with achievement, analysis, profit probability.
-        """
+        WHEN TO USE: 用户要看基金过往表现, 如"近3年收益曲线".
+        CONCEPT: 基金净值历史 + 区间收益率 + 基准对比.
+        DIFFERENTIATION: 历史业绩视角; 当前估值用 get_fund_valuation.
+        next_recommended_tools: get_fund_valuation -> get_fund_detail"""
         if ctx:
             await ctx.info(f"分析基金业绩: {fund_code}")
         try:
@@ -552,18 +493,12 @@ def register_fund_tools(mcp: FastMCP):
     async def get_fund_scale(
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """全市场基金规模变动：基金家数/申购/赎回/净资产的历史变化趋势。
+        """获取基金规模数据.
 
-        Typical use cases:
-        - "查看全市场基金规模变化趋势"
-        - "分析最近几个季度基金申购赎回对比"
-
-        Args:
-            ctx: FastMCP Context.
-
-        Returns:
-            Market-wide fund scale history with subscription, redemption, NAV.
-        """
+        WHEN TO USE: 用户问"这只基金规模多大"、"有没有清盘风险".
+        CONCEPT: 基金规模(AUM)是流动性和运营稳定性的重要指标.
+        DIFFERENTIATION: 只看规模; 全面信息用 get_fund_detail.
+        next_recommended_tools: get_fund_detail -> get_fund_performance"""
         if ctx:
             await ctx.info("获取全市场基金规模变动")
         try:

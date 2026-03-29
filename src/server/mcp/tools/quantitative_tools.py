@@ -111,49 +111,12 @@ def register_quantitative_tools(mcp: FastMCP):
         limit: int = 50,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Quantitative stock screener for all A-share stocks.
+        """量化选股筛选 (多条件过滤).
 
-        Filters the entire A-share universe (~5000 stocks) by multiple criteria
-        such as PE, PB, market cap, turnover rate, volume ratio, price change, etc.
-        Returns ranked results sorted by any metric.
-
-        Typical use cases:
-        - "Find large-cap value stocks: PE < 15, market cap > 500亿"
-        - "High turnover momentum stocks: turnover_rate > 8%, change_pct > 3%"
-        - "Oversold large caps: 60d change < -20%, market cap > 1000亿"
-        - "Low PE + low PB screener: PE 5-15, PB 0.5-1.5"
-
-        Args:
-            min_pe: Minimum PE (TTM). Filters out negative PE (loss-makers).
-            max_pe: Maximum PE (TTM).
-            min_pb: Minimum price-to-book ratio.
-            max_pb: Maximum price-to-book ratio.
-            min_market_cap: Minimum total market cap in CNY *billions* (e.g. 500 = 500亿).
-            max_market_cap: Maximum total market cap in CNY billions.
-            min_price: Minimum latest price.
-            max_price: Maximum latest price.
-            min_turnover_rate: Minimum turnover rate %.
-            max_turnover_rate: Maximum turnover rate %.
-            min_volume_ratio: Minimum volume ratio (量比).
-            max_volume_ratio: Maximum volume ratio.
-            min_change_pct: Minimum daily change %.
-            max_change_pct: Maximum daily change %.
-            min_ytd_change: Minimum year-to-date change %.
-            max_ytd_change: Maximum year-to-date change %.
-            min_60d_change: Minimum 60-day change %.
-            max_60d_change: Maximum 60-day change %.
-            min_amplitude: Minimum amplitude % (振幅).
-            max_amplitude: Maximum amplitude %.
-            exchange: Filter by exchange: "SSE" (Shanghai), "SZSE" (Shenzhen), "BSE" (Beijing).
-            sort_by: Sort field. Options: market_cap, pe, pb, price, turnover_rate,
-                volume_ratio, change_pct, ytd_change, change_60d, amplitude.
-            sort_order: "desc" (default) or "asc".
-            limit: Max results to return (default 50, max 200).
-            ctx: FastMCP Context.
-
-        Returns:
-            Filtered and ranked stock list with key metrics.
-        """
+        WHEN TO USE: 用户想按条件筛股, 如"PE<15且ROE>15%的白酒股".
+        CONCEPT: 多维度条件筛选(估值/成长/质量/技术), 返回符合条件的股票列表.
+        DIFFERENTIATION: 多条件过滤; 排名用 get_stock_ranking; 因子分析用 get_factor_analysis.
+        next_recommended_tools: get_stock_ranking -> get_valuation_metrics"""
         if ctx:
             await ctx.info(f"Running stock screener: {sort_by} {sort_order}, limit={limit}")
         try:
@@ -259,10 +222,12 @@ def register_quantitative_tools(mcp: FastMCP):
         limit: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get real-time performance ranking of all A-share industry boards.
+        """获取行业板块实时排名.
 
-        Ranks ~100 industry sectors by daily change %, turnover rate, volume,
-        amplitude, or rise/fall stock count. Essential for identifying hot/cold
+        WHEN TO USE: 用户问"今天哪些行业涨得好"、"行业板块排名"、"哪个板块最强/最弱".
+        CONCEPT: 按涨跌幅/换手率/成交量等对~100个申万行业板块排名, 把握板块轮动.
+        DIFFERENTIATION: 行业板块排名; 概念板块用 get_concept_ranking; 个股筛选用 screen_stocks.
+        next_recommended_tools: get_concept_ranking -> screen_stocks
         sectors and sector rotation trends.
 
         Typical use cases:
@@ -355,10 +320,12 @@ def register_quantitative_tools(mcp: FastMCP):
         limit: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get real-time performance ranking of all A-share concept/theme boards.
+        """获取概念板块实时排名.
 
-        Ranks ~400 concept sectors (AI, 新能源, 半导体, etc.) by daily change %,
-        turnover rate, or other metrics. Key for tracking market themes and narratives.
+        WHEN TO USE: 用户问"今天AI概念怎么样"、"概念板块排名"、"新能源题材".
+        CONCEPT: 按涨跌幅等对~400个概念板块(半导体/AI/碳中和等)排名, 追踪市场题材.
+        DIFFERENTIATION: 概念板块排名; 行业板块用 get_industry_ranking; 个股筛选用 screen_stocks.
+        next_recommended_tools: get_industry_ranking -> screen_stocks
 
         Typical use cases:
         - "What are the hottest concept themes today?"

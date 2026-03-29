@@ -40,19 +40,12 @@ def register_asset_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"asset"})
     async def get_asset_info(ticker: str, ctx: Context = None) -> Dict[str, Any]:
-        """Get detailed asset information.
+        """获取资产详情 (名称/行业/上市日期等).
 
-        Args:
-            ticker: Asset identifier. Prefer EXCHANGE:SYMBOL
-                - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
-                - 美股: NASDAQ:AAPL, NYSE:TSLA
-                - 加密货币: CRYPTO:BTC, CRYPTO:ETH
-              Raw input like “苹果”, “白银期货”, “EURUSD” is also supported.
-            ctx: FastMCP Context for logging
-
-        Returns:
-            Asset details
-        """
+        WHEN TO USE: 用户已有确定代码, 想了解公司基本属性(行业/市值/上市日期).
+        CONCEPT: 返回资产主数据的完整画像, 包含 name, exchange, industry, list_date, market_cap 等.
+        DIFFERENTIATION: 比 search_assets 更详细; 不包含实时行情(用 get_real_time_price).
+        next_recommended_tools: get_real_time_price -> get_multiple_prices"""
         if ctx:
             await ctx.info(f"🔧 获取资产信息: {ticker}", extra={"ticker": ticker})
 
@@ -108,19 +101,12 @@ def register_asset_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"asset"})
     async def get_real_time_price(ticker: str, ctx: Context = None) -> Dict[str, Any]:
-        """Get real-time price for an asset.
+        """获取单个资产实时行情.
 
-        Args:
-            ticker: Asset identifier. Prefer EXCHANGE:SYMBOL
-                - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
-                - 美股: NASDAQ:AAPL, NYSE:TSLA
-                - 加密货币: CRYPTO:BTC, CRYPTO:ETH
-              Raw input like “苹果”, “白银期货”, “EURUSD” is also supported.
-            ctx: FastMCP Context for logging
-
-        Returns:
-            Real-time price data
-        """
+        WHEN TO USE: 用户要当前最新价/涨跌幅/成交量, 且只查一只.
+        CONCEPT: 返回最新 tick 数据: price, change_pct, volume, turnover 等.
+        DIFFERENTIATION: 单个标的; 如需批量请用 get_multiple_prices.
+        next_recommended_tools: get_multiple_prices -> search_assets"""
         if ctx:
             await ctx.info(f"🔧 获取实时价格: {ticker}", extra={"ticker": ticker})
 
@@ -180,18 +166,12 @@ def register_asset_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"asset"})
     async def get_multiple_prices(tickers: list[str], ctx: Context = None) -> Dict[str, Any]:
-        """Get real-time prices for multiple assets.
+        """批量获取多个资产实时行情.
 
-        Args:
-            tickers: List of asset tickers. Format: EXCHANGE:SYMBOL
-                - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
-                - 美股: NASDAQ:AAPL, NYSE:TSLA
-                - 加密货币: CRYPTO:BTC, CRYPTO:ETH
-            ctx: FastMCP Context for logging
-
-        Returns:
-            Dictionary mapping tickers to price data
-        """
+        WHEN TO USE: 用户同时查多只股票/基金/ETF的实时价格.
+        CONCEPT: 一次请求多个标的实时行情, 效率高于多次调用 get_real_time_price.
+        DIFFERENTIATION: 批量版 get_real_time_price; 若只需一只用 get_real_time_price 更简单.
+        next_recommended_tools: get_real_time_price -> get_asset_info"""
         if ctx:
             await ctx.info(
                 f"🔧 批量获取价格: {len(tickers)}个资产",

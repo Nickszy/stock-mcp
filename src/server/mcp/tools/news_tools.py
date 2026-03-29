@@ -22,11 +22,12 @@ def register_news_tools(mcp: FastMCP):
     async def get_stock_news(
         symbol: str, days_back: int = 7, ctx: Context = None
     ) -> Dict[str, Any]:
-        """Get professional stock news.
+        """获取个股相关新闻.
 
-        Args:
-            symbol: Asset ticker. Format: EXCHANGE:SYMBOL
-                - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
+        WHEN TO USE: 用户问"这只股票最近有什么新闻"、"有没有利空/利好消息".
+        CONCEPT: 按标的检索相关财经新闻, 支持时间范围过滤.
+        DIFFERENTIATION: 个股新闻; 市场热点用 get_latest_news; 美股情绪用 get_us_news_sentiment.
+        next_recommended_tools: get_latest_news -> get_real_time_price
                 - 美股: NASDAQ:AAPL, NYSE:TSLA
                 - 加密货币: CRYPTO:BTC, CRYPTO:ETH
             days_back: Days to look back (default 7)

@@ -65,15 +65,12 @@ def register_index_tools(mcp: FastMCP):
     async def get_index_list(
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取A股全部指数列表：代码、名称、发布日期。
+        """获取指数列表.
 
-        Typical use cases:
-        - "有哪些A股指数？"
-        - "查找代码包含'000'的指数"
-
-        Returns:
-            List of all A-share indices with code, name, publish date.
-        """
+        WHEN TO USE: 用户想看有哪些指数, 如"A股主要指数有哪些".
+        CONCEPT: 返回可用指数列表, 包含代码、名称、基准日期等.
+        DIFFERENTIATION: 列表入口; 成分股用 get_index_constituents; 估值用 get_sector_pe_pb_historical.
+        next_recommended_tools: get_index_constituents -> get_sector_pe_pb_historical"""
         if ctx:
             await ctx.info("获取A股指数列表")
         try:
@@ -127,20 +124,12 @@ def register_index_tools(mcp: FastMCP):
         limit: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取指数估值(PE/PB)历史数据。
+        """获取指数PE/PB估值.
 
-        Typical use cases:
-        - "沪深300最近的PE/PB是多少？"
-        - "创业板指估值历史趋势"
-
-        Args:
-            symbol: 指数名称 (如 '沪深300', '上证50', '中证500', '创业板指')
-            limit: 返回最近N条 (default 30, max 100)
-            ctx: FastMCP Context.
-
-        Returns:
-            Index PE/PB time series data.
-        """
+        WHEN TO USE: 用户问"沪深300现在PE多少"、"中证500估值百分位".
+        CONCEPT: 指数级估值, 基于成分股加权PE/PB及历史分位.
+        DIFFERENTIATION: 指数级估值; 个股估值用 get_valuation_metrics.
+        next_recommended_tools: get_index_constituents -> get_valuation_metrics"""
         if ctx:
             await ctx.info(f"获取指数估值: {symbol}")
         try:
