@@ -35,6 +35,7 @@ from src.server.api.routes import (
     index_router,
     quantitative_router,
     us_market_router,
+    corporate_action_router,
 )
 from src.server.utils.logger import logger
 from src.server.middleware import JsonArgumentsFixMiddleware
@@ -191,6 +192,7 @@ def create_app():
     app.include_router(index_router, tags=["Index Data"])
     app.include_router(quantitative_router, tags=["Quantitative Analysis"])
     app.include_router(us_market_router, tags=["US Market"])
+    app.include_router(corporate_action_router, tags=["Corporate Action"])
 
     logger.info("✅ RESTful API routes registered")
     logger.info("   - Health check: /health")
@@ -205,6 +207,7 @@ def create_app():
     logger.info("   - Index Data: /api/v1/index/*")
     logger.info("   - Quantitative: /api/v1/quant/*")
     logger.info("   - US Market: /api/v1/us/*")
+    logger.info("   - Corporate Action: /api/v1/corporate-action/*")
 
     # 6. Mount MCP protocol endpoint
     if mcp_app:

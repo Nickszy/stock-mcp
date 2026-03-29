@@ -87,6 +87,11 @@ ENDPOINTS: List[Tuple[str, str, dict]] = [
     # --- Market Data (POST endpoints) ---
     ("POST", "/api/v1/market/asset/info", {"symbol": "SSE:600519"}),
     ("POST", "/api/v1/market/signals/technical", {"symbol": "SSE:600519"}),
+
+    # --- Corporate Action ---
+    ("GET", "/api/v1/corporate-action/shareholder-holding", {"symbol": "688235"}),
+    ("GET", "/api/v1/corporate-action/ipo-calendar", {}),
+    ("GET", "/api/v1/corporate-action/ipo-info/600519", {}),
 ]
 
 
