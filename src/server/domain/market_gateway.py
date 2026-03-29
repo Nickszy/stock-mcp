@@ -78,6 +78,8 @@ _TICKER_METHODS: Set[str] = {
     # Stock participant data (COL-144)
     "get_stock_northbound_holdings",
     "get_stock_top10_shareholders",
+    # Quantitative (needs single symbol)
+    "get_stock_factors",
 }
 
 # market-wide: no symbol resolution, forward kwargs as-is
@@ -158,7 +160,6 @@ _MARKET_METHODS: Set[str] = {
     "get_etf_detail",
     "get_etf_performance",
     # Factor / correlation / ranking (COL-142)
-    "get_stock_factors",
     "get_stock_correlation",
     "get_factor_ranking",
 }

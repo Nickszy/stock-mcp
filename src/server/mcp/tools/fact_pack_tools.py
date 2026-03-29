@@ -73,148 +73,26 @@ def register_fact_pack_tools(mcp: FastMCP):
                 f"(耗时 {elapsed:.1f}s)"
             )
 
-            # Build structured Markdown fact view
-            md = f"# 股票事实包: {name}({symbol})\n\n"
-            md += f"**已获取**: {categories_fetched}/{categories_total} 类"
-            md += f" | **耗时**: {elapsed:.1f}s\n\n"
-
-            # Coverage summary
-            if coverage:
-                complete = sum(1 for v in coverage.values() if v == "complete")
-                partial = sum(1 for v in coverage.values() if v == "partial")
-                md += f"**覆盖率**: {complete}完整 + {partial}部分 / {categories_total}类\n\n"
-
-            facts = result.get("facts", {})
-
-            # Security master
-            sec = facts.get("security_master", {})
-            if sec:
-                md += "## 证券主数据\n\n"
-                for k, v in sec.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Financial
-            fin = facts.get("financial", {})
-            if fin:
-                md += "## 财务数据\n\n"
-                if isinstance(fin, dict):
-                    for k, v in fin.items():
-                        md += f"- **{k}**: {v}\n"
-                else:
-                    md += f"{fin}\n"
-                md += "\n"
-
-            # Market / Valuation
-            mkt = facts.get("market", {})
-            if mkt:
-                md += "## 市场估值\n\n"
-                for k, v in mkt.items():
-                    md += f"- **{k}**: {v}\n"
-                md += "\n"
-
-            # Governance
-            gov = facts.get("governance", {})
-            if gov:
-                md += "## 公司治理\n\n"
-                top10 = gov.get("top10_shareholders", [])
-                if top10:
-                    md += "### 前十大流通股东\n\n"
-                    md += "| 股东名称 | 持股数量 | 持股比例 |\n"
-                    md += "|---------|---------|----------|\n"
-                    for s in top10[:10]:
-                        if isinstance(s, dict):
-                            md += (
-                                f"| {s.get('holder_name', '')} "
-                                f"| {s.get('hold_qty', '-')} "
-                                f"| {s.get('hold_ratio', '-')} |\n"
-                            )
-                        else:
-                            md += f"| {s} |\n"
-                    md += "\n"
-                changes = gov.get("shareholder_changes", {})
-                if changes:
-                    md += f"### 股东户数变化\n\n{changes}\n\n"
-
-            # Events
-            evt = facts.get("events", {})
-            if evt:
-                md += "## 事件\n\n"
-                div = evt.get("dividends", {})
-                if div:
-                    md += "### 分红\n\n"
-                    if isinstance(div, list):
-                        for d in div[:5]:
-                            md += f"- {d}\n"
-                    else:
-                        md += f"{div}\n"
-                    md += "\n"
-                rep = evt.get("repurchase", {})
-                if rep:
-                    md += f"### 回购\n\n{rep}\n\n"
-                rst = evt.get("restricted_release", {})
-                if rst:
-                    md += f"### 解禁\n\n{rst}\n\n"
-
-            # Business structure
-            biz = facts.get("business_structure", {})
-            if biz:
-                md += "## 业务结构(主营构成)\n\n"
-                if isinstance(biz, list):
-                    for b in biz[:10]:
-                        md += f"- {b}\n"
-                else:
-                    md += f"{biz}\n"
-                md += "\n"
-
-            # Restricted Release (top-level category)
-            rr = facts.get("restricted_release", {})
-            if rr:
-                md += "## 限售解禁\n\n"
-                rr_data = rr.get("data", rr) if isinstance(rr, dict) else rr
-                if isinstance(rr_data, list):
-                    for item in rr_data[:10]:
-                        if isinstance(item, dict):
-                            md += f"- {item.get('symbol', '')} 解禁日期:{item.get('release_date', item.get('日期', '-'))} 数量:{item.get('release_volume', item.get('解禁数量', '-'))}\n"
-                        else:
-                            md += f"- {item}\n"
-                elif isinstance(rr_data, dict):
-                    for k, v in rr_data.items():
-                        md += f"- **{k}**: {v}\n"
-                else:
-                    md += f"{rr_data}\n"
-                md += "\n"
-
-            # Repurchase (top-level category)
-            rp = facts.get("repurchase", {})
-            if rp:
-                md += "## 回购数据\n\n"
-                rp_data = rp.get("data", rp) if isinstance(rp, dict) else rp
-                if isinstance(rp_data, list):
-                    for item in rp_data[:10]:
-                        if isinstance(item, dict):
-                            md += f"- {item.get('symbol', '')} 进度:{item.get('progress', item.get('实施进度', '-'))} 金额:{item.get('amount', item.get('回购金额', '-'))}\n"
-                        else:
-                            md += f"- {item}\n"
-                elif isinstance(rp_data, dict):
-                    for k, v in rp_data.items():
-                        md += f"- **{k}**: {v}\n"
-                else:
-                    md += f"{rp_data}\n"
-                md += "\n"
-
-            # Source trace (dict: category → {provider, error?})
-            trace = result.get("source_trace", {})
-            if trace:
-                md += "## 数据溯源\n\n"
-                md += "| 类别 | 详情 |\n"
-                md += "|------|------|\n"
-                for cat, info in trace.items():
-                    md += f"| {cat} | {info} |\n"
-                md += "\n"
-
-            if missing:
-                md += f"## 缺失字段\n\n> {', '.join(missing)}\n"
+            # Use adapter-generated fact_markdown (COL-181: single source of truth)
+            adapter_md = result.get("fact_markdown", "")
+            if adapter_md:
+                # Prepend runtime header (coverage/elapsed not available at adapter build time)
+                header = f"**已获取**: {categories_fetched}/{categories_total} 类"
+                header += f" | **耗时**: {elapsed:.1f}s\n\n"
+                if coverage:
+                    complete = sum(1 for v in coverage.values() if v == "complete")
+                    partial = sum(1 for v in coverage.values() if v == "partial")
+                    header += f"**覆盖率**: {complete}完整 + {partial}部分 / {categories_total}类\n\n"
+                md = adapter_md.replace(
+                    f"# 股票事实包: {name}({symbol})\n\n",
+                    f"# 股票事实包: {name}({symbol})\n\n{header}",
+                    1,
+                )
+            else:
+                # Fallback: minimal inline view when adapter didn't produce markdown
+                md = f"# 股票事实包: {name}({symbol})\n\n"
+                md += f"**已获取**: {categories_fetched}/{categories_total} 类"
+                md += f" | **耗时**: {elapsed:.1f}s\n\n"
 
             return create_standard_artifact_response(
                 summary=summary,

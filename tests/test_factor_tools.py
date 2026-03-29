@@ -157,9 +157,11 @@ class TestFactorGateway:
     """Verify factor methods are in _MARKET_METHODS."""
 
     def test_all_factor_methods_registered(self):
-        from src.server.domain.market_gateway import _MARKET_METHODS
-        factor_methods = ["get_stock_factors", "get_stock_correlation", "get_factor_ranking"]
-        for m in factor_methods:
+        from src.server.domain.market_gateway import _TICKER_METHODS, _MARKET_METHODS
+        # get_stock_factors is ticker-scoped (needs single symbol)
+        assert "get_stock_factors" in _TICKER_METHODS
+        # get_stock_correlation and get_factor_ranking are market-wide
+        for m in ["get_stock_correlation", "get_factor_ranking"]:
             assert m in _MARKET_METHODS, f"{m} not in _MARKET_METHODS"
 
 

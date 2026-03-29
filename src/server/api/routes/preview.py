@@ -71,6 +71,354 @@ _METHOD_CATEGORIES: Dict[str, List[str]] = {
     ],
 }
 
+# --- Method parameter schemas for the preview workbench ---
+# Each entry: { param_name: { type, required, default, placeholder, label } }
+# Methods NOT listed here use the default behavior:
+#   - ticker methods: auto "symbol" input
+#   - market methods: no special inputs (just extra params)
+
+_METHOD_PARAMS: Dict[str, List[Dict[str, Any]]] = {
+    # --- Quantitative / Factor methods ---
+    "get_stock_factors": [
+        {
+            "name": "symbol",
+            "type": "text",
+            "required": True,
+            "default": "600519",
+            "placeholder": "e.g. 600519, 000858",
+            "label": "symbol",
+        },
+        {
+            "name": "days",
+            "type": "number",
+            "required": False,
+            "default": 250,
+            "placeholder": "Calculation window (days)",
+            "label": "days",
+        },
+    ],
+    "get_stock_correlation": [
+        {
+            "name": "symbols",
+            "type": "text",
+            "required": True,
+            "default": "600519,000858,000333",
+            "placeholder": "Comma-separated codes, e.g. 600519,000858",
+            "label": "symbols",
+        },
+        {
+            "name": "days",
+            "type": "number",
+            "required": False,
+            "default": 60,
+            "placeholder": "Correlation window (days)",
+            "label": "days",
+        },
+    ],
+    "get_factor_ranking": [
+        {
+            "name": "factor",
+            "type": "select",
+            "required": False,
+            "default": "change_pct",
+            "options": ["change_pct", "turnover_rate", "volume_ratio", "amplitude"],
+            "label": "factor",
+        },
+        {
+            "name": "direction",
+            "type": "select",
+            "required": False,
+            "default": "desc",
+            "options": ["desc", "asc"],
+            "label": "direction",
+        },
+        {
+            "name": "limit",
+            "type": "number",
+            "required": False,
+            "default": 30,
+            "label": "limit",
+        },
+        {
+            "name": "exchange",
+            "type": "select",
+            "required": False,
+            "default": "",
+            "options": ["", "SSE", "SZSE", "BSE"],
+            "label": "exchange",
+        },
+    ],
+    "screen_stocks": [
+        {
+            "name": "min_pe",
+            "type": "number",
+            "required": False,
+            "default": None,
+            "placeholder": "Min P/E",
+            "label": "min_pe",
+        },
+        {
+            "name": "max_pe",
+            "type": "number",
+            "required": False,
+            "default": None,
+            "placeholder": "Max P/E",
+            "label": "max_pe",
+        },
+        {
+            "name": "min_pb",
+            "type": "number",
+            "required": False,
+            "default": None,
+            "placeholder": "Min P/B",
+            "label": "min_pb",
+        },
+        {
+            "name": "max_pb",
+            "type": "number",
+            "required": False,
+            "default": None,
+            "placeholder": "Max P/B",
+            "label": "max_pb",
+        },
+        {
+            "name": "min_market_cap",
+            "type": "number",
+            "required": False,
+            "default": None,
+            "placeholder": "Min market cap (亿)",
+            "label": "min_market_cap",
+        },
+        {
+            "name": "max_market_cap",
+            "type": "number",
+            "required": False,
+            "default": None,
+            "placeholder": "Max market cap (亿)",
+            "label": "max_market_cap",
+        },
+        {
+            "name": "min_price",
+            "type": "number",
+            "required": False,
+            "default": None,
+            "placeholder": "Min price",
+            "label": "min_price",
+        },
+        {
+            "name": "max_price",
+            "type": "number",
+            "required": False,
+            "default": None,
+            "placeholder": "Max price",
+            "label": "max_price",
+        },
+        {
+            "name": "min_turnover_rate",
+            "type": "number",
+            "required": False,
+            "default": None,
+            "placeholder": "Min turnover %",
+            "label": "min_turnover_rate",
+        },
+        {
+            "name": "exchange",
+            "type": "select",
+            "required": False,
+            "default": None,
+            "options": [None, "SSE", "SZSE", "BSE"],
+            "label": "exchange",
+        },
+        {
+            "name": "sector",
+            "type": "text",
+            "required": False,
+            "default": None,
+            "placeholder": "Sector filter",
+            "label": "sector",
+        },
+        {
+            "name": "sort_by",
+            "type": "select",
+            "required": False,
+            "default": "market_cap",
+            "options": ["market_cap", "pe", "pb", "change_pct", "turnover_rate"],
+            "label": "sort_by",
+        },
+        {
+            "name": "sort_order",
+            "type": "select",
+            "required": False,
+            "default": "desc",
+            "options": ["desc", "asc"],
+            "label": "sort_order",
+        },
+        {
+            "name": "limit",
+            "type": "number",
+            "required": False,
+            "default": 50,
+            "label": "limit",
+        },
+    ],
+    "get_industry_ranking": [
+        {
+            "name": "sort_by",
+            "type": "select",
+            "required": False,
+            "default": "change_pct",
+            "options": ["change_pct", "turnover_rate", "volume", "amount"],
+            "label": "sort_by",
+        },
+        {
+            "name": "sort_order",
+            "type": "select",
+            "required": False,
+            "default": "desc",
+            "options": ["desc", "asc"],
+            "label": "sort_order",
+        },
+        {
+            "name": "limit",
+            "type": "number",
+            "required": False,
+            "default": 30,
+            "label": "limit",
+        },
+    ],
+    "get_concept_ranking": [
+        {
+            "name": "sort_by",
+            "type": "select",
+            "required": False,
+            "default": "change_pct",
+            "options": ["change_pct", "turnover_rate", "volume", "amount"],
+            "label": "sort_by",
+        },
+        {
+            "name": "sort_order",
+            "type": "select",
+            "required": False,
+            "default": "desc",
+            "options": ["desc", "asc"],
+            "label": "sort_order",
+        },
+        {
+            "name": "limit",
+            "type": "number",
+            "required": False,
+            "default": 30,
+            "label": "limit",
+        },
+    ],
+    # --- Sector methods with custom params ---
+    "get_sector_trend": [
+        {
+            "name": "sector_name",
+            "type": "text",
+            "required": True,
+            "default": "半导体",
+            "placeholder": "e.g. 半导体, 白酒, 新能源",
+            "label": "sector_name",
+        },
+    ],
+    "get_sector_money_flow_history": [
+        {
+            "name": "sector_name",
+            "type": "text",
+            "required": True,
+            "default": "半导体",
+            "placeholder": "e.g. 半导体, 白酒",
+            "label": "sector_name",
+        },
+    ],
+    "get_sector_valuation_metrics": [
+        {
+            "name": "sector_name",
+            "type": "text",
+            "required": True,
+            "default": "半导体",
+            "placeholder": "e.g. 半导体, 白酒",
+            "label": "sector_name",
+        },
+    ],
+    # --- US Market methods ---
+    "get_us_sector_etf_analysis": [
+        {
+            "name": "sector_name",
+            "type": "select",
+            "required": True,
+            "default": "Technology",
+            "options": [
+                "Technology", "Healthcare", "Financials", "Energy",
+                "Consumer Discretionary", "Industrials", "Materials",
+                "Utilities", "Real Estate", "Consumer Staples",
+                "Communication Services",
+            ],
+            "label": "sector_name",
+        },
+    ],
+    "resolve_sector": [
+        {
+            "name": "sector_name",
+            "type": "text",
+            "required": True,
+            "default": "半导体",
+            "placeholder": "e.g. 半导体, Semiconductors",
+            "label": "sector_name",
+        },
+        {
+            "name": "market",
+            "type": "select",
+            "required": False,
+            "default": "auto",
+            "options": ["auto", "cn", "us", "hk"],
+            "label": "market",
+        },
+    ],
+    # --- Index / ETF search methods ---
+    "search_funds": [
+        {
+            "name": "keyword",
+            "type": "text",
+            "required": True,
+            "default": "沪深300",
+            "placeholder": "Fund name or code",
+            "label": "keyword",
+        },
+    ],
+    "get_fund_detail": [
+        {
+            "name": "fund_code",
+            "type": "text",
+            "required": True,
+            "default": "510300",
+            "placeholder": "e.g. 510300",
+            "label": "fund_code",
+        },
+    ],
+    "get_etf_detail": [
+        {
+            "name": "symbol",
+            "type": "text",
+            "required": True,
+            "default": "510300",
+            "placeholder": "e.g. 510300",
+            "label": "symbol",
+        },
+    ],
+    "get_index_pe_pb": [
+        {
+            "name": "symbol",
+            "type": "text",
+            "required": True,
+            "default": "000300",
+            "placeholder": "Index code, e.g. 000300",
+            "label": "symbol",
+        },
+    ],
+}
+
 # Reverse lookup: method -> category
 _METHOD_TO_CATEGORY: Dict[str, str] = {}
 for _cat, _methods in _METHOD_CATEGORIES.items():
@@ -135,6 +483,7 @@ async def preview_catalog():
             "name": method_name,
             "type": "ticker",
             "sources": available,
+            "params": _METHOD_PARAMS.get(method_name),
         }
 
     for method_name in sorted(_MARKET_METHODS):
@@ -146,6 +495,7 @@ async def preview_catalog():
             "name": method_name,
             "type": "market",
             "sources": available,
+            "params": _METHOD_PARAMS.get(method_name),
         }
 
     # Group by category
@@ -195,7 +545,11 @@ async def preview_query(request: PreviewQueryRequest):
         try:
             if source_name == "auto":
                 method = getattr(gateway, method_name)
-                data = await method(**params)
+                # Ticker methods expect (raw_symbol, **kwargs); frontends send (symbol=...)
+                call_params = dict(params)
+                if method_name in _TICKER_METHODS and "symbol" in call_params:
+                    call_params["raw_symbol"] = call_params.pop("symbol")
+                data = await method(**call_params)
                 elapsed = (time.perf_counter() - t0) * 1000
                 results["auto"] = {
                     "data": data,

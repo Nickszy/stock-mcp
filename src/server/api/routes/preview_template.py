@@ -164,7 +164,8 @@ function renderSidebar(data) {
     html += '<div class="cat-methods">';
     for (const m of cat.methods) {
       html += '<div class="method-item" data-method="'+esc(m.name)+'" data-type="'+esc(m.type)+'" data-sources=\''+
-              esc(JSON.stringify(m.sources))+'\' onclick="selectMethod(this)">'+
+              esc(JSON.stringify(m.sources))+'\' data-params=\''+
+              esc(JSON.stringify(m.params || null))+'\' onclick="selectMethod(this)">'+
               esc(m.name) + '<span class="type-badge">' + esc(m.type) + '</span></div>';
     }
     html += '</div></div>';
@@ -187,24 +188,70 @@ function selectMethod(el) {
   const name = el.dataset.method;
   const type = el.dataset.type;
   const sources = JSON.parse(el.dataset.sources || '[]');
-  currentMethod = { name, type, sources };
-  renderParams(name, type, sources);
+  const params = JSON.parse(el.dataset.params || 'null');
+  currentMethod = { name, type, sources, params };
+  renderParams(name, type, sources, params);
 }
 
-function renderParams(name, type, sources) {
+// --- Market-aware symbol defaults ---
+const MARKET_DEFAULTS = {
+  'cn': { symbol: 'SSE:600519', placeholder: 'e.g. SSE:600519, SZSE:000858' },
+  'us': { symbol: 'NASDAQ:AAPL', placeholder: 'e.g. NASDAQ:AAPL, NYSE:TSLA' },
+  'hk': { symbol: 'HKEX:00700', placeholder: 'e.g. HKEX:00700, HKEX:09988' },
+};
+
+function detectMarket(symbol) {
+  const s = symbol.toUpperCase();
+  if (s.includes('SSE:') || s.includes('SZSE:') || s.includes('BSE:')) return 'cn';
+  if (/^\d{6}$/.test(s)) return 'cn';
+  if (s.includes('NASDAQ:') || s.includes('NYSE:') || s.includes('AMEX:')) return 'us';
+  if (s.includes('HKEX:') || s.includes('SEHK:')) return 'hk';
+  return 'cn';
+}
+
+function renderParams(name, type, sources, paramsSchema) {
   const p = document.getElementById('paramsPanel');
   let html = '<div class="method-title">' + esc(name) +
              '<span class="type-tag">' + esc(type) + '</span></div>';
 
-  // Symbol input for ticker methods
-  if (type === 'ticker') {
+  if (paramsSchema && paramsSchema.length > 0) {
+    // Method has a custom parameter schema — render dedicated inputs
+    for (const param of paramsSchema) {
+      html += '<div class="param-row"><label>' + esc(param.label || param.name) + '</label>';
+      if (param.type === 'select' && param.options) {
+        html += '<select id="p_' + esc(param.name) + '" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-size:13px;min-width:200px">';
+        for (const opt of param.options) {
+          const optVal = opt === null ? '' : opt;
+          const optLabel = optVal === '' ? '(all)' : optVal;
+          const selected = (optVal == param.default) ? ' selected' : '';
+          html += '<option value="'+esc(String(optVal))+'"'+selected+'>'+esc(String(optLabel))+'</option>';
+        }
+        html += '</select>';
+      } else {
+        const val = param.default != null ? param.default : '';
+        const ph = param.placeholder || '';
+        html += '<input id="p_' + esc(param.name) + '" placeholder="'+esc(ph)+'" value="'+esc(String(val))+'">';
+      }
+      if (param.required) {
+        html += '<span style="color:var(--error);font-size:11px;margin-left:4px">*</span>';
+      }
+      html += '</div>';
+    }
+  } else if (type === 'ticker') {
+    // Default ticker method — render symbol input with market selector
+    html += '<div class="param-row"><label>market</label>' +
+            '<select id="p_market" onchange="updateSymbolDefault()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-size:13px;min-width:200px">' +
+            '<option value="cn">A-Share (CN)</option>' +
+            '<option value="us">US Stock</option>' +
+            '<option value="hk">HK Stock</option>' +
+            '</select></div>';
     html += '<div class="param-row"><label>symbol</label>' +
-            '<input id="p_symbol" placeholder="e.g. SSE:600519 or AAPL" value="SSE:600519"></div>';
+            '<input id="p_symbol" placeholder="e.g. SSE:600519 or NASDAQ:AAPL" value="SSE:600519"></div>';
   }
 
-  // Common params
+  // Extra params (semicolon-separated to avoid breaking comma values)
   html += '<div class="param-row"><label>extra params</label>' +
-          '<input id="p_extra" placeholder="key1=val1,key2=val2 (optional)"></div>';
+          '<input id="p_extra" placeholder="key1=val1;key2=val2 (optional, use ; separator)"></div>';
 
   // Sources
   html += '<div class="sources-row"><label>sources</label>';
@@ -219,6 +266,15 @@ function renderParams(name, type, sources) {
   p.innerHTML = html;
 }
 
+function updateSymbolDefault() {
+  const market = document.getElementById('p_market').value;
+  const symInput = document.getElementById('p_symbol');
+  if (symInput && MARKET_DEFAULTS[market]) {
+    symInput.value = MARKET_DEFAULTS[market].symbol;
+    symInput.placeholder = MARKET_DEFAULTS[market].placeholder;
+  }
+}
+
 // --- Execute ---
 async function execute() {
   if (!currentMethod) return;
@@ -228,19 +284,46 @@ async function execute() {
   spinner.style.display = 'inline-block';
 
   const params = {};
-  if (currentMethod.type === 'ticker') {
-    const sym = document.getElementById('p_symbol').value.trim();
-    if (!sym) { alert('Symbol required for ticker methods'); btn.disabled=false; spinner.style.display='none'; return; }
-    params.symbol = sym;
+
+  // Collect params from schema-driven inputs
+  if (currentMethod.params && currentMethod.params.length > 0) {
+    for (const param of currentMethod.params) {
+      const el = document.getElementById('p_' + param.name);
+      if (!el) continue;
+      let val = el.value.trim();
+      if (param.type === 'number' && val !== '') {
+        val = Number(val);
+        if (isNaN(val)) { alert(param.name + ' must be a number'); btn.disabled=false; spinner.style.display='none'; return; }
+      }
+      if (param.type === 'select' && val === '') val = null;
+      if (val !== '' && val !== null) {
+        params[param.name] = val;
+      } else if (param.required) {
+        alert(param.name + ' is required'); btn.disabled=false; spinner.style.display='none'; return;
+      }
+    }
+  } else if (currentMethod.type === 'ticker') {
+    // Default ticker method — collect symbol
+    const sym = document.getElementById('p_symbol');
+    if (sym) {
+      const val = sym.value.trim();
+      if (!val) { alert('Symbol required for ticker methods'); btn.disabled=false; spinner.style.display='none'; return; }
+      params.symbol = val;
+    }
   }
-  // Parse extra params
+
+  // Parse extra params (semicolon-separated to preserve commas in values)
   const extra = (document.getElementById('p_extra').value || '').trim();
   if (extra) {
-    for (const pair of extra.split(',')) {
-      const [k,v] = pair.split('=').map(s => s.trim());
-      if (k && v) {
-        const num = Number(v);
-        params[k] = isNaN(num) || v.includes('.') === false && v.length > 10 ? v : num;
+    for (const pair of extra.split(';')) {
+      const eqIdx = pair.indexOf('=');
+      if (eqIdx > 0) {
+        const k = pair.substring(0, eqIdx).trim();
+        const v = pair.substring(eqIdx + 1).trim();
+        if (k && v && !(k in params)) {
+          const num = Number(v);
+          params[k] = isNaN(num) || (v.indexOf('.') === -1 && v.length > 10) ? v : num;
+        }
       }
     }
   }

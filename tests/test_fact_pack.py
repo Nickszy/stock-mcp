@@ -663,3 +663,129 @@ class TestMarketFactPackMCPTool:
         assert content["data"]["entity"]["symbol"] == "600519"
         assert "markdown" in content
         assert "600519" in result["summary"]
+
+
+# =====================================================================
+# fact_markdown Contract Tests (COL-181)
+# =====================================================================
+
+
+class TestFactMarkdownContract:
+    """Verify fact_markdown is part of the unified fact-pack contract."""
+
+    def test_stock_adapter_includes_fact_markdown(self, mock_cache):
+        """Adapter get_stock_fact_pack should return fact_markdown field."""
+        from src.server.domain.adapters.akshare_adapter import AkshareAdapter
+
+        adapter = AkshareAdapter(mock_cache)
+
+        with patch.object(adapter, "get_asset_info", new_callable=AsyncMock) as m_info, \
+             patch.object(adapter, "get_financials", new_callable=AsyncMock) as m_fin, \
+             patch.object(adapter, "_get_valuation_raw", new_callable=AsyncMock) as m_val, \
+             patch.object(adapter, "get_money_flow", new_callable=AsyncMock) as m_mf, \
+             patch.object(adapter, "get_stock_top10_shareholders", new_callable=AsyncMock) as m_top10, \
+             patch.object(adapter, "get_stock_shareholder_changes", new_callable=AsyncMock) as m_chg, \
+             patch.object(adapter, "get_dividend_info", new_callable=AsyncMock) as m_div, \
+             patch.object(adapter, "get_repurchase_info", new_callable=AsyncMock) as m_rep, \
+             patch.object(adapter, "get_restricted_release", new_callable=AsyncMock) as m_rst, \
+             patch.object(adapter, "get_mainbz_info", new_callable=AsyncMock) as m_biz:
+
+            m_info.return_value = _mock_asset_info("贵州茅台", "600519")
+            m_fin.return_value = {"revenue": 100}
+            m_val.return_value = {"pe": 30.5}
+            m_mf.return_value = {"net_inflow": 1e8}
+            m_top10.return_value = {"data": [{"holder_name": "A", "hold_qty": 100}]}
+            m_chg.return_value = {"data": [{"total": 150000}]}
+            m_div.return_value = {"dividend_yield": 0.02}
+            m_rep.return_value = {"data": [{"symbol": "600519", "progress": "实施中", "amount": 10e8}]}
+            m_rst.return_value = {"data": [{"symbol": "600519", "release_date": "2025-06-01", "release_volume": 1000}]}
+            m_biz.return_value = [{"biz": "白酒"}]
+
+            result = _run(adapter.get_stock_fact_pack(symbol="600519"))
+
+        # COL-181: fact_markdown must be a contract field
+        assert "fact_markdown" in result, "fact_markdown missing from stock fact pack contract"
+        assert isinstance(result["fact_markdown"], str)
+        assert len(result["fact_markdown"]) > 0
+        # Markdown should contain the entity name
+        assert "贵州茅台" in result["fact_markdown"] or "600519" in result["fact_markdown"]
+
+    def test_mcp_tool_uses_adapter_fact_markdown(self, mock_cache):
+        """MCP tool should use adapter's fact_markdown instead of rebuilding."""
+        from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
+        from src.server.core.dependencies import Container
+
+        mock_pack = {
+            "source": "akshare",
+            "entity": {"symbol": "600519", "type": "stock"},
+            "facts": {
+                "security_master": {"code": "600519", "name": "贵州茅台"},
+                "financial": {"revenue": 100},
+                "market": {"pe": 30.5},
+            },
+            "source_trace": {},
+            "coverage": {
+                "security_master": "complete",
+                "financial": "complete",
+                "market": "complete",
+            },
+            "missing_fields": [],
+            "categories_fetched": 3,
+            "categories_total": 8,
+            "fact_markdown": "# 股票事实包: 贵州茅台(600519)\n\n## 证券主数据\n\n- **name**: 贵州茅台\n",
+        }
+
+        mock_gw = MagicMock()
+        mock_gw.get_stock_fact_pack = AsyncMock(return_value=mock_pack)
+
+        with patch.object(Container, "market_gateway", return_value=mock_gw):
+            captured = {}
+
+            class MockMCP:
+                def tool(self, **kwargs):
+                    def decorator(fn):
+                        key = frozenset(kwargs.get("tags", set()))
+                        captured[key] = fn
+                        return fn
+                    return decorator
+
+            register_fact_pack_tools(MockMCP())
+            tool_fn = list(captured.values())[0]
+            result = _run(tool_fn(symbol="600519"))
+
+        content = result["artifact"]["content"]
+        md = content.get("markdown", "")
+        # The adapter's fact_markdown content should be preserved
+        assert "贵州茅台" in md
+        assert "证券主数据" in md
+
+    def test_all_contract_fields_present(self, mock_cache):
+        """Verify all 6 unified contract fields are in stock fact pack."""
+        from src.server.domain.adapters.akshare_adapter import AkshareAdapter
+
+        adapter = AkshareAdapter(mock_cache)
+
+        with patch.object(adapter, "get_asset_info", new_callable=AsyncMock) as m_info, \
+             patch.object(adapter, "get_financials", new_callable=AsyncMock) as m_fin, \
+             patch.object(adapter, "_get_valuation_raw", new_callable=AsyncMock) as m_val, \
+             patch.object(adapter, "get_money_flow", new_callable=AsyncMock) as m_mf, \
+             patch.object(adapter, "get_stock_top10_shareholders", new_callable=AsyncMock) as m_top10, \
+             patch.object(adapter, "get_stock_shareholder_changes", new_callable=AsyncMock) as m_chg, \
+             patch.object(adapter, "get_dividend_info", new_callable=AsyncMock) as m_div, \
+             patch.object(adapter, "get_repurchase_info", new_callable=AsyncMock) as m_rep, \
+             patch.object(adapter, "get_restricted_release", new_callable=AsyncMock) as m_rst, \
+             patch.object(adapter, "get_mainbz_info", new_callable=AsyncMock) as m_biz:
+
+            for m in [m_info, m_fin, m_val, m_mf, m_top10, m_chg, m_div, m_rep, m_rst, m_biz]:
+                m.return_value = {}
+            m_info.return_value = _mock_asset_info("测试", "000001")
+
+            result = _run(adapter.get_stock_fact_pack(symbol="000001"))
+
+        # COL-181: the 6 contract fields
+        required_fields = [
+            "entity", "facts", "fact_markdown",
+            "source_trace", "coverage", "missing_fields",
+        ]
+        for field in required_fields:
+            assert field in result, f"Contract field '{field}' missing from fact pack"
