@@ -6406,14 +6406,31 @@ class AkshareAdapter(BaseDataAdapter):
 
         # --- 5. Scale (规模与份额事实) ---
         try:
-            scale = await self.get_fund_scale()
-            if scale and "error" not in scale:
-                facts["scale"] = {
-                    k: v for k, v in scale.items()
-                    if k not in ("source", "error")
-                }
-                coverage["scale"] = "partial"  # market-wide, not fund-specific
-                source_trace["scale"] = {"provider": "akshare"}
+            # Extract fund-specific scale from already-fetched detail data
+            # (get_fund_scale() returns market-wide data, not fund-specific)
+            detail_raw = facts.get("master", {})
+            scale_info: Dict[str, Any] = {}
+            # Extract AUM/scale fields from detail
+            for key in ("基金规模", "fund_size", "规模", "成立规模", "latest_size"):
+                val = detail_raw.get(key) if isinstance(detail_raw, dict) else None
+                if val is not None:
+                    scale_info["aum"] = val
+                    break
+            # Also include latest NAV as scale proxy
+            nav_data = facts.get("nav", {})
+            if isinstance(nav_data, dict):
+                nav_history = nav_data.get("nav_history", [])
+                if nav_history and isinstance(nav_history, list):
+                    latest = nav_history[0] if nav_history else None
+                    if isinstance(latest, dict):
+                        for k in ("nav", "单位净值", "累积净值"):
+                            if latest.get(k) is not None:
+                                scale_info["latest_nav"] = latest[k]
+                                break
+            if scale_info:
+                facts["scale"] = scale_info
+                coverage["scale"] = "complete" if scale_info.get("aum") else "partial"
+                source_trace["scale"] = {"provider": "akshare", "note": "derived from fund detail and NAV"}
             else:
                 coverage["scale"] = "missing"
                 missing_fields.append("scale")
