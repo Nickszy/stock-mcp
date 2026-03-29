@@ -6377,8 +6377,9 @@ class AkshareAdapter(BaseDataAdapter):
                     facts["manager"] = filtered
                     coverage["manager"] = "complete"
                 else:
-                    facts["manager"] = mgr_data[:3]  # top managers as reference
-                    coverage["manager"] = "partial"
+                    # Do NOT fall back to unrelated managers — mark as missing
+                    coverage["manager"] = "missing"
+                    missing_fields.append("manager")
                 source_trace["manager"] = {"provider": "akshare"}
             else:
                 coverage["manager"] = "missing"
