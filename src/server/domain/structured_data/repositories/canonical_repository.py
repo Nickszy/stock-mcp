@@ -177,9 +177,41 @@ class CanonicalRepository:
                 """
                 SELECT * FROM canonical_records
                 WHERE dataset_key = $1
+                  AND superseded_at IS NULL
                 ORDER BY published_at DESC LIMIT $2
                 """,
                 dataset_key,
+                limit,
+            )
+        return [dict(r) for r in rows]
+
+    async def find_by_symbol(
+        self,
+        dataset_key: str,
+        exchange: str,
+        symbol: str,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Find all active canonical records for a given symbol.
+
+        Queries by business_key prefix ``{exchange}:{symbol}`` and returns
+        matching records ordered by report_period descending.
+        """
+        pool = await self._get_pool()
+        if not pool:
+            return []
+        async with pool.acquire() as conn:
+            prefix = f"{exchange}:{symbol}:%"
+            rows = await conn.fetch(
+                """
+                SELECT * FROM canonical_records
+                WHERE dataset_key = $1
+                  AND superseded_at IS NULL
+                  AND business_key LIKE $2
+                ORDER BY published_at DESC LIMIT $3
+                """,
+                dataset_key,
+                prefix,
                 limit,
             )
         return [dict(r) for r in rows]

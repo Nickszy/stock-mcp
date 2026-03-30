@@ -17,12 +17,48 @@ Adding a new gateway-delegating use case:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional
+import json
+from typing import Any, Callable, Dict, List, Optional
 
 from src.server.core.dependencies import Container
 from src.server.domain.field_translator import translate_financial_payload
 from src.server.domain.response_contract import create_data_response
 from src.server.utils.logger import logger
+
+
+# ---------------------------------------------------------------------------
+# Canonical bridge — lazy-accessor for the canonical repository
+# ---------------------------------------------------------------------------
+
+_canonical_repo = None
+
+
+def _get_canonical_repo():
+    """Return the CanonicalRepository if PostgreSQL is available.
+
+    Lazily creates one from the Container's postgres connection.
+    Returns None if PostgreSQL is not configured or not connected.
+    """
+    global _canonical_repo
+    if _canonical_repo is not None:
+        return _canonical_repo
+    try:
+        from src.server.domain.structured_data.repositories.canonical_repository import (
+            CanonicalRepository,
+        )
+        pg = Container.postgres()
+        if pg and getattr(pg, "connected", False):
+            _canonical_repo = CanonicalRepository(pg)
+            return _canonical_repo
+    except Exception:
+        pass
+    return None
+
+
+def reset_canonical_repo() -> None:
+    """Reset cached canonical repo (for testing)."""
+    global _canonical_repo
+    _canonical_repo = None
 
 
 # ---------------------------------------------------------------------------
@@ -105,25 +141,18 @@ async def get_stock_financial_statements(
     period: str = "all",
     periods: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Unified financial statements with standardised response contract.
+    """Unified financial statements with canonical-first reading.
 
-    Wraps the gateway-level ``get_financial_statements`` call so that both
-    REST and MCP consumers receive a consistent payload.
-
-    Parameters
-    ----------
-    symbol:
-        Ticker in any accepted format (``600519``, ``SSE:600519``, etc.).
-    period:
-        ``"quarterly"`` | ``"annual"`` | ``"all"``.
-    periods:
-        Max number of periods to return. ``None`` = all available.
-
-    Returns
-    -------
-    dict
-        Standard data-response contract with ``source``, ``data``, etc.
+    When canonical data exists, return it directly (high quality, validated,
+    structured data).  When canonical is not available, fall back to live
+    gateway call.  Response includes source attribution via
+    ``source_type: "canonical" | "live"``.
     """
+    import json as _json
+    from src.server.domain.structured_data.canonical_reader import (
+        read_canonical_financial_statements,
+    )
+
     gateway = Container.market_gateway()
     logger.info(
         "UseCase: get_stock_financial_statements",
@@ -131,6 +160,62 @@ async def get_stock_financial_statements(
         period=period,
         periods=periods,
     )
+
+    # --- Canonical-first bridge ---
+    clean_symbol = symbol
+    exchange = ""
+    for prefix in ("SSE:", "SZSE:", "BSE:", "NASDAQ:", "NYSE:"):
+        if symbol.startswith(prefix):
+            exchange = prefix.rstrip(":")
+            clean_symbol = symbol[len(prefix):]
+            break
+
+    if exchange:
+        canonical = await read_canonical_financial_statements(
+            dataset_key="financial_statements",
+            symbol=clean_symbol,
+            exchange=exchange,
+        )
+        if canonical is not None:
+            income_q, income_a = [], []
+            balance_q, balance_a = [], []
+            cashflow_q, cashflow_a = [], []
+
+            for rec in canonical:
+                data = rec.get("data", {})
+                rp = rec.get("report_period", "")
+                is_annual = rp.endswith("1231") if rp else False
+                income = data.get("income_statement", [])
+                balance = data.get("balance_sheet", [])
+                cashflow = data.get("cash_flow", data.get("cashflow", []))
+                if is_annual:
+                    income_a.extend(income if isinstance(income, list) else [income])
+                    balance_a.extend(balance if isinstance(balance, list) else [balance])
+                    cashflow_a.extend(cashflow if isinstance(cashflow, list) else [cashflow])
+                else:
+                    income_q.extend(income if isinstance(income, list) else [income])
+                    balance_q.extend(balance if isinstance(balance, list) else [balance])
+                    cashflow_q.extend(cashflow if isinstance(cashflow, list) else [cashflow])
+
+            translated = translate_financial_payload({
+                "income_statement": {"quarterly": income_q, "annual": income_a},
+                "balance_sheet": {"quarterly": balance_q, "annual": balance_a},
+                "cash_flow": {"quarterly": cashflow_q, "annual": cashflow_a},
+            })
+
+            result = create_data_response(
+                data=translated,
+                symbol=symbol,
+                source="canonical",
+                period=period,
+                limit=periods,
+            )
+            result["source"]["source_type"] = "canonical"
+            result["source"]["provider"] = canonical[0].get("provider", "canonical") if canonical else "canonical"
+            logger.info("Canonical data hit", symbol=symbol, records=len(canonical))
+            return result
+
+    # --- Fallback to live gateway ---
     raw = await gateway.get_financial_statements(
         symbol, report_type=period, periods=periods
     )
@@ -139,17 +224,19 @@ async def get_stock_financial_statements(
     if isinstance(source, dict):
         source = source.get("provider", "unknown")
 
-    # Translate raw coded/abbreviated fields into human-readable form
     translated = translate_financial_payload({
         "income_statement": raw.get("income_statement", {}),
         "balance_sheet": raw.get("balance_sheet", {}),
         "cash_flow": raw.get("cash_flow", {}),
     })
 
-    return create_data_response(
+    result = create_data_response(
         data=translated,
         symbol=raw.get("ts_code") or raw.get("ticker") or symbol,
         source=source,
         period=period,
         limit=periods,
     )
+    result["source"]["source_type"] = "live"
+    return result
+
