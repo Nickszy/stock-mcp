@@ -35,6 +35,7 @@ from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
 from src.server.mcp.tools.cn_macro_tools import register_cn_macro_tools
 from src.server.mcp.tools.fixed_income_tools import register_fixed_income_tools
 from src.server.mcp.tools.research_report_tools import register_research_report_tools
+from src.server.mcp.tools.commodity_tools import register_commodity_tools
 
 
 @dataclass(frozen=True)
@@ -208,6 +209,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="研报数据 (研报搜索/个股研报 — 接入news-mcp)",
         count=2,
+    ),
+    ToolGroup(
+        name="commodity",
+        register=register_commodity_tools,
+        enabled=True,
+        description="大宗商品 (黄金/白银/原油期货/商品概览)",
+        count=4,
     ),
 ]
 
