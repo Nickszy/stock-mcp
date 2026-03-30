@@ -38,6 +38,7 @@ from src.server.mcp.tools.research_report_tools import register_research_report_
 from src.server.mcp.tools.commodity_tools import register_commodity_tools
 from src.server.mcp.tools.option_tools import register_option_tools
 from src.server.mcp.tools.sentiment_tools import register_sentiment_tools
+from src.server.mcp.tools.hk_market_tools import register_hk_market_tools
 
 
 @dataclass(frozen=True)
@@ -232,6 +233,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="市场情绪/QVIX (50ETF/300ETF/1000/CYB/总览)",
         count=5,
+    ),
+    ToolGroup(
+        name="hk-market",
+        register=register_hk_market_tools,
+        enabled=True,
+        description="港股市场 (全市场/热度榜/主板/总览)",
+        count=4,
     ),
 ]
 

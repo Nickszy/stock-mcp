@@ -3332,6 +3332,99 @@ class AkshareAdapter(BaseDataAdapter):
             "source": "akshare",
         }
 
+    async def get_hk_market_spot(self) -> Dict[str, Any]:
+        """获取港股市场实时行情列表."""
+        cache_key = "akshare:hk_market_spot"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.stock_hk_spot_em)
+            data = df.to_dict(orient="records") if df is not None and not df.empty else []
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+            result = {"data": data, "source": "akshare", "market": "HK"}
+            await self.cache.set(cache_key, result, ttl=900)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get HK market spot: {e}")
+            return {"data": [], "source": "akshare", "market": "HK", "error": str(e)}
+
+    async def get_hk_hot_rank(self) -> Dict[str, Any]:
+        """获取港股热度排行."""
+        cache_key = "akshare:hk_hot_rank"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.stock_hk_hot_rank_em)
+            data = df.to_dict(orient="records") if df is not None and not df.empty else []
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+            result = {"data": data, "source": "akshare", "market": "HK"}
+            await self.cache.set(cache_key, result, ttl=900)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get HK hot rank: {e}")
+            return {"data": [], "source": "akshare", "market": "HK", "error": str(e)}
+
+    async def get_hk_main_board(self) -> Dict[str, Any]:
+        """获取港股主板实时行情."""
+        cache_key = "akshare:hk_main_board"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.stock_hk_main_board_spot_em)
+            data = df.to_dict(orient="records") if df is not None and not df.empty else []
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+            result = {"data": data, "source": "akshare", "market": "HK"}
+            await self.cache.set(cache_key, result, ttl=900)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get HK main board: {e}")
+            return {"data": [], "source": "akshare", "market": "HK", "error": str(e)}
+
+    async def get_hk_market_overview(self) -> Dict[str, Any]:
+        """获取港股市场概览(全市场+主板+热度榜)."""
+        import asyncio
+
+        indicators: Dict[str, Any] = {}
+        errors: list[str] = []
+
+        async def _safe(label: str, coro):
+            try:
+                indicators[label] = await coro
+            except Exception as exc:
+                errors.append(f"{label}: {exc}")
+
+        await asyncio.gather(
+            _safe("spot", self.get_hk_market_spot()),
+            _safe("main_board", self.get_hk_main_board()),
+            _safe("hot_rank", self.get_hk_hot_rank()),
+        )
+
+        return {
+            "data": {
+                "indicators": indicators,
+                "counts": {
+                    "spot": len(indicators.get("spot", {}).get("data", [])),
+                    "main_board": len(indicators.get("main_board", {}).get("data", [])),
+                    "hot_rank": len(indicators.get("hot_rank", {}).get("data", [])),
+                },
+                "errors": errors,
+            },
+            "source": "akshare",
+            "market": "HK",
+        }
+
     # ------------------------------------------------------------------
     # COL-127: 行业估值PE/PB历史分位
     # ------------------------------------------------------------------

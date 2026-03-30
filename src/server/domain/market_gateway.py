@@ -144,6 +144,10 @@ _MARKET_METHODS: Set[str] = {
     "get_qvix_1000index",
     "get_qvix_cyb",
     "get_market_sentiment_overview",
+    "get_hk_market_spot",
+    "get_hk_hot_rank",
+    "get_hk_main_board",
+    "get_hk_market_overview",
     "get_fund_holdings",
     "get_commodity_inventory",
     # Stock participant data (COL-144)
