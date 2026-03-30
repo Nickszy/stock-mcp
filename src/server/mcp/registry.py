@@ -40,6 +40,9 @@ from src.server.mcp.tools.option_tools import register_option_tools
 from src.server.mcp.tools.sentiment_tools import register_sentiment_tools
 from src.server.mcp.tools.hk_market_tools import register_hk_market_tools
 from src.server.mcp.tools.hk_connect_tools import register_hk_connect_tools
+from src.server.mcp.tools.canonical_data_tools import register_canonical_data_tools
+from src.server.mcp.tools.entity_tools import register_entity_tools
+from src.server.mcp.tools.financial_analytics_tools import register_financial_analytics_tools
 
 
 @dataclass(frozen=True)
@@ -248,6 +251,28 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="港股通/南向资金 (成分股/资金流/持股排行/总览)",
         count=4,
+    ),
+    # ---- AI投研增强: Canonical数据桥接 + 实体知识图谱 + 财务分析 ----
+    ToolGroup(
+        name="canonical-data",
+        register=register_canonical_data_tools,
+        enabled=True,
+        description="Canonical数据桥接 (已验证财报/已验证行情/数据中台状态)",
+        count=3,
+    ),
+    ToolGroup(
+        name="entity",
+        register=register_entity_tools,
+        enabled=True,
+        description="实体知识图谱 (实体解析/实体详情/同行发现/实体搜索)",
+        count=4,
+    ),
+    ToolGroup(
+        name="financial-analytics",
+        register=register_financial_analytics_tools,
+        enabled=True,
+        description="AI财务分析 (增长率分析/财务健康评分)",
+        count=2,
     ),
 ]
 
