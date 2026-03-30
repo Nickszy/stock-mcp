@@ -218,6 +218,7 @@ class MarketGateway:
         symbol_resolver,
         market_router=None,
         provider_timeout_seconds: float = 12.0,
+        quote_cache=None,
     ):
         """Initialize the unified gateway.
 
@@ -225,10 +226,12 @@ class MarketGateway:
             symbol_resolver: SymbolResolver for raw_symbol → ticker conversion
             market_router: Optional MarketRouter for advanced routing (e.g., health-based)
             provider_timeout_seconds: Timeout for individual adapter calls
+            quote_cache: Optional QuoteCache for real-time price caching with single-flight
         """
         # Symbol resolution
         self._resolver = symbol_resolver
         self._router = market_router
+        self._quote_cache = quote_cache
 
         # Adapter management (migrated from AdapterManager)
         self.adapters: Dict[DataSource, BaseDataAdapter] = {}
@@ -523,8 +526,35 @@ class MarketGateway:
             return None
 
     async def get_real_time_price(self, raw_symbol: str) -> Optional[AssetPrice]:
-        """Get real-time price with router support."""
+        """Get real-time price with optional quote cache + single-flight."""
         instrument = await self.resolve_instrument(raw_symbol)
+
+        # If quote cache is available, use cache-aside + single-flight
+        if self._quote_cache is not None:
+            async def _fetch():
+                if self._router and hasattr(instrument, "normalized"):
+                    price = await self._router.get_real_time_price(instrument)
+                else:
+                    price = await self._dispatch_ticker(
+                        "get_real_time_price", instrument.normalized
+                    )
+                if price is not None and hasattr(price, "to_dict"):
+                    return price.to_dict()
+                return None
+
+            cached = await self._quote_cache.get_or_fetch(
+                instrument.normalized,
+                fetch_fn=_fetch,
+            )
+            if cached is not None and isinstance(cached, dict):
+                try:
+                    return AssetPrice.from_dict(cached)
+                except Exception:
+                    logger.warning("quote_cache: failed to deserialize cached price", ticker=instrument.normalized)
+                    return None
+            return None
+
+        # Fallback: no cache
         if self._router and hasattr(instrument, "normalized"):
             return await self._router.get_real_time_price(instrument)
         return await self._dispatch_ticker("get_real_time_price", instrument.normalized)
@@ -616,9 +646,20 @@ class MarketGateway:
                 }
 
         results: Dict[str, Any] = {}
-        resolved_tickers = [t for t in resolved_map.values() if t]
-        if resolved_tickers:
-            tasks = {t: self._dispatch_ticker("get_real_time_price", t) for t in resolved_tickers}
+        # Deduplicate resolved tickers — only fetch each unique ticker once
+        unique_tickers = list(dict.fromkeys(t for t in resolved_map.values() if t))
+        if unique_tickers:
+            # Route through quote cache if available (batch gets single-flight protection)
+            if self._quote_cache is not None:
+                tasks = {
+                    t: self._quote_cache.get_or_fetch(
+                        t,
+                        fetch_fn=lambda _t=t: self._dispatch_ticker("get_real_time_price", _t),
+                    )
+                    for t in unique_tickers
+                }
+            else:
+                tasks = {t: self._dispatch_ticker("get_real_time_price", t) for t in unique_tickers}
             price_results = await asyncio.gather(*tasks.values(), return_exceptions=True)
             price_map = {t: r for t, r in zip(tasks.keys(), price_results)}
 

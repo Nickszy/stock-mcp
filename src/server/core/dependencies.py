@@ -39,6 +39,7 @@ from src.server.domain.services.chip_service import ChipService
 
 # Import domain classes
 from src.server.domain.market_gateway import MarketGateway
+from src.server.domain.quote_cache import QuoteCache
 from src.server.domain.symbols import SymbolResolver
 from src.server.domain.routing import MarketRouter, ProviderHealthTracker, RoutingPolicy
 from src.server.domain.security_master import SecurityMasterRepository
@@ -85,6 +86,9 @@ class Container(containers.DeclarativeContainer):
 
     # Cache
     cache = providers.Singleton(AsyncRedisCache, redis_client=redis)
+
+    # Quote cache (real-time price caching with single-flight protection)
+    quote_cache = providers.Singleton(QuoteCache, cache=cache)
 
     # Adapters (each receives cache for result caching)
     yahoo_adapter = providers.Singleton(
@@ -193,6 +197,7 @@ class Container(containers.DeclarativeContainer):
             lambda cfg: cfg.timeout.provider_call_seconds,
             config,
         ),
+        quote_cache=quote_cache,
     )
 
     # MarketRouter (optional advanced routing)
