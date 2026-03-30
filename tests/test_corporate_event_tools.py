@@ -313,7 +313,7 @@ class TestCorporateEventRegistry:
     def test_total_tool_count_updated(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        assert total == 183, f"Expected 183, got {total}"
+        assert total == 184, f"Expected 184, got {total}"
 
     def test_all_event_groups_present(self):
         from src.server.mcp.registry import TOOL_GROUPS

@@ -337,6 +337,84 @@ def register_fund_tools(mcp: FastMCP):
             )
 
     # ------------------------------------------------------------------
+    # get_fund_manager_changes — 基金经理变更
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"fund", "manager-changes"})
+    async def get_fund_manager_changes(
+        fund_code: str,
+        limit: int = 10,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取基金经理变更记录 (聘任/解聘/离任).
+
+        WHEN TO USE: 用户问"这只基金经理有没有换人"、"近期人事变动".
+        CONCEPT: 基金经理变更是评估策略连续性和业绩可预测性的关键信号.
+        DIFFERENTIATION: 人事变动; 基金经理信息用 get_fund_manager; 基金详情用 get_fund_detail.
+        next_recommended_tools: get_fund_manager -> get_fund_detail
+
+        Typical use cases:
+        - "110011这只基金经理换了吗？"
+        - "查看最近基金经理离任记录"
+        - "某某基金近期有没有增聘经理？"
+
+        Args:
+            fund_code: 基金代码 (如 110011), 必填
+            limit: 返回条数 (默认10)
+            ctx: FastMCP Context.
+
+        Returns:
+            基金经理变更记录
+        """
+        if ctx:
+            await ctx.info(f"获取基金经理变更: {fund_code}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_fund_manager_changes", fund_code=fund_code)
+
+            result = await Container.market_gateway().get_fund_manager_changes(
+                fund_code=fund_code, limit=limit,
+            )
+
+            elapsed = time.perf_counter() - t0
+            changes = result.get("changes", [])
+            total = result.get("total", 0)
+
+            summary = f"基金经理变更: {fund_code} 共{total}条 (耗时 {elapsed:.1f}s)"
+
+            type_labels = {"appoint": "聘任", "dismiss": "解聘", "resign": "离任", "other": "其他"}
+            md = f"## 基金经理变更: {fund_code}\n\n"
+            md += f"**变更次数**: {total} | **耗时**: {elapsed:.1f}s\n\n"
+
+            if changes:
+                md += "| 日期 | 类型 | 公告标题 |\n"
+                md += "|------|------|----------|\n"
+                for c in changes:
+                    ct = type_labels.get(c.get("change_type", ""), c.get("change_type", "-"))
+                    md += f"| {c.get('date', '-')} | {ct} | {c.get('title', '')} |\n"
+
+            return create_standard_artifact_response(
+                summary=summary,
+                component_type=ComponentType.TABLE,
+                name=f"基金经理变更: {fund_code}",
+                data=changes,
+                source="akshare",
+                description=summary,
+                markdown=md,
+                symbol=fund_code,
+            )
+
+        except Exception as e:
+            logger.error(f"get_fund_manager_changes failed: {e}")
+            return create_standard_artifact_response(
+                summary=f"基金经理变更查询失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="经理变更错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"基金经理变更查询失败: {e}",
+            )
+
+    # ------------------------------------------------------------------
     # get_fund_valuation — 基金实时估值
     # ------------------------------------------------------------------
     @mcp.tool(tags={"fund", "valuation"})

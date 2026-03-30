@@ -161,8 +161,8 @@ TOOL_GROUPS: List[ToolGroup] = [
         name="fund",
         register=register_fund_tools,
         enabled=True,
-        description="基金数据 (搜索/详情/排行/经理/估值/业绩/规模)",
-        count=7,
+        description="基金数据 (搜索/详情/排行/经理/经理变更/估值/业绩/规模)",
+        count=8,
     ),
     ToolGroup(
         name="index",

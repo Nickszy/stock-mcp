@@ -54,4 +54,4 @@ class TestNewsRegistry:
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
         # 180 (prior) + 2 (news was disabled with count=1, now enabled with count=3, net +2)
-        assert total == 183, f"Expected 183, got {total}"
+        assert total == 184, f"Expected 184, got {total}"
