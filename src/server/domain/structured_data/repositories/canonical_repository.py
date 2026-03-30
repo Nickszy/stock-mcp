@@ -2,10 +2,11 @@
 """Repository for canonical data records - version tracking and rollback.
 
 Uses raw asyncpg SQL (project pattern - no ORM).
+All version mutations use atomic subqueries or single-statement operations
+to prevent race conditions under concurrent writes.
 """
 
 from __future__ import annotations
-
 import json
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -40,36 +41,29 @@ class CanonicalRepository:
                     candidate_id UUID,
                     data          JSONB NOT NULL DEFAULT '{}',
                     version       INT NOT NULL DEFAULT 1,
-                    source       TEXT NOT NULL DEFAULT 'auto',
+                    source        TEXT NOT NULL DEFAULT 'auto',
                     published_at  TIMESTAMP NOT NULL DEFAULT NOW(),
                     superseded_at TIMESTAMP,
                     created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
                     updated_at    TIMESTAMP NOT NULL DEFAULT NOW()
                 )
             """)
+            # UNIQUE constraint prevents version race conditions
+            await conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_canonical_bizkey_version
+                ON canonical_records(dataset_key, business_key, version)
+            """)
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_canonical_dataset
                 ON canonical_records(dataset_key)
             """)
             await conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_canonical_bizkey_ver
-                ON canonical_records(dataset_key, business_key, version)
+                CREATE INDEX IF NOT EXISTS idx_canonical_bizkey_active
+                ON canonical_records(dataset_key, business_key)
+                WHERE superseded_at IS NULL
             """)
         logger.info("CanonicalRepository schema ensured")
         return True
-
-    async def _next_version(self, pool, dataset_key: str, business_key: str) -> int:
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                SELECT MAX(version) as max_ver
-                FROM canonical_records
-                WHERE dataset_key = $1 AND business_key = $2
-                """,
-                dataset_key,
-                business_key,
-            )
-            return (row["max_ver"] or 0) + 1
 
     async def publish(
         self,
@@ -79,49 +73,58 @@ class CanonicalRepository:
         data: Dict[str, Any],
         source: str = "auto",
     ) -> str:
+        """Publish data to canonical table atomically.
+
+        Uses a single transaction with:
+        1. Atomic version via subquery (no read-then-write race)
+        2. Mark older records as superseded
+        3. Insert new record
+        """
         pool = await self._get_pool()
         if not pool:
             raise RuntimeError("PostgreSQL not available")
 
         canonical_id = str(uuid4())
-        version = await self._next_version(pool, dataset_key, business_key)
 
         async with pool.acquire() as conn:
-            # Mark older active records as superseded
-            await conn.execute(
-                """
-                UPDATE canonical_records
-                SET superseded_at = NOW(), updated_at = NOW()
-                WHERE dataset_key = $1 AND business_key = $2
-                  AND superseded_at IS NULL
-                  AND canonical_id != $3
-                """,
-                dataset_key,
-                business_key,
-                canonical_id,
-            )
-            # Insert new canonical record
-            await conn.execute(
-                """
-                INSERT INTO canonical_records (
-                    canonical_id, dataset_key, business_key, candidate_id,
-                    data, version, source
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-                """,
-                canonical_id,
-                dataset_key,
-                business_key,
-                candidate_id,
-                json.dumps(data, default=str),
-                version,
-                source,
-            )
+            async with conn.transaction():
+                # Mark older active records as superseded
+                await conn.execute(
+                    """
+                    UPDATE canonical_records
+                    SET superseded_at = NOW(), updated_at = NOW()
+                    WHERE dataset_key = $1 AND business_key = $2
+                      AND superseded_at IS NULL
+                    """,
+                    dataset_key,
+                    business_key,
+                )
+                # Insert new record with atomic version
+                await conn.execute(
+                    """
+                    INSERT INTO canonical_records (
+                        canonical_id, dataset_key, business_key, candidate_id,
+                        data, version, source
+                    ) VALUES (
+                        $1, $2, $3, $4, $5,
+                        (SELECT COALESCE(MAX(version), 0) + 1
+                         FROM canonical_records
+                         WHERE dataset_key = $2 AND business_key = $3),
+                        $6
+                    )
+                    """,
+                    canonical_id,
+                    dataset_key,
+                    business_key,
+                    candidate_id,
+                    json.dumps(data, default=str),
+                    source,
+                )
 
         logger.info(
             "Published canonical record",
             dataset_key=dataset_key,
             business_key=business_key,
-            version=version,
             source=source,
         )
         return canonical_id
@@ -184,41 +187,57 @@ class CanonicalRepository:
     async def rollback(self, dataset_key: str, business_key: str, target_version: int) -> int:
         """Roll back: supersede newer versions, re-publish the target version.
 
-        Returns the number of records superseded.
+        Creates a NEW record (new version) that copies the target version's data,
+        preserving full audit trail rather than mutating superseded_at flags.
+
+        Returns the new canonical_id.
         """
         pool = await self._get_pool()
         if not pool:
-            return 0
+            raise RuntimeError("PostgreSQL not available")
+
+        new_id = str(uuid4())
+
         async with pool.acquire() as conn:
-            # Mark current active records as superseded
-            await conn.execute(
-                """
-                UPDATE canonical_records
-                SET superseded_at = NOW(), updated_at = NOW()
-                WHERE dataset_key = $1 AND business_key = $2
-                  AND superseded_at IS NULL
-                """,
-                dataset_key,
-                business_key,
-            )
-            # Un-supersede the target version (re-publish it it )
-            result = await conn.execute(
-                """
-                UPDATE canonical_records
-                SET superseded_at = NULL, updated_at = NOW()
-                WHERE dataset_key = $1 AND business_key = $2
-                  AND version = $3
-                """,
-                dataset_key,
-                business_key,
-                target_version,
-            )
-            count = int(result.split()[-1]) if result else 0
-            logger.info(
-                "Rollback complete",
-                dataset_key=dataset_key,
-                business_key=business_key,
-                target_version=target_version,
-                affected=count,
-    )
-        return count
+            async with conn.transaction():
+                # Mark current active records as superseded
+                await conn.execute(
+                    """
+                    UPDATE canonical_records
+                    SET superseded_at = NOW(), updated_at = NOW()
+                    WHERE dataset_key = $1 AND business_key = $2
+                      AND superseded_at IS NULL
+                    """,
+                    dataset_key,
+                    business_key,
+                )
+                # Insert new record copying data from target version
+                await conn.execute(
+                    """
+                    INSERT INTO canonical_records (
+                        canonical_id, dataset_key, business_key, candidate_id,
+                        data, version, source
+                    ) SELECT
+                        $1, dataset_key, business_key, candidate_id,
+                        data,
+                        (SELECT COALESCE(MAX(version), 0) + 1
+                         FROM canonical_records
+                         WHERE dataset_key = canonical_records.dataset_key
+                           AND business_key = canonical_records.business_key),
+                        'rollback'
+                    FROM canonical_records
+                    WHERE dataset_key = $2 AND business_key = $3 AND version = $4
+                    """,
+                    new_id,
+                    dataset_key,
+                    business_key,
+                    target_version,
+                )
+
+        logger.info(
+            "Rollback complete",
+            dataset_key=dataset_key,
+            business_key=business_key,
+            target_version=target_version,
+        )
+        return new_id

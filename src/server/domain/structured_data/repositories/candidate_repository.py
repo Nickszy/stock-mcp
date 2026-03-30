@@ -79,6 +79,11 @@ class CandidateRepository:
             """)
 
             # Indexes
+            # UNIQUE constraint prevents version race conditions
+            await conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_candidates_bizkey_version
+                ON normalized_candidates(dataset_key, business_key, version)
+            """)
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_candidates_dataset_key
                 ON normalized_candidates(dataset_key)
@@ -119,13 +124,13 @@ class CandidateRepository:
         business_key: str,
         normalized_data: Dict[str, Any],
     ) -> str:
-        """Insert a new normalized candidate and return its ID."""
+        """Insert a new normalized candidate and return its ID.
+
+        Uses an atomic subquery for version to prevent race conditions.
+        """
         pool = await self._get_pool()
         if not pool:
             raise RuntimeError("PostgreSQL not available")
-
-        # Determine next version
-        version = await self._next_version(pool, dataset_key, business_key)
 
         candidate_id = str(uuid4())
         async with pool.acquire() as conn:
@@ -134,26 +139,17 @@ class CandidateRepository:
                 INSERT INTO normalized_candidates (
                     candidate_id, snapshot_id, job_id, dataset_key,
                     source, business_key, normalized_data, version
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7,
+                    (SELECT COALESCE(MAX(version), 0) + 1
+                     FROM normalized_candidates
+                     WHERE dataset_key = $4 AND business_key = $6)
+                )
                 """,
                 candidate_id, snapshot_id, job_id, dataset_key,
                 source, business_key, json.dumps(normalized_data, default=str),
-                version,
             )
         return candidate_id
-
-    async def _next_version(self, pool, dataset_key: str, business_key: str) -> int:
-        """Get the next version number for a business key."""
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                SELECT MAX(version) as max_ver
-                FROM normalized_candidates
-                WHERE dataset_key = $1 AND business_key = $2
-                """,
-                dataset_key, business_key,
-            )
-            return (row["max_ver"] or 0) + 1
 
     async def get_candidate(self, candidate_id: str) -> Optional[Dict[str, Any]]:
         """Get a candidate by ID."""
@@ -239,12 +235,18 @@ class CandidateRepository:
         confidence_score: Optional[float] = None,
         comparison_result: Optional[Dict[str, Any]] = None,
     ) -> bool:
-        """Transition a candidate to a new state. Validates the transition first."""
+        """Transition a candidate to a new state atomically.
+
+        Uses UPDATE ... WHERE state = $from_state RETURNING to prevent
+        race conditions: if another process already moved the record,
+        the UPDATE matches 0 rows and we return False.
+        """
         pool = await self._get_pool()
         if not pool:
             return False
 
         async with pool.acquire() as conn:
+            # Read current state for validation
             row = await conn.fetchrow(
                 "SELECT state FROM normalized_candidates WHERE candidate_id = $1",
                 candidate_id,
@@ -260,6 +262,7 @@ class CandidateRepository:
                     f"Invalid transition: {from_state.value} → {to_state.value}"
                 )
 
+            # Build dynamic SET clause
             sets = ["state = $2", "updated_at = NOW()"]
             params: list = [candidate_id, new_state]
             idx = 3
@@ -273,12 +276,14 @@ class CandidateRepository:
                 params.append(json.dumps(comparison_result, default=str))
                 idx += 1
 
+            # Atomic UPDATE: only succeeds if state hasn't changed concurrently
+            params.append(from_state.value)
             set_clause = ", ".join(sets)
-            await conn.execute(
-                f"UPDATE normalized_candidates SET {set_clause} WHERE candidate_id = $1",
+            result = await conn.execute(
+                f"UPDATE normalized_candidates SET {set_clause} WHERE candidate_id = $1 AND state = ${idx}",
                 *params,
             )
-        return True
+            return "UPDATE 1" in result
 
     async def mark_superseded(
         self,
