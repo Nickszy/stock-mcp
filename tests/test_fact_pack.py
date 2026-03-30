@@ -377,8 +377,7 @@ class TestFactPackRegistry:
     def test_total_tool_count(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        # 119 + 1 technical_signals = 120
-        assert total == 121, f"Expected 120, got {total}"
+        assert total == 130, f"Expected 130, got {total}"
 
     def test_fact_pack_group_present(self):
         from src.server.mcp.registry import TOOL_GROUPS

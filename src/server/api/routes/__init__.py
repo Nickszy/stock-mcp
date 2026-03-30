@@ -15,6 +15,7 @@ from .us_market import router as us_market_router
 from .corporate_action import router as corporate_action_router
 from .preview import router as preview_router
 from .sector_research import router as sector_research_router
+from .cn_macro import router as cn_macro_router
 
 __all__ = [
     "market_data_router",
@@ -31,4 +32,5 @@ __all__ = [
     "corporate_action_router",
     "preview_router",
     "sector_research_router",
+    "cn_macro_router",
 ]

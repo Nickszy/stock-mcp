@@ -32,6 +32,7 @@ from src.server.mcp.tools.etf_tools import register_etf_tools
 from src.server.mcp.tools.factor_tools import register_factor_tools
 from src.server.mcp.tools.corporate_action_tools import register_corporate_action_tools
 from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
+from src.server.mcp.tools.cn_macro_tools import register_cn_macro_tools
 
 
 @dataclass(frozen=True)
@@ -184,6 +185,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="事实包聚合 (股票/基金/行情/美股/ETF/指数/行业事实包)",
         count=7,
+    ),
+    ToolGroup(
+        name="cn-macro",
+        register=register_cn_macro_tools,
+        enabled=True,
+        description="中国宏观经济数据 (GDP/CPI/PPI/PMI/M2/利率/贸易差额/社融/宏观概览)",
+        count=9,
     ),
 ]
 

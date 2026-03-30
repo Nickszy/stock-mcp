@@ -94,6 +94,7 @@ _MARKET_METHODS: Set[str] = {
     "get_social_financing",
     "get_interest_rates",
     "get_market_liquidity",
+    "get_trade_balance",
     "get_market_money_flow",
     "resolve_sector",
     "get_sector_trend",

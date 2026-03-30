@@ -281,6 +281,12 @@ class BaseDataAdapter(abc.ABC):
             f"{self.source.value} does not support get_market_liquidity"
         )
 
+    async def get_trade_balance(self, months: int = 60) -> Dict[str, Any]:
+        """获取中国进出口贸易差额数据 (Optional)."""
+        raise NotImplementedError(
+            f"{self.source.value} does not support get_trade_balance"
+        )
+
     async def get_market_money_flow(
         self,
         trade_date: Optional[str] = None,

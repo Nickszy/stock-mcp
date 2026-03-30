@@ -2085,6 +2085,32 @@ class AkshareAdapter(BaseDataAdapter):
 
         return result
 
+    async def get_trade_balance(self, months: int = 60) -> Dict[str, Any]:
+        """获取中国进出口贸易差额数据."""
+        cache_key = f"akshare:trade_balance:{months}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.macro_china_trade_balance)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            data = df.tail(months).to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {"data": data, "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get trade balance: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
     async def get_ggt_daily(self, days: int = 60) -> Dict[str, Any]:
         """获取港股通每日资金流向数据."""
         cache_key = f"akshare:ggt_daily:{days}"

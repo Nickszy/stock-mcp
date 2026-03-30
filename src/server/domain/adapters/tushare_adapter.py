@@ -1290,6 +1290,10 @@ class TushareAdapter(BaseDataAdapter):
         await self.cache.set(cache_key, result, ttl=3600)
         return result
 
+    async def get_trade_balance(self, months: int = 60) -> Dict[str, Any]:
+        """Tushare does not support China trade balance data."""
+        raise NotImplementedError("tushare does not support get_trade_balance")
+
     async def get_market_liquidity(self, days: int = 60) -> Dict[str, Any]:
         """获取市场流动性数据 (北向资金 + 融资融券)."""
         cache_key = f"tushare:market_liquidity:{days}"
