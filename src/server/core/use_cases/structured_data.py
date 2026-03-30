@@ -274,6 +274,174 @@ async def company_profile_fetcher(
         return None
 
 
+async def dividend_fetcher(
+    dataset_key: str,
+    source: str,
+    business_key: Optional[str] = None,
+    **kwargs,
+) -> Optional[Dict[str, Any]]:
+    """Fetcher for dividend data via MarketGateway adapters.
+
+    Calls get_dividend_info on the appropriate adapter to retrieve
+    dividend history (cash dividends, stock dividends, ex-dates).
+    """
+    from src.server.core.dependencies import Container
+    gateway = Container.market_gateway()
+    if gateway is None:
+        logger.warning("Gateway not available for dividend fetch")
+        return None
+
+    symbol = business_key or kwargs.get("symbol")
+    if not symbol:
+        return None
+
+    # Resolve symbol to proper ticker format
+    if ":" in symbol:
+        ticker = symbol
+    else:
+        try:
+            from src.server.domain.symbols.resolver import SymbolResolver
+            resolved = await SymbolResolver.resolve(symbol)
+            ticker = f"{resolved.exchange}:{resolved.symbol}" if resolved else f"SSE:{symbol}"
+        except Exception:
+            ticker = f"SSE:{symbol}"
+
+    try:
+        adapter = gateway.get_adapter_by_provider(source)
+        if adapter is None:
+            return None
+
+        result = await adapter.get_dividend_info(ticker)
+        if result is None:
+            return None
+
+        # Ensure source is tagged
+        if isinstance(result, dict):
+            result["_source"] = source
+        return result
+
+    except Exception as e:
+        logger.warning("Dividend fetch failed", source=source, symbol=symbol, error=str(e))
+        return None
+
+
+async def shareholder_fetcher(
+    dataset_key: str,
+    source: str,
+    business_key: Optional[str] = None,
+    **kwargs,
+) -> Optional[Dict[str, Any]]:
+    """Fetcher for shareholder data via MarketGateway adapters.
+
+    Calls get_shareholder_info on the appropriate adapter to retrieve
+    top 10 holders, float holders, holder count trends, and insider trades.
+    """
+    from src.server.core.dependencies import Container
+    gateway = Container.market_gateway()
+    if gateway is None:
+        logger.warning("Gateway not available for shareholder fetch")
+        return None
+
+    symbol = business_key or kwargs.get("symbol")
+    if not symbol:
+        return None
+
+    # Resolve symbol to proper ticker format
+    if ":" in symbol:
+        ticker = symbol
+    else:
+        try:
+            from src.server.domain.symbols.resolver import SymbolResolver
+            resolved = await SymbolResolver.resolve(symbol)
+            ticker = f"{resolved.exchange}:{resolved.symbol}" if resolved else f"SSE:{symbol}"
+        except Exception:
+            ticker = f"SSE:{symbol}"
+
+    try:
+        adapter = gateway.get_adapter_by_provider(source)
+        if adapter is None:
+            return None
+
+        result = await adapter.get_shareholder_info(ticker)
+        if result is None:
+            return None
+
+        if isinstance(result, dict):
+            result["_source"] = source
+        return result
+
+    except Exception as e:
+        logger.warning("Shareholder fetch failed", source=source, symbol=symbol, error=str(e))
+        return None
+
+
+async def daily_market_data_fetcher(
+    dataset_key: str,
+    source: str,
+    business_key: Optional[str] = None,
+    **kwargs,
+) -> Optional[Dict[str, Any]]:
+    """Fetcher for daily market data (OHLCV) via MarketGateway adapters.
+
+    Calls get_historical_prices on the appropriate adapter to retrieve
+    daily OHLCV data for valuation snapshots.
+    """
+    from src.server.core.dependencies import Container
+    gateway = Container.market_gateway()
+    if gateway is None:
+        logger.warning("Gateway not available for daily market data fetch")
+        return None
+
+    symbol = business_key or kwargs.get("symbol")
+    if not symbol:
+        return None
+
+    # Resolve symbol to proper ticker format
+    if ":" in symbol:
+        ticker = symbol
+    else:
+        try:
+            from src.server.domain.symbols.resolver import SymbolResolver
+            resolved = await SymbolResolver.resolve(symbol)
+            ticker = f"{resolved.exchange}:{resolved.symbol}" if resolved else f"SSE:{symbol}"
+        except Exception:
+            ticker = f"SSE:{symbol}"
+
+    try:
+        adapter = gateway.get_adapter_by_provider(source)
+        if adapter is None:
+            return None
+
+        # Fetch last N trading days
+        from datetime import datetime, timedelta, timezone
+        end_date = datetime.now(timezone.utc)
+        start_date = end_date - timedelta(days=30)  # Last 30 days
+
+        prices = await adapter.get_historical_prices(
+            ticker, start_date, end_date, interval="1d"
+        )
+        if not prices:
+            return None
+
+        # Convert AssetPrice objects to dicts
+        rows = []
+        for p in prices:
+            if hasattr(p, "to_dict"):
+                rows.append(p.to_dict())
+            elif isinstance(p, dict):
+                rows.append(p)
+
+        return {
+            "rows": rows,
+            "_source": source,
+            "ticker": ticker,
+        }
+
+    except Exception as e:
+        logger.warning("Daily market data fetch failed", source=source, symbol=symbol, error=str(e))
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Initialization
 # ---------------------------------------------------------------------------
@@ -323,6 +491,21 @@ async def init_structured_data(
     )
     registry.register_normalizer("company_profile", CompanyProfileNormalizer())
 
+    from src.server.domain.structured_data.normalize.dividend import (
+        DividendNormalizer,
+    )
+    registry.register_normalizer("dividend", DividendNormalizer())
+
+    from src.server.domain.structured_data.normalize.shareholder import (
+        ShareholderNormalizer,
+    )
+    registry.register_normalizer("shareholder", ShareholderNormalizer())
+
+    from src.server.domain.structured_data.normalize.daily_market_data import (
+        DailyMarketDataNormalizer,
+    )
+    registry.register_normalizer("daily_market_data", DailyMarketDataNormalizer())
+
     # Register validators
     from src.server.domain.structured_data.validate.engine import ValidationEngine
     from src.server.domain.structured_data.validate.financial_statements import (
@@ -340,9 +523,33 @@ async def init_structured_data(
     register_company_profile_rules(cp_validation_engine)
     registry.register_validator("company_profile", _ValidatorAdapter(cp_validation_engine))
 
+    from src.server.domain.structured_data.validate.dividend import (
+        register_dividend_rules,
+    )
+    div_validation_engine = ValidationEngine()
+    register_dividend_rules(div_validation_engine)
+    registry.register_validator("dividend", _ValidatorAdapter(div_validation_engine))
+
+    from src.server.domain.structured_data.validate.shareholder import (
+        register_shareholder_rules,
+    )
+    sh_validation_engine = ValidationEngine()
+    register_shareholder_rules(sh_validation_engine)
+    registry.register_validator("shareholder", _ValidatorAdapter(sh_validation_engine))
+
+    from src.server.domain.structured_data.validate.daily_market_data import (
+        register_daily_market_data_rules,
+    )
+    dmd_validation_engine = ValidationEngine()
+    register_daily_market_data_rules(dmd_validation_engine)
+    registry.register_validator("daily_market_data", _ValidatorAdapter(dmd_validation_engine))
+
     # Register fetchers
     registry.register_fetcher("financial_statements", financial_statements_fetcher)
     registry.register_fetcher("company_profile", company_profile_fetcher)
+    registry.register_fetcher("dividend", dividend_fetcher)
+    registry.register_fetcher("shareholder", shareholder_fetcher)
+    registry.register_fetcher("daily_market_data", daily_market_data_fetcher)
 
     # Create runner
     runner = TaskRunner(
