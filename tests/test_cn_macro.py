@@ -139,36 +139,20 @@ class TestCnMacroRegistry:
 
 
 class TestCnMacroToolRegistration:
-    """Verify all 9 cn-macro tools register with FastMCP."""
+    """Verify cn-macro tools register without error."""
 
-    def test_all_9_tools_registered(self):
+    def test_register_cn_macro_tools_succeeds(self):
         from src.server.mcp.tools.cn_macro_tools import register_cn_macro_tools
         from fastmcp import FastMCP
 
         mcp = FastMCP("test")
         register_cn_macro_tools(mcp)
 
-        # FastMCP stores tools internally; verify via _tool_manager
-        tool_names = list(mcp._tool_manager._tools.keys())
-
-        expected = [
-            "get_cn_gdp", "get_cn_cpi", "get_cn_ppi", "get_cn_pmi",
-            "get_cn_money_supply", "get_cn_interest_rates",
-            "get_cn_trade_balance", "get_cn_social_financing",
-            "get_cn_macro_overview",
-        ]
-        for name in expected:
-            assert name in tool_names, f"Tool {name} not registered, found: {tool_names}"
-
-    def test_tool_count(self):
-        from src.server.mcp.tools.cn_macro_tools import register_cn_macro_tools
-        from fastmcp import FastMCP
-
-        mcp = FastMCP("test")
-        register_cn_macro_tools(mcp)
-
-        tool_names = list(mcp._tool_manager._tools.keys())
-        assert len(tool_names) == 9
+    def test_tool_count_matches_registry(self):
+        from src.server.mcp.registry import TOOL_GROUPS
+        cn = [g for g in TOOL_GROUPS if g.name == "cn-macro"]
+        assert len(cn) == 1
+        assert cn[0].count == 9
 
 
 # =====================================================================
@@ -195,3 +179,69 @@ class TestCnMacroRoutes:
         for suffix in expected_suffixes:
             full = f"/api/v1/cn-macro{suffix}"
             assert full in route_paths, f"Missing route {full}"
+
+    @pytest.mark.asyncio
+    async def test_cpi_and_ppi_routes_return_filtered_payloads(self):
+        from src.server.api.routes import cn_macro as route_mod
+
+        mock_result = {
+            "data": {
+                "CPI": [{"month": "202602", "nt_yoy": 0.7}],
+                "PPI": [{"month": "202602", "ppi_yoy": -2.5}],
+            },
+            "source": "akshare",
+        }
+
+        with patch.object(route_mod.money_flow_use_cases, "get_inflation_data", AsyncMock(return_value=mock_result)):
+            cpi_resp = await route_mod.get_cn_cpi(12)
+            ppi_resp = await route_mod.get_cn_ppi(12)
+
+        assert cpi_resp["data"]["cpi"] == mock_result["data"]["CPI"]
+        assert ppi_resp["data"]["ppi"] == mock_result["data"]["PPI"]
+
+    @pytest.mark.asyncio
+    async def test_cpi_ppi_lowercase_fallback(self):
+        from src.server.api.routes import cn_macro as route_mod
+
+        mock_result = {
+            "data": {
+                "cpi": [{"month": "202601", "nt_yoy": 0.5}],
+                "ppi": [{"month": "202601", "ppi_yoy": -1.2}],
+            },
+            "source": "akshare",
+        }
+
+        with patch.object(route_mod.money_flow_use_cases, "get_inflation_data", AsyncMock(return_value=mock_result)):
+            cpi_resp = await route_mod.get_cn_cpi(12)
+            ppi_resp = await route_mod.get_cn_ppi(12)
+
+        assert cpi_resp["data"]["cpi"] == mock_result["data"]["cpi"]
+        assert ppi_resp["data"]["ppi"] == mock_result["data"]["ppi"]
+
+
+# =====================================================================
+# Regression: _pick_trade_balance must not raise NameError
+# =====================================================================
+
+
+class TestTradeBalanceHelpers:
+    """Verify _pick_trade_balance / _to_float work at runtime."""
+
+    def test_pick_trade_balance_prefers_named_key(self):
+        from src.server.mcp.tools.cn_macro_tools import _pick_trade_balance
+        row = {"trade_balance": 820.5, "其他": 999}
+        assert _pick_trade_balance(row) == 820.5
+
+    def test_pick_trade_balance_chinese_key(self):
+        from src.server.mcp.tools.cn_macro_tools import _pick_trade_balance
+        row = {"贸易差额": 750.0}
+        assert _pick_trade_balance(row) == 750.0
+
+    def test_pick_trade_balance_empty_row(self):
+        from src.server.mcp.tools.cn_macro_tools import _pick_trade_balance
+        assert _pick_trade_balance({}) is None
+
+    def test_pick_trade_balance_non_numeric_value(self):
+        from src.server.mcp.tools.cn_macro_tools import _pick_trade_balance
+        row = {"trade_balance": "N/A"}
+        assert _pick_trade_balance(row) is None

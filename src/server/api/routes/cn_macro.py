@@ -28,7 +28,9 @@ async def get_cn_cpi(
 ) -> Dict[str, Any]:
     try:
         result = await money_flow_use_cases.get_inflation_data(months)
-        return rest_response(data=result, source="akshare")
+        data = result.get("data", {}) if isinstance(result, dict) else {}
+        cpi = data.get("CPI", data.get("cpi", [])) or []
+        return rest_response(data={"cpi": cpi}, source=result.get("source", "akshare"))
     except Exception as e:
         logger.error(f"API error in get_cn_cpi: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -40,7 +42,9 @@ async def get_cn_ppi(
 ) -> Dict[str, Any]:
     try:
         result = await money_flow_use_cases.get_inflation_data(months)
-        return rest_response(data=result, source="akshare")
+        data = result.get("data", {}) if isinstance(result, dict) else {}
+        ppi = data.get("PPI", data.get("ppi", [])) or []
+        return rest_response(data={"ppi": ppi}, source=result.get("source", "akshare"))
     except Exception as e:
         logger.error(f"API error in get_cn_ppi: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

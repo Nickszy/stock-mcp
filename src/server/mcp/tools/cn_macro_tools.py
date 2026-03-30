@@ -41,11 +41,55 @@ def _fmt_pct(v: Any) -> str:
         return "N/A"
 
 
+def _fmt_num(v: Any) -> str:
+    if v is None:
+        return "N/A"
+    try:
+        return f"{float(v):,.2f}"
+    except Exception:
+        return "N/A"
+
+
+def _fmt_index(v: Any) -> str:
+    if v is None:
+        return "N/A"
+    try:
+        return f"{float(v):.2f}"
+    except Exception:
+        return "N/A"
+
+
 def _to_float(v: Any) -> float | None:
     try:
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _pick_trade_balance(row: Dict[str, Any]) -> float | None:
+    preferred_keys = (
+        "trade_balance",
+        "贸易差额",
+        "贸易顺差",
+        "顺差",
+        "balance",
+    )
+    for key in preferred_keys:
+        if key in row:
+            value = _to_float(row.get(key))
+            if value is not None:
+                return value
+
+    for key, value in row.items():
+        if any(token in str(key).lower() for token in ("balance", "trade_balance")):
+            fv = _to_float(value)
+            if fv is not None:
+                return fv
+        if any(token in str(key) for token in ("差额", "顺差")):
+            fv = _to_float(value)
+            if fv is not None:
+                return fv
+    return None
 
 
 def register_cn_macro_tools(mcp: FastMCP):
@@ -233,7 +277,7 @@ def register_cn_macro_tools(mcp: FastMCP):
             rows = result.get("data", []) if isinstance(result, dict) else []
             latest = rows[-1] if rows else {}
             mfg = latest.get("pmi", latest.get("PMI010000"))
-            summary = f"中国PMI(近{months}月): 最新制造业{_fmt_pct(mfg)}"
+            summary = f"中国PMI(近{months}月): 最新制造业{_fmt_index(mfg)}"
             artifact = create_artifact_envelope(
                 component_type=ComponentType.PMI_DATA,
                 name="中国 PMI",
@@ -392,15 +436,9 @@ def register_cn_macro_tools(mcp: FastMCP):
             result = await mf_uc.get_trade_balance(months)
             rows = result.get("data", []) if isinstance(result, dict) else []
             latest = rows[-1] if rows else {}
-            # Akshare returns Chinese column names; pick first numeric-looking value
-            balance = None
-            for k, v in latest.items():
-                fv = _to_float(v)
-                if fv is not None and k not in ("日期", "date"):
-                    balance = fv
-                    break
+            balance = _pick_trade_balance(latest)
             summary = (
-                f"中国贸易差额(近{months}月): 最新值={_fmt_pct(balance) if balance else 'N/A'}"
+                f"中国贸易差额(近{months}月): 最新值={_fmt_num(balance)}"
             )
             artifact = create_artifact_envelope(
                 component_type="cn_trade_balance",
@@ -450,7 +488,7 @@ def register_cn_macro_tools(mcp: FastMCP):
         try:
             result = await mf_uc.get_social_financing(months)
             rows = result.get("data", []) if isinstance(result, dict) else []
-            latest = rows[0] if rows else {}
+            latest = rows[-1] if rows else {}
             stk_yoy = latest.get("stk_yoy")
             summary = f"中国社融(近{months}月): 存量同比{_fmt_pct(stk_yoy)}"
             artifact = create_artifact_envelope(
@@ -542,7 +580,7 @@ def register_cn_macro_tools(mcp: FastMCP):
             if pmi_rows:
                 pm = pmi_rows[-1]
                 mfg = pm.get("pmi", pm.get("PMI010000"))
-                parts.append(f"PMI={_fmt_pct(mfg)}")
+                parts.append(f"PMI={_fmt_index(mfg)}")
 
             ms_data = indicators.get("money_supply", {})
             ms_rows = ms_data.get("data", []) if isinstance(ms_data, dict) else []
