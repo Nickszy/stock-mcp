@@ -136,6 +136,9 @@ _MARKET_METHODS: Set[str] = {
     "get_repo_rates",
     "get_interbank_rate",
     "get_bond_issuance_overview",
+    "get_option_chain",
+    "get_option_greeks",
+    "get_option_price_history",
     "get_fund_holdings",
     "get_commodity_inventory",
     # Stock participant data (COL-144)

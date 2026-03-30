@@ -36,6 +36,7 @@ from src.server.mcp.tools.cn_macro_tools import register_cn_macro_tools
 from src.server.mcp.tools.fixed_income_tools import register_fixed_income_tools
 from src.server.mcp.tools.research_report_tools import register_research_report_tools
 from src.server.mcp.tools.commodity_tools import register_commodity_tools
+from src.server.mcp.tools.option_tools import register_option_tools
 
 
 @dataclass(frozen=True)
@@ -216,6 +217,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="大宗商品 (黄金/白银/原油/铜/工业金属/商品概览)",
         count=6,
+    ),
+    ToolGroup(
+        name="option",
+        register=register_option_tools,
+        enabled=True,
+        description="期权数据 (合约列表/Greeks/历史行情)",
+        count=3,
     ),
 ]
 

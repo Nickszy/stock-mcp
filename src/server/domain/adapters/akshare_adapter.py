@@ -3099,6 +3099,95 @@ class AkshareAdapter(BaseDataAdapter):
         await self.cache.set(cache_key, result, ttl=1800)
         return result
 
+    async def get_option_chain(
+        self, symbol: str = "50ETF", exchange: str = "null"
+    ) -> Dict[str, Any]:
+        """获取上交所期权合约列表(50ETF/300ETF).
+
+        Uses ak.option_sse_list_sina to get contract codes per expiry month.
+        """
+        cache_key = f"akshare:option_chain:{symbol}:{exchange}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            contracts = await self._run(
+                ak.option_sse_list_sina, symbol=symbol, exchange=exchange
+            )
+            if not contracts:
+                return {"data": [], "symbol": symbol, "source": "akshare"}
+
+            result = {"data": contracts, "symbol": symbol, "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get option chain: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    async def get_option_greeks(
+        self, contract: str = "10003045"
+    ) -> Dict[str, Any]:
+        """获取单个期权合约Greeks(Delta/Gamma/Theta/Vega/Rho/IV).
+
+        Uses ak.option_sse_greeks_sina.
+        """
+        cache_key = f"akshare:option_greeks:{contract}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.option_sse_greeks_sina, symbol=contract)
+            if df is None or df.empty:
+                return {"data": [], "contract": contract, "source": "akshare"}
+
+            data = df.to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {"data": data, "contract": contract, "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=900)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get option greeks: {e}")
+            return {"data": [], "contract": contract, "source": "akshare", "error": str(e)}
+
+    async def get_option_price_history(
+        self, contract: str = "10003889"
+    ) -> Dict[str, Any]:
+        """获取单个期权合约历史行情(日K).
+
+        Uses ak.option_sse_daily_sina.
+        """
+        cache_key = f"akshare:option_price_history:{contract}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.option_sse_daily_sina, symbol=contract)
+            if df is None or df.empty:
+                return {"data": [], "contract": contract, "source": "akshare"}
+
+            data = df.to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {"data": data, "contract": contract, "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get option price history: {e}")
+            return {"data": [], "contract": contract, "source": "akshare", "error": str(e)}
+
     # ------------------------------------------------------------------
     # COL-127: 行业估值PE/PB历史分位
     # ------------------------------------------------------------------
