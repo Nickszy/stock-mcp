@@ -148,6 +148,10 @@ _MARKET_METHODS: Set[str] = {
     "get_hk_hot_rank",
     "get_hk_main_board",
     "get_hk_market_overview",
+    "get_hk_connect_components",
+    "get_hsgt_fund_flow_summary",
+    "get_hsgt_hold_stock",
+    "get_hk_connect_overview",
     "get_fund_holdings",
     "get_commodity_inventory",
     # Stock participant data (COL-144)

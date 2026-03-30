@@ -22,6 +22,7 @@ from .commodities import router as commodities_router
 from .options import router as options_router
 from .sentiment import router as sentiment_router
 from .hk_market import router as hk_market_router
+from .hk_connect import router as hk_connect_router
 
 __all__ = [
     "market_data_router",
@@ -45,4 +46,5 @@ __all__ = [
     "options_router",
     "sentiment_router",
     "hk_market_router",
+    "hk_connect_router",
 ]

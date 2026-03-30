@@ -39,6 +39,7 @@ from src.server.mcp.tools.commodity_tools import register_commodity_tools
 from src.server.mcp.tools.option_tools import register_option_tools
 from src.server.mcp.tools.sentiment_tools import register_sentiment_tools
 from src.server.mcp.tools.hk_market_tools import register_hk_market_tools
+from src.server.mcp.tools.hk_connect_tools import register_hk_connect_tools
 
 
 @dataclass(frozen=True)
@@ -239,6 +240,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         register=register_hk_market_tools,
         enabled=True,
         description="港股市场 (全市场/热度榜/主板/总览)",
+        count=4,
+    ),
+    ToolGroup(
+        name="hk-connect",
+        register=register_hk_connect_tools,
+        enabled=True,
+        description="港股通/南向资金 (成分股/资金流/持股排行/总览)",
         count=4,
     ),
 ]

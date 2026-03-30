@@ -3425,6 +3425,101 @@ class AkshareAdapter(BaseDataAdapter):
             "market": "HK",
         }
 
+    async def get_hk_connect_components(self) -> Dict[str, Any]:
+        """获取港股通成分股."""
+        cache_key = "akshare:hk_connect_components"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.stock_hk_ggt_components_em)
+            data = df.to_dict(orient="records") if df is not None and not df.empty else []
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+            result = {"data": data, "source": "akshare", "market": "HK Connect"}
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get HK connect components: {e}")
+            return {"data": [], "source": "akshare", "market": "HK Connect", "error": str(e)}
+
+    async def get_hsgt_fund_flow_summary(self) -> Dict[str, Any]:
+        """获取沪深港通资金流汇总."""
+        cache_key = "akshare:hsgt_fund_flow_summary"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.stock_hsgt_fund_flow_summary_em)
+            data = df.to_dict(orient="records") if df is not None and not df.empty else []
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+            result = {"data": data, "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=900)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get HSGT fund flow summary: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_hsgt_hold_stock(
+        self, market: str = "港股通", indicator: str = "5日排行"
+    ) -> Dict[str, Any]:
+        """获取沪深港通持股排行/明细."""
+        cache_key = f"akshare:hsgt_hold_stock:{market}:{indicator}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.stock_hsgt_hold_stock_em, market=market, indicator=indicator)
+            data = df.to_dict(orient="records") if df is not None and not df.empty else []
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+            result = {"data": data, "source": "akshare", "market": market, "indicator": indicator}
+            await self.cache.set(cache_key, result, ttl=900)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get HSGT hold stock: {e}")
+            return {"data": [], "source": "akshare", "market": market, "indicator": indicator, "error": str(e)}
+
+    async def get_hk_connect_overview(self) -> Dict[str, Any]:
+        """获取港股通/南向资金概览."""
+        import asyncio
+
+        indicators: Dict[str, Any] = {}
+        errors: list[str] = []
+
+        async def _safe(label: str, coro):
+            try:
+                indicators[label] = await coro
+            except Exception as exc:
+                errors.append(f"{label}: {exc}")
+
+        await asyncio.gather(
+            _safe("components", self.get_hk_connect_components()),
+            _safe("fund_flow", self.get_hsgt_fund_flow_summary()),
+            _safe("hold_rank", self.get_hsgt_hold_stock()),
+        )
+
+        return {
+            "data": {
+                "indicators": indicators,
+                "counts": {
+                    "components": len(indicators.get("components", {}).get("data", [])),
+                    "fund_flow": len(indicators.get("fund_flow", {}).get("data", [])),
+                    "hold_rank": len(indicators.get("hold_rank", {}).get("data", [])),
+                },
+                "errors": errors,
+            },
+            "source": "akshare",
+            "market": "HK Connect",
+        }
+
     # ------------------------------------------------------------------
     # COL-127: 行业估值PE/PB历史分位
     # ------------------------------------------------------------------

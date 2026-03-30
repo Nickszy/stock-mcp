@@ -27,7 +27,7 @@ class TestHKMarketRegistry:
     def test_total_tool_count_increased(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        assert total >= 159, f"Expected >= 159, got {total}"
+        assert total >= 163, f"Expected >= 163, got {total}"
 
 
 class TestHKMarketToolRegistration:
