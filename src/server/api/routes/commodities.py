@@ -1,5 +1,5 @@
 # src/server/api/routes/commodities.py
-"""Commodity asset REST API routes (gold, silver, crude oil)."""
+"""Commodity asset REST API routes (gold, silver, crude oil, copper, industrial metals)."""
 
 from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, Any
@@ -43,6 +43,30 @@ async def get_crude_oil_price(
         return rest_response(data=result, source="akshare")
     except Exception as e:
         logger.error(f"API error in get_crude_oil_price: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/copper", summary="铜期货行情")
+async def get_copper_price(
+    days: int = Query(60, ge=1, le=500, description="天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await comm_uc.get_commodity_price("CU0", days)
+        return rest_response(data=result, source="akshare")
+    except Exception as e:
+        logger.error(f"API error in get_copper_price: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/industrial-metals", summary="工业金属全景概览(铜+铝+锌+螺纹钢)")
+async def get_industrial_metals_overview(
+    days: int = Query(30, ge=1, le=500, description="各品种天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await comm_uc.get_industrial_metals_overview(days)
+        return rest_response(data=result, source="akshare")
+    except Exception as e:
+        logger.error(f"API error in get_industrial_metals_overview: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -23,13 +23,13 @@ class TestCommodityRegistry:
         from src.server.mcp.registry import TOOL_GROUPS
         c = [g for g in TOOL_GROUPS if g.name == "commodity"]
         assert len(c) == 1
-        assert c[0].count == 4
+        assert c[0].count == 6
         assert c[0].enabled is True
 
     def test_total_tool_count_increased(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        assert total >= 142, f"Expected >= 142, got {total}"
+        assert total >= 144, f"Expected >= 144, got {total}"
 
 
 class TestCommodityToolRegistration:
@@ -53,7 +53,7 @@ class TestCommodityRoutes:
     def test_router_has_routes(self):
         from src.server.api.routes.commodities import router
         route_paths = [r.path for r in router.routes]
-        expected_suffixes = ["/gold", "/silver", "/crude-oil", "/overview"]
+        expected_suffixes = ["/gold", "/silver", "/crude-oil", "/copper", "/industrial-metals", "/overview"]
         for suffix in expected_suffixes:
             full = f"/api/v1/commodities{suffix}"
             assert full in route_paths, f"Missing route {full}"

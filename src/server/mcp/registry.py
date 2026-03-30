@@ -214,8 +214,8 @@ TOOL_GROUPS: List[ToolGroup] = [
         name="commodity",
         register=register_commodity_tools,
         enabled=True,
-        description="大宗商品 (黄金/白银/原油期货/商品概览)",
-        count=4,
+        description="大宗商品 (黄金/白银/原油/铜/工业金属/商品概览)",
+        count=6,
     ),
 ]
 
