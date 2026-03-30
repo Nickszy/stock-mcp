@@ -83,6 +83,7 @@ BALANCE_SHEET_CANONICAL = {
     "accounts_payable": "应付账款",
     "advance_payments": "预收款项",
     "total_equity": "所有者权益合计",
+    "total_equity_inc_minority": "所有者权益合计(含少数股东)",
     "equity_attr_p": "归属于母公司所有者权益合计",
     "equity_attr_minority": "少数股东权益",
     "paid_in_capital": "实收资本",
@@ -105,7 +106,7 @@ BALANCE_TUSHARE = {
     "long_term_borrowing": "lt_borr",
     "accounts_payable": "acct_payable",
     "total_equity": "total_hldr_eqy_exc_min_int",
-    "equity_attr_p": "total_hldr_eqy_inc_min_int",
+    "total_equity_inc_minority": "total_hldr_eqy_inc_min_int",
     "paid_in_capital": "cap_rese",
 }
 
@@ -425,36 +426,48 @@ class FinancialStatementsNormalizer(Normalizer):
         akshare_map: Dict[str, str],
         tushare_map: Dict[str, str],
     ) -> Dict[str, Optional[float]]:
-        """Normalize the latest row from a list of raw rows."""
+        """Normalize the latest row from a list of raw rows.
+
+        Finds the row with the most recent report_period rather than
+        assuming rows are sorted.
+        """
         if not rows:
             return {}
 
         if isinstance(rows, dict):
             rows = [rows]
 
-        # Take the latest row (should be sorted by date already)
-        row = rows[0] if rows else {}
+        # Find the row with the latest report_period
+        latest_row = rows[0]
+        latest_period = _extract_report_period(rows[0], source) or ""
+
+        for row in rows[1:]:
+            period = _extract_report_period(row, source) or ""
+            if period > latest_period:
+                latest_period = period
+                latest_row = row
+
         canonical_map = akshare_map if source == "akshare" else tushare_map
 
-        result = _map_fields(row, canonical_map)
+        result = _map_fields(latest_row, canonical_map)
 
         # Try both maps if the primary yields mostly None
         non_none = sum(1 for v in result.values() if v is not None)
         if non_none < 3 and source != "akshare":
             # Fallback to akshare map
-            fallback = _map_fields(row, akshare_map)
+            fallback = _map_fields(latest_row, akshare_map)
             for k, v in fallback.items():
                 if result.get(k) is None and v is not None:
                     result[k] = v
         elif non_none < 3 and source == "akshare":
             # Fallback to tushare map
-            fallback = _map_fields(row, tushare_map)
+            fallback = _map_fields(latest_row, tushare_map)
             for k, v in fallback.items():
                 if result.get(k) is None and v is not None:
                     result[k] = v
 
         # Add YoY/QoQ
-        _add_yoy_qoq(result, row, source)
+        _add_yoy_qoq(result, latest_row, source)
 
         return result
 

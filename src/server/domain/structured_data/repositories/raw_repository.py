@@ -260,6 +260,7 @@ class RawRepository:
         dataset_key: str,
         business_key: Optional[str] = None,
         source: Optional[str] = None,
+        job_id: Optional[str] = None,
         limit: int = 50,
     ) -> List[Dict[str, Any]]:
         """List raw snapshots with optional filters."""
@@ -278,6 +279,10 @@ class RawRepository:
             if source:
                 conditions.append(f"source = ${idx}")
                 params.append(source)
+                idx += 1
+            if job_id:
+                conditions.append(f"job_id = ${idx}")
+                params.append(job_id)
                 idx += 1
 
             params.append(limit)

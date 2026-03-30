@@ -134,9 +134,12 @@ async def financial_statements_fetcher(
 
     Calls the existing gateway to get financial data, then wraps it
     in a format suitable for the raw repository.
+
+    When source is specified (e.g. "akshare" or "tushare"), attempts to
+    call the matching adapter directly for more accurate field mapping.
     """
     from src.server.core.dependencies import Container
-    gateway = Container.gateway()
+    gateway = Container.market_gateway()
     if gateway is None:
         logger.warning("Gateway not available for structured data fetch")
         return None
@@ -147,11 +150,19 @@ async def financial_statements_fetcher(
         return None
 
     try:
-        result = await gateway.get_financial_statements(
-            ticker=symbol,
-            report_type="all",
-            periods=4,
-        )
+        # Try source-specific adapter when source is explicitly provided
+        result = None
+        if source in ("akshare", "tushare"):
+            result = await _fetch_from_adapter(gateway, source, symbol)
+
+        # Fallback to generic gateway call
+        if result is None:
+            result = await gateway.get_financial_statements(
+                ticker=symbol,
+                report_type="all",
+                periods=4,
+            )
+
         if not result:
             return None
 
@@ -191,6 +202,21 @@ async def financial_statements_fetcher(
             error=str(e),
         )
         return None
+
+
+async def _fetch_from_adapter(gateway, source: str, symbol: str) -> Optional[Dict[str, Any]]:
+    """Call a specific adapter directly for source-routed fetching."""
+    try:
+        adapter = gateway.get_adapter_by_provider(source)
+        if adapter and hasattr(adapter, "get_financial_statements"):
+            return await adapter.get_financial_statements(
+                ticker=symbol,
+                report_type="all",
+                periods=4,
+            )
+    except Exception as e:
+        logger.debug("Source-specific adapter fetch failed", source=source, error=str(e))
+    return None
 
 
 # ---------------------------------------------------------------------------

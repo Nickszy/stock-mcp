@@ -59,22 +59,21 @@ class Orchestrator:
                 "error": f"No normalizer registered for '{dataset_key}'",
             }
 
-        # Load raw snapshots
+        # Load raw snapshots (filtered by job_id at DB level)
         snapshots = await self._raw_repo.list_snapshots(
             dataset_key=dataset_key,
+            job_id=job_id,
             limit=1000,
         )
-        # Filter to only this job's snapshots
-        job_snapshots = [s for s in snapshots if s.get("job_id") == job_id]
 
-        if not job_snapshots:
+        if not snapshots:
             return {"status": "no_data", "processed": 0}
 
         logger.info(
             "Orchestrating pipeline",
             job_id=job_id,
             dataset_key=dataset_key,
-            snapshot_count=len(job_snapshots),
+            snapshot_count=len(snapshots),
         )
 
         stats = {
@@ -86,7 +85,7 @@ class Orchestrator:
             "errors": 0,
         }
 
-        for snapshot in job_snapshots:
+        for snapshot in snapshots:
             try:
                 result = await self._process_snapshot(
                     snapshot=snapshot,
@@ -104,7 +103,7 @@ class Orchestrator:
                     error=str(e),
                 )
 
-        return {"status": "completed", "processed": len(job_snapshots), **stats}
+        return {"status": "completed", "processed": len(snapshots), **stats}
 
     async def _process_snapshot(
         self,
@@ -129,7 +128,7 @@ class Orchestrator:
 
         # Step 1: Normalize
         if hasattr(normalizer, "normalize"):
-            normalized = await normalizer.normalize(raw_data)
+            normalized = await normalizer.normalize(raw_data, source=source)
         else:
             normalized = raw_data  # Passthrough if no method
 
@@ -156,22 +155,26 @@ class Orchestrator:
 
         # Step 3: Validate
         error_count = 0
+        warning_count = 0
         if validator:
             if hasattr(validator, "validate"):
                 issues = await validator.validate(normalized, config)
                 for issue in issues:
+                    severity = issue.get("severity", "WARNING")
                     await self._candidate_repo.insert_issue(
                         candidate_id=candidate_id,
                         dataset_key=config.dataset_key,
                         rule_name=issue.get("rule_name", "unknown"),
-                        severity=issue.get("severity", "WARNING"),
+                        severity=severity,
                         field_path=issue.get("field_path"),
                         expected_value=issue.get("expected_value"),
                         actual_value=issue.get("actual_value"),
                         message=issue.get("message"),
                     )
-                    if issue.get("severity") == "ERROR":
+                    if severity == "ERROR":
                         error_count += 1
+                    elif severity == "WARNING":
+                        warning_count += 1
 
         # Transition to VALIDATED
         await self._candidate_repo.transition_state(
@@ -180,11 +183,13 @@ class Orchestrator:
         result["validated"] = 1
 
         # Step 4: Publish decision
-        # If hard errors exist → reject
+        # If hard errors exist → reject with low confidence
         if error_count > 0:
+            # Confidence degrades with each ERROR-level validation issue
+            confidence = max(0.1, 0.5 - error_count * 0.1)
             await self._candidate_repo.transition_state(
                 candidate_id, PipelineState.PENDING_REVIEW.value,
-                confidence_score=0.3,
+                confidence_score=confidence,
             )
             await self._issue_repo.create_task(
                 candidate_id=candidate_id,
@@ -195,8 +200,23 @@ class Orchestrator:
             result["pending_review"] = 1
             return result
 
-        # Calculate confidence (simplified: 0.9 if no issues, lower with warnings)
-        confidence = 0.95 if not validator else 0.9
+        # Calculate confidence dynamically:
+        # - Base confidence from field completeness
+        # - Penalty for WARNING-level validation issues
+        # - Bonus for multi-source corroboration (if canonical exists)
+        non_meta_keys = [k for k in normalized if not k.startswith("_")]
+        total_fields = len(non_meta_keys)
+        mapped_fields = sum(1 for k in non_meta_keys if normalized[k] is not None)
+        completeness = mapped_fields / max(total_fields, 1) if total_fields > 0 else 0.5
+
+        confidence = min(0.95, 0.6 + completeness * 0.25 - warning_count * 0.05)
+
+        # Check if current canonical exists — corroboration bonus
+        existing_canonical = await self._canonical_repo.get_current(
+            config.dataset_key, business_key,
+        )
+        if existing_canonical:
+            confidence = min(0.98, confidence + 0.1)
 
         if confidence >= config.auto_publish_threshold:
             # Auto-publish
