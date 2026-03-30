@@ -506,6 +506,61 @@ async def corporate_actions_fetcher(
         return None
 
 
+async def index_constituents_fetcher(
+    dataset_key: str,
+    source: str,
+    symbol: str,
+    **kwargs,
+) -> Optional[Dict[str, Any]]:
+    """Fetch index constituent data for an index code.
+
+    Calls gateway adapter to get constituent list and weight data.
+    The symbol parameter here is the index code (e.g. '000300').
+    """
+    from src.server.core.dependencies import Container
+
+    try:
+        gateway = Container.market_gateway()
+        if gateway is None:
+            return None
+
+        # Use symbol directly as index_code (strip exchange prefix if present)
+        index_code = symbol
+        if ":" in symbol:
+            index_code = symbol.split(":", 1)[1]
+
+        adapter = gateway.get_adapter_by_provider(source)
+        if adapter is None:
+            return None
+
+        result: Dict[str, Any] = {"_source": source, "index_code": index_code}
+
+        # Constituent list
+        if hasattr(adapter, "get_index_constituents"):
+            try:
+                const = await adapter.get_index_constituents(index_code=index_code)
+                if const and const.get("data"):
+                    result["constituents"] = const
+            except Exception:
+                pass
+
+        # Weight data
+        if hasattr(adapter, "get_index_constituent_weights"):
+            try:
+                weights = await adapter.get_index_constituent_weights(index_code=index_code)
+                if weights and weights.get("data"):
+                    result["weights"] = weights
+            except Exception:
+                pass
+
+        has_data = "constituents" in result or "weights" in result
+        return result if has_data else None
+
+    except Exception as e:
+        logger.warning("Index constituents fetch failed", source=source, symbol=symbol, error=str(e))
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Initialization
 # ---------------------------------------------------------------------------
@@ -575,6 +630,11 @@ async def init_structured_data(
     )
     registry.register_normalizer("corporate_actions", CorporateActionsNormalizer())
 
+    from src.server.domain.structured_data.normalize.index_constituents import (
+        IndexConstituentsNormalizer,
+    )
+    registry.register_normalizer("index_constituents", IndexConstituentsNormalizer())
+
     # Register validators
     from src.server.domain.structured_data.validate.engine import ValidationEngine
     from src.server.domain.structured_data.validate.financial_statements import (
@@ -620,6 +680,13 @@ async def init_structured_data(
     register_corporate_actions_rules(ca_validation_engine)
     registry.register_validator("corporate_actions", _ValidatorAdapter(ca_validation_engine))
 
+    from src.server.domain.structured_data.validate.index_constituents import (
+        register_index_constituents_rules,
+    )
+    ic_validation_engine = ValidationEngine()
+    register_index_constituents_rules(ic_validation_engine)
+    registry.register_validator("index_constituents", _ValidatorAdapter(ic_validation_engine))
+
     # Register fetchers
     registry.register_fetcher("financial_statements", financial_statements_fetcher)
     registry.register_fetcher("company_profile", company_profile_fetcher)
@@ -627,6 +694,7 @@ async def init_structured_data(
     registry.register_fetcher("shareholder", shareholder_fetcher)
     registry.register_fetcher("daily_market_data", daily_market_data_fetcher)
     registry.register_fetcher("corporate_actions", corporate_actions_fetcher)
+    registry.register_fetcher("index_constituents", index_constituents_fetcher)
 
     # Create runner
     runner = TaskRunner(
