@@ -442,6 +442,70 @@ async def daily_market_data_fetcher(
         return None
 
 
+async def corporate_actions_fetcher(
+    dataset_key: str,
+    source: str,
+    symbol: str,
+    **kwargs,
+) -> Optional[Dict[str, Any]]:
+    """Fetch corporate action data for a symbol.
+
+    Calls gateway adapter to get repurchase, restricted release,
+    and block trade data for the given symbol.
+    """
+    from src.server.core.dependencies import Container
+
+    try:
+        gateway = Container.market_gateway()
+        if gateway is None:
+            return None
+
+        # Resolve symbol
+        resolved = symbol
+        if ":" in symbol:
+            resolved = symbol.split(":", 1)[1]
+
+        adapter = gateway.get_adapter_by_provider(source)
+        if adapter is None:
+            return None
+
+        result: Dict[str, Any] = {"_source": source, "ticker": symbol}
+
+        # Repurchase data
+        if hasattr(adapter, "get_repurchase_info"):
+            try:
+                repo = await adapter.get_repurchase_info(symbol=resolved)
+                if repo and repo.get("data"):
+                    result["repurchase"] = repo
+            except Exception:
+                pass
+
+        # Restricted release data
+        if hasattr(adapter, "get_restricted_release"):
+            try:
+                restricted = await adapter.get_restricted_release(symbol=resolved)
+                if restricted and restricted.get("data"):
+                    result["restricted_release"] = restricted
+            except Exception:
+                pass
+
+        # Block trade data
+        if hasattr(adapter, "get_block_trade"):
+            try:
+                block = await adapter.get_block_trade(days=30)
+                if block and block.get("data"):
+                    result["block_trade"] = block
+            except Exception:
+                pass
+
+        has_data = any(k in result for k in ("repurchase", "restricted_release", "block_trade"))
+        return result if has_data else None
+
+    except Exception as e:
+        logger.warning("Corporate actions fetch failed", source=source, symbol=symbol, error=str(e))
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Initialization
 # ---------------------------------------------------------------------------
@@ -506,6 +570,11 @@ async def init_structured_data(
     )
     registry.register_normalizer("daily_market_data", DailyMarketDataNormalizer())
 
+    from src.server.domain.structured_data.normalize.corporate_actions import (
+        CorporateActionsNormalizer,
+    )
+    registry.register_normalizer("corporate_actions", CorporateActionsNormalizer())
+
     # Register validators
     from src.server.domain.structured_data.validate.engine import ValidationEngine
     from src.server.domain.structured_data.validate.financial_statements import (
@@ -544,12 +613,20 @@ async def init_structured_data(
     register_daily_market_data_rules(dmd_validation_engine)
     registry.register_validator("daily_market_data", _ValidatorAdapter(dmd_validation_engine))
 
+    from src.server.domain.structured_data.validate.corporate_actions import (
+        register_corporate_actions_rules,
+    )
+    ca_validation_engine = ValidationEngine()
+    register_corporate_actions_rules(ca_validation_engine)
+    registry.register_validator("corporate_actions", _ValidatorAdapter(ca_validation_engine))
+
     # Register fetchers
     registry.register_fetcher("financial_statements", financial_statements_fetcher)
     registry.register_fetcher("company_profile", company_profile_fetcher)
     registry.register_fetcher("dividend", dividend_fetcher)
     registry.register_fetcher("shareholder", shareholder_fetcher)
     registry.register_fetcher("daily_market_data", daily_market_data_fetcher)
+    registry.register_fetcher("corporate_actions", corporate_actions_fetcher)
 
     # Create runner
     runner = TaskRunner(
