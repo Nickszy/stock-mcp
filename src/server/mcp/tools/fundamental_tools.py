@@ -565,7 +565,18 @@ def register_fundamental_tools(mcp: FastMCP):
         ts_code: str | None = None,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get shareholder info for the given ticker."""
+        """Get shareholder info for the given ticker.
+
+        WHEN TO USE: User asks about top 10 shareholders, ownership concentration,
+        institutional holdings changes, or shareholder structure.
+
+        CONCEPT: Returns top 10 shareholders with holding ratios, changes, and
+        shareholder concentration metrics.
+
+        DIFFERENTIATION: vs get_stock_fact_pack shareholder section: this is the dedicated
+        tool with more detail; fact_pack provides a summary.
+
+        next_recommended_tools: get_mainbz_info, get_stock_fact_pack, get_dividend_info"""
         if not symbol and not ts_code:
             return {"error": "symbol or ts_code is required"}
         raw_symbol = ts_code or symbol
@@ -865,6 +876,18 @@ def register_fundamental_tools(mcp: FastMCP):
 
     @mcp.tool(tags={"fundamental"})
     async def get_dividend_info(symbol: str, ctx: Context = None) -> Dict[str, Any]:
+        """Get dividend history and yield info.
+
+        WHEN TO USE: User asks about dividend history, yield, payout ratio,
+        or "how much has this stock paid in dividends".
+
+        CONCEPT: Returns dividend payment history including ex-date, pay date,
+        dividend per share, yield, and payout ratio trends.
+
+        DIFFERENTIATION: vs get_stock_fact_pack dividend section: this is the dedicated
+        tool with full history; fact_pack provides a summary snapshot.
+
+        next_recommended_tools: get_shareholder_info, get_valuation_metrics, get_stock_fact_pack"""
         """Get dividend history info for the given ticker.
 
         Args:
@@ -996,7 +1019,18 @@ def register_fundamental_tools(mcp: FastMCP):
         limit: int = 50,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get performance forecast info for the given A-share ticker."""
+        """Get performance forecast info for the given A-share ticker.
+
+        WHEN TO USE: User asks about earnings forecasts, profit guidance,
+        or "what do analysts expect this company to earn".
+
+        CONCEPT: Returns company-issued performance forecasts and analyst earnings
+        estimates including expected revenue, net profit, and EPS.
+
+        DIFFERENTIATION: vs get_profit_forecast: This returns company guidance;
+        profit_forecast returns analyst consensus estimates.
+
+        next_recommended_tools: get_profit_forecast, get_financial_reports, get_stock_fact_pack"""
         if not symbol and not ts_code:
             return {"error": "symbol or ts_code is required"}
 
@@ -1470,6 +1504,17 @@ def register_fundamental_tools(mcp: FastMCP):
     ) -> Dict[str, Any]:
         """Get analyst profit forecasts for the given ticker.
 
+        WHEN TO USE: User asks about analyst consensus, earnings estimates,
+        or "what do analysts predict for this company's profits".
+
+        CONCEPT: Returns analyst consensus profit forecasts including revenue,
+        net profit, and EPS estimates from multiple research institutions.
+
+        DIFFERENTIATION: vs get_forecast_info: This returns analyst consensus;
+        forecast_info returns company-issued performance guidance.
+
+        next_recommended_tools: get_forecast_info, get_financial_reports, get_valuation_metrics
+
         Args:
             symbol: Asset ticker. Format: EXCHANGE:SYMBOL
                 - A股: SSE:600519 (上交所), SZSE:000001 (深交所)
@@ -1543,6 +1588,17 @@ def register_fundamental_tools(mcp: FastMCP):
         ctx: Context = None,
     ) -> Dict[str, Any]:
         """Get key financial ratios (PE, PB, ROE, etc.) for the given ticker.
+
+        WHEN TO USE: User asks about financial ratios like PE, PB, ROE, ROA,
+        debt-to-equity, or "how does this company's profitability compare".
+
+        CONCEPT: Returns key financial ratios across profitability, valuation,
+        leverage, and efficiency dimensions.
+
+        DIFFERENTIATION: vs get_valuation_metrics: This returns comprehensive ratios;
+        valuation_metrics focuses on valuation with historical percentile.
+
+        next_recommended_tools: get_valuation_metrics, get_financial_reports, get_stock_fact_pack
 
         Args:
             symbol: Asset ticker. Format: EXCHANGE:SYMBOL

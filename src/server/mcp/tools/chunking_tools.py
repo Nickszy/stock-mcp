@@ -51,9 +51,18 @@ def register_chunking_tools(mcp: FastMCP):
         ctx: Context = None
     ) -> Dict[str, Any]:
         """Get semantic chunks from SEC filing with item labels.
-        
-        Uses edgartools' ChunkedDocument to split SEC filings by logical sections (Items).
-        Each chunk includes rich metadata for precise RAG filtering.
+
+        WHEN TO USE: User needs structured sections from a specific SEC filing
+        for RAG (Retrieval Augmented Generation) or section-level analysis.
+
+        CONCEPT: Uses edgartools' ChunkedDocument to split SEC filings by logical
+        sections (Items). Each chunk includes rich metadata for precise filtering.
+
+        DIFFERENTIATION: vs get_filing_markdown: This returns structured chunks by
+        section; markdown returns the full text. vs extract_filing_section_facts:
+        This chunks for RAG; section_facts extracts fact statements.
+
+        next_recommended_tools: get_filing_markdown, extract_filing_section_facts, extract_filing_key_metrics
         
         Args:
             ticker: Stock ticker (e.g., "AAPL" or "NASDAQ:AAPL")

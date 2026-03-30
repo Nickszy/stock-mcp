@@ -65,6 +65,17 @@ def register_news_tools(mcp: FastMCP):
     ) -> Dict[str, Any]:
         """Get latest market news.
 
+        WHEN TO USE: User asks about general market news, sector trends, or
+        searches for news by keyword. Not stock-specific.
+
+        CONCEPT: Returns latest financial news articles matching a search query.
+        Covers broad market themes, policy changes, and sector trends.
+
+        DIFFERENTIATION: vs get_stock_news: This is keyword-based general search;
+        get_stock_news is for stock-specific news.
+
+        next_recommended_tools: get_stock_news, get_us_news_sentiment
+
         Args:
             query: Search query (e.g. "technology stocks")
             limit: Max results (default 10)
@@ -120,11 +131,17 @@ def register_news_tools(mcp: FastMCP):
     ) -> Dict[str, Any]:
         """Get news sentiment analysis for a US stock.
 
-        Fetches recent English-language news headlines for the given US stock
-        and scores each item with a rule-based sentiment classifier that mimics
-        FinBERT outputs (positive / neutral / negative + confidence score).
+        WHEN TO USE: User asks about market sentiment, news tone, or
+        "is the news positive or negative for this stock".
 
-        Useful for gauging market sentiment before earnings or catalysts.
+        CONCEPT: Fetches recent English-language news headlines for a US stock
+        and scores each with a rule-based sentiment classifier that mimics
+        FinBERT outputs (positive/neutral/negative + confidence score).
+
+        DIFFERENTIATION: vs get_stock_news: This analyzes sentiment; stock_news returns raw articles.
+        vs get_latest_news: This is US stock-specific with sentiment scoring.
+
+        next_recommended_tools: get_stock_news, get_latest_news, get_us_stock_fact_pack
 
         Args:
             symbol: US stock ticker. Format: EXCHANGE:SYMBOL

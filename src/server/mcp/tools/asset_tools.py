@@ -223,6 +223,22 @@ def register_asset_tools(mcp: FastMCP):
     ) -> Dict[str, Any]:
         """Get K-line historical price data (daily by default).
 
+        WHEN TO USE:
+        - Need historical OHLCV candlestick data for charting or technical analysis
+        - Backtesting trading strategies on historical price data
+        - Computing technical indicators (MA, RSI, MACD) from raw price data
+
+        CONCEPT:
+        Returns historical K-line (candlestick) data: open, high, low, close, volume.
+        Supports A-share, US stock, and crypto markets. Configurable interval and date range.
+
+        DIFFERENTIATION:
+        - vs get_real_time_price: This returns historical time-series; real_time returns current snapshot
+        - vs get_us_price_history: This is multi-market; us_price_history is US-only
+        - vs get_technical_indicators: This returns raw OHLCV; technical calculates derived indicators
+
+        next_recommended_tools: get_real_time_price, get_technical_indicators, get_asset_info
+
         Args:
             ticker: Asset ticker. Format: EXCHANGE:SYMBOL
                 - A股: SSE:600519 (上交所), SZSE:000001 (深交所)

@@ -21,7 +21,18 @@ def register_trade_tools(mcp: FastMCP):
         quantity: float,
         price: Optional[float] = None,
         exchange_id: Optional[str] = None, ctx: Context = None) -> Dict[str, Any]:
-        """Execute a trading order.x
+        """Execute a trading order.
+
+        WHEN TO USE: User explicitly wants to place a buy/sell order.
+        Only use when user gives clear trading instructions.
+
+        CONCEPT: Submits a market or limit order to a connected exchange.
+        Supports crypto (CCXT) and broker integrations.
+
+        DIFFERENTIATION: This is the only trade execution tool. All analysis tools
+        are read-only; this is the only write/action tool.
+
+        next_recommended_tools: get_account_balance, get_real_time_price
 
         Args:
             symbol: Trading pair symbol (e.g., "BTC/USDT", "AAPL")
@@ -91,6 +102,17 @@ def register_trade_tools(mcp: FastMCP):
     @mcp.tool(tags={"trade"})
     async def get_account_balance(exchange_id: Optional[str] = None, ctx: Context = None) -> Dict[str, Any]:
         """Get account balance.
+
+        WHEN TO USE: User asks about their portfolio balance, available funds,
+        or position sizes on connected exchanges.
+
+        CONCEPT: Returns account balance from connected exchange showing
+        total equity, available margin, and per-asset positions.
+
+        DIFFERENTIATION: This is a portfolio/account tool, not a market data tool.
+        Use market data tools for prices, this for account status.
+
+        next_recommended_tools: execute_order, get_real_time_price
 
         Args:
             exchange_id: Optional exchange ID

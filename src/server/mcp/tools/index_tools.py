@@ -187,12 +187,21 @@ def register_index_tools(mcp: FastMCP):
         limit: int = 60,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取指数行情历史：开盘/收盘/最高/最低/成交量/涨跌幅。
+        """获取指数行情历史.
 
-        Typical use cases:
-        - "沪深300最近60个交易日走势"
-        - "上证指数2025年以来的日K数据"
-        - "创业板指月线数据"
+        WHEN TO USE:
+        - Need historical index OHLCV data for trend analysis or backtesting
+        - Computing index-level technical indicators
+        - Comparing index performance across time periods
+
+        CONCEPT: Returns historical K-line data for market indices
+        (CSI 300, SSE Composite, ChiNext, etc.) with daily/weekly/monthly intervals.
+
+        DIFFERENTIATION:
+        - vs get_kline_data: This is index-specific; kline_data is for individual stocks
+        - vs get_index_fact_pack: This returns raw time-series; fact_pack returns aggregated analysis
+
+        next_recommended_tools: get_index_pe_pb, get_index_fact_pack, get_kline_data
 
         Args:
             symbol: 指数代码 (如 '000300'=沪深300, '000001'=上证指数, '399006'=创业板指)
