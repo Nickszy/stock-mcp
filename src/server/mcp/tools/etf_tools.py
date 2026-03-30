@@ -61,10 +61,20 @@ def register_etf_tools(mcp: FastMCP):
     ) -> Dict[str, Any]:
         """获取A股ETF列表及实时行情。
 
-        Typical use cases:
-        - "列出所有股票型ETF"
-        - "成交额最大的ETF"
-        - "债券型ETF有哪些"
+        WHEN TO USE:
+        - Browse or filter ETFs (types, top volume, sector ETF codes)
+        - Find sector ETF codes for sector/industry analysis
+        - Screen ETFs by type for portfolio construction
+
+        CONCEPT:
+        ETF list tool returning real-time quotes filtered by type
+        (stock/bond/commodity/cross-border). Returns price, change%, amount, turnover.
+
+        DIFFERENTIATION:
+        - vs get_etf_detail: This returns ETF list overview; detail returns single ETF info
+        - vs get_index_constituents: This returns ETF funds; index returns index constituents
+
+        next_recommended_tools: get_etf_detail, get_etf_performance, get_index_fact_pack
 
         Args:
             etf_type: ETF类型筛选 (股票型/债券型/商品型/跨境型, 空=全部)
@@ -136,9 +146,21 @@ def register_etf_tools(mcp: FastMCP):
     ) -> Dict[str, Any]:
         """获取单只ETF详情信息。
 
-        Typical use cases:
-        - "510300 沪深300ETF的详情"
-        - "159919 嘉实300ETF的详细信息"
+        WHEN TO USE:
+        - User has identified an ETF code and wants full details
+        - Compare ETF fees, size, tracking error across candidates
+        - Evaluate ETF liquidity and premium/discount levels
+
+        CONCEPT:
+        Single ETF detail query returning NAV, cumulative NAV, premium/discount,
+        IOPV, management fee, custody fee, inception date, fund size, tracking index.
+
+        DIFFERENTIATION:
+        - vs get_etf_list: This returns full detail for one ETF; list returns overview of many
+        - vs get_etf_performance: This returns fund attributes; performance returns price K-line
+        - vs get_fund_detail: This is ETF-specific; fund_detail is for open-end mutual funds
+
+        next_recommended_tools: get_etf_performance, get_etf_list, get_index_fact_pack
 
         Args:
             symbol: ETF代码 (如 '510300'=华泰柏瑞沪深300ETF)
@@ -202,12 +224,24 @@ def register_etf_tools(mcp: FastMCP):
         limit: int = 60,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取ETF行情历史：开盘/收盘/最高/最低/成交量/涨跌幅。
+        """获取ETF行情历史.
 
-        Typical use cases:
-        - "沪深300ETF最近60个交易日走势"
-        - "510300今年以来日K数据"
-        - "纳指ETF月线数据"
+        WHEN TO USE:
+        - Analyze ETF price trends over time
+        - Calculate technical indicators (MA, RSI, MACD) from raw OHLCV data
+        - Backtest ETF strategies or compare performance across periods
+
+        CONCEPT:
+        ETF price history returning OHLCV (Open/High/Low/Close/Volume) K-line data.
+        Supports daily/weekly/monthly periods. Fields: date, open, close, high,
+        low, volume, amount, change_pct. Suitable for technical analysis.
+
+        DIFFERENTIATION:
+        - vs get_etf_detail: This returns time-series data; detail returns fund snapshot
+        - vs get_us_price_history: This is for A-share ETFs; us_price_history is for US stocks
+        - vs get_kline_data: get_kline_data is for individual stocks; this is ETF-specific
+
+        next_recommended_tools: get_etf_detail, get_us_technical_indicators, get_etf_list
 
         Args:
             symbol: ETF代码 (如 '510300'=沪深300ETF, '513100'=纳指ETF)
