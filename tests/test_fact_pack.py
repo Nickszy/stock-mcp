@@ -1060,3 +1060,223 @@ class TestAllFactPackMarkdownContracts:
 
         md = result["artifact"]["content"].get("markdown", "")
         assert "美股 test markdown with real content" in md
+
+
+# =====================================================================
+# COL-211: Extractor Robustness Tests
+# =====================================================================
+
+
+class TestExtractorRobustness:
+    """Verify extractors handle various akshare field name formats."""
+
+    def test_fuzzy_get_exact_match(self):
+        from src.server.api.routes.fact_pack import _fuzzy_get
+        d = {"净资产收益率(%)": 15.3}
+        assert _fuzzy_get(d, "净资产收益率(%)", "roe") == 15.3
+
+    def test_fuzzy_get_fallback_match(self):
+        from src.server.api.routes.fact_pack import _fuzzy_get
+        d = {"roe": 12.5}
+        assert _fuzzy_get(d, "净资产收益率(%)", "roe") == 12.5
+
+    def test_fuzzy_get_contains_match(self):
+        from src.server.api.routes.fact_pack import _fuzzy_get
+        d = {"加权净资产收益率(%)": 18.2}
+        # Exact key doesn't match, but "净资产收益率" is contained in "加权净资产收益率"
+        assert _fuzzy_get(d, "净资产收益率(%)", "roe") == 18.2
+
+    def test_fuzzy_get_no_match(self):
+        from src.server.api.routes.fact_pack import _fuzzy_get
+        d = {"other_field": 42}
+        assert _fuzzy_get(d, "净资产收益率(%)", "roe") is None
+
+    def test_extract_profitability_akshare_columns(self):
+        """Test with actual akshare column names from stock_financial_analysis_indicator."""
+        from src.server.api.routes.fact_pack import _extract_profitability
+        facts = {
+            "financial": {
+                "financial_indicators": [
+                    {"日期": "2023-12-31", "毛利率(%)": 91.5, "净利率(%)": 49.8, "净资产收益率(%)": 30.2},
+                ],
+            },
+        }
+        result = _extract_profitability(facts)
+        assert result["roe"] == 30.2
+        assert result["net_margin"] == 49.8
+        assert result["gross_margin"] == 91.5
+
+    def test_extract_profitability_english_columns(self):
+        from src.server.api.routes.fact_pack import _extract_profitability
+        facts = {
+            "financial": {
+                "financial_indicators": [
+                    {"roe": 25.0, "net_margin": 45.0, "gross_margin": 90.0},
+                ],
+            },
+        }
+        result = _extract_profitability(facts)
+        assert result["roe"] == 25.0
+        assert result["net_margin"] == 45.0
+        assert result["gross_margin"] == 90.0
+
+    def test_extract_profitability_yoy_from_income(self):
+        """YoY calculated from income_statement when indicators lack YoY."""
+        from src.server.api.routes.fact_pack import _extract_profitability
+        facts = {
+            "financial": {
+                "financial_indicators": [{"roe": 20.0}],
+                "income_statement": [
+                    {"报告期": "20241231", "营业收入": 1500000, "净利润": 750000},
+                    {"报告期": "20231231", "营业收入": 1200000, "净利润": 600000},
+                    {"报告期": "20221231", "营业收入": 1000000, "净利润": 500000},
+                ],
+            },
+        }
+        result = _extract_profitability(facts)
+        assert result["revenue_yoy"] == 25.0  # (1500000-1200000)/1200000*100
+        assert result["profit_yoy"] == 25.0   # (750000-600000)/600000*100
+
+    def test_extract_profitability_empty_financial(self):
+        from src.server.api.routes.fact_pack import _extract_profitability
+        result = _extract_profitability({"financial": {}})
+        assert result["roe"] is None
+        assert result["net_margin"] is None
+        assert result["revenue_yoy"] is None
+
+    def test_extract_valuation_akshare_fields(self):
+        """Test with fields from stock_a_indicator_lg."""
+        from src.server.api.routes.fact_pack import _extract_valuation
+        facts = {
+            "market": {
+                "valuation": {
+                    "pe": 35.2,
+                    "pe_ttm": 33.8,
+                    "pb": 11.5,
+                    "ps_ttm": 15.0,
+                    "dv_ratio": 1.8,
+                },
+            },
+        }
+        result = _extract_valuation(facts)
+        assert result["pe_ttm"] == 33.8
+        assert result["pb"] == 11.5
+        assert result["ps_ttm"] == 15.0
+        assert result["dv_ratio"] == 1.8
+
+    def test_extract_valuation_flat_market(self):
+        """market dict is the valuation data (no nested valuation key)."""
+        from src.server.api.routes.fact_pack import _extract_valuation
+        facts = {
+            "market": {
+                "pe": 30.0,
+                "pb": 10.0,
+            },
+        }
+        result = _extract_valuation(facts)
+        assert result["pe_ttm"] == 30.0
+        assert result["pb"] == 10.0
+
+    def test_extract_valuation_empty(self):
+        from src.server.api.routes.fact_pack import _extract_valuation
+        result = _extract_valuation({"market": {}})
+        assert result["pe_ttm"] is None
+        assert result["pb"] is None
+
+    def test_extract_financial_akshare_fields(self):
+        from src.server.api.routes.fact_pack import _extract_financial
+        facts = {
+            "financial": {
+                "balance_sheet": [
+                    {"资产总计": 2000000, "负债合计": 800000},
+                ],
+                "cash_flow": [
+                    {"经营活动产生的现金流量净额": 500000},
+                ],
+            },
+        }
+        result = _extract_financial(facts)
+        assert result["total_assets"] == 2000000
+        assert result["total_liabilities"] == 800000
+        assert result["debt_ratio"] == 40.0
+        assert result["operating_cashflow"] == 500000
+
+    def test_extract_financial_debt_ratio_calc(self):
+        from src.server.api.routes.fact_pack import _extract_financial
+        facts = {
+            "financial": {
+                "balance_sheet": [{"资产总计": 1000000, "负债合计": 650000}],
+                "cash_flow": [{}],
+            },
+        }
+        result = _extract_financial(facts)
+        assert result["debt_ratio"] == 65.0
+
+    def test_extract_financial_empty(self):
+        from src.server.api.routes.fact_pack import _extract_financial
+        result = _extract_financial({"financial": {}})
+        assert result["total_assets"] is None
+        assert result["debt_ratio"] is None
+
+    def test_extract_shareholder_various_keys(self):
+        from src.server.api.routes.fact_pack import _extract_shareholder
+        facts = {
+            "governance": {
+                "top10_shareholders": [
+                    {"holder_name": "中国茅台", "hold_ratio": 60, "change": "+100"},
+                    {"股东名称": "Other", "持股比例": 5.0, "增减": "-50"},
+                ],
+            },
+        }
+        result = _extract_shareholder(facts)
+        assert len(result["top10_shareholders"]) == 2
+        assert result["top10_shareholders"][0]["name"] == "中国茅台"
+        assert result["top10_shareholders"][0]["ratio"] == 60.0
+
+    def test_extract_dividend_various_keys(self):
+        from src.server.api.routes.fact_pack import _extract_dividend
+        facts = {
+            "events": {
+                "dividends": {
+                    "data": [
+                        {"dividend_yield": 0.025, "consecutive_years": 10, "payout_ratio": 0.52},
+                    ],
+                },
+            },
+        }
+        result = _extract_dividend(facts)
+        assert result["dividend_yield"] == 0.025
+        assert result["consecutive_years"] == 10.0
+        assert result["payout_ratio"] == 0.52
+
+    def test_extract_dividend_chinese_keys(self):
+        from src.server.api.routes.fact_pack import _extract_dividend
+        facts = {
+            "events": {
+                "dividends": {"股息率": 2.5, "连续分红年数": 8, "股利支付率": 50.0},
+            },
+        }
+        result = _extract_dividend(facts)
+        assert result["dividend_yield"] == 2.5
+        assert result["consecutive_years"] == 8.0
+
+    def test_extract_dividend_non_dict(self):
+        from src.server.api.routes.fact_pack import _extract_dividend
+        result = _extract_dividend({"events": {"dividends": "not a dict"}})
+        assert result["dividend_yield"] is None
+
+    def test_extract_revenue_breakdown_product_region(self):
+        from src.server.api.routes.fact_pack import _extract_revenue_breakdown
+        facts = {
+            "business_structure": {
+                "rows": [
+                    {"分类类型": "按产品分类", "主营构成": "茅台酒", "主营收入占比": 85.0, "主营收入": 1000000},
+                    {"分类类型": "按地区分类", "主营构成": "国内", "主营收入占比": 90.0, "主营收入": 1050000},
+                    {"分类类型": "按产品分类", "主营构成": "系列酒", "主营收入占比": 10.0, "主营收入": 120000},
+                ],
+            },
+        }
+        result = _extract_revenue_breakdown(facts)
+        assert len(result["by_product"]) == 2
+        assert len(result["by_region"]) == 1
+        assert result["by_product"][0]["name"] == "茅台酒"
