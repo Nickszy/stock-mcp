@@ -43,6 +43,7 @@ from src.server.mcp.tools.hk_connect_tools import register_hk_connect_tools
 from src.server.mcp.tools.canonical_data_tools import register_canonical_data_tools
 from src.server.mcp.tools.entity_tools import register_entity_tools
 from src.server.mcp.tools.financial_analytics_tools import register_financial_analytics_tools
+from src.server.mcp.tools.stock_comparison_tools import register_stock_comparison_tools
 
 
 @dataclass(frozen=True)
@@ -273,6 +274,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="AI财务分析 (增长率分析/财务健康评分)",
         count=2,
+    ),
+    ToolGroup(
+        name="stock-comparison",
+        register=register_stock_comparison_tools,
+        enabled=True,
+        description="多股对比 (2-5只股票横向对比)",
+        count=1,
     ),
 ]
 
