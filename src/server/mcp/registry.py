@@ -110,9 +110,9 @@ TOOL_GROUPS: List[ToolGroup] = [
     ToolGroup(
         name="news",
         register=register_news_tools,
-        enabled=False,
-        description="新闻与检索",
-        count=1,
+        enabled=True,
+        description="新闻与情绪 (个股新闻/新闻搜索/美股新闻情感分析)",
+        count=3,
     ),
     # ---- 美股工具集 (ValueCell 竞品对齐) ----
     ToolGroup(
