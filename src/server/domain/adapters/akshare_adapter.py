@@ -4215,6 +4215,126 @@ class AkshareAdapter(BaseDataAdapter):
 
         return {"data": spreads, "source": "akshare"}
 
+    async def get_earnings_calendar(
+        self, market: str = "沪深京", period: str = "",
+    ) -> Dict[str, Any]:
+        """获取财报披露预约日历.
+
+        Args:
+            market: 市场范围 {"沪深京", "深市", "深主板", "创业板",
+                     "沪市", "沪主板", "科创板", "北交所"}
+            period: 报告期 (如 "2024年报", "2025一季", "2025半年报", "2025三季")
+        """
+        if not period:
+            now = datetime.now()
+            year = str(now.year)
+            if now.month <= 4:
+                period = f"{int(year) - 1}年报"
+            elif now.month <= 8:
+                period = f"{year}半年报"
+            elif now.month <= 10:
+                period = f"{year}三季"
+            else:
+                period = f"{year}年报"
+
+        cache_key = f"akshare:earnings_calendar:{market}:{period}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_report_disclosure, market=market, period=period)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare", "market": market, "period": period}
+
+            col_map = {
+                "股票代码": "stock_code",
+                "股票简称": "stock_name",
+                "首次预约": "first_scheduled",
+                "初次变更": "first_change",
+                "二次变更": "second_change",
+                "三次变更": "third_change",
+                "实际披露": "actual_date",
+            }
+            df = df.rename(columns=col_map)
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+                    elif str(v) == "NaT":
+                        item[k] = None
+
+            result = {
+                "source": "akshare",
+                "market": market,
+                "period": period,
+                "total": len(records),
+                "data": records[:500],
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get earnings calendar: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_dividend_calendar(self, symbol: str = "") -> Dict[str, Any]:
+        """获取个股分红送股日历（巨潮资讯）.
+
+        Args:
+            symbol: 股票代码 (如 600519)，为空则返回空
+        """
+        if not symbol:
+            return {"data": [], "source": "akshare", "error": "symbol required"}
+
+        cache_key = f"akshare:dividend_calendar:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_dividend_cninfo, symbol=symbol)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare", "symbol": symbol}
+
+            col_map = {
+                "实施方案公告日期": "announce_date",
+                "分红类型": "dividend_type",
+                "送股比例": "bonus_share_ratio",
+                "转增比例": "conversion_ratio",
+                "派息比例": "cash_div_ratio",
+                "股权登记日": "record_date",
+                "除权日": "ex_date",
+                "派息日": "pay_date",
+                "股份到账日": "share_credit_date",
+                "实施方案分红说明": "description",
+                "报告时间": "report_period",
+            }
+            df = df.rename(columns=col_map)
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+                    elif str(v) == "NaT" or str(v) == "None":
+                        item[k] = None
+
+            result = {
+                "source": "akshare",
+                "symbol": symbol,
+                "total": len(records),
+                "data": records,
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get dividend calendar: {e}")
+            return {"data": [], "source": "akshare", "symbol": symbol, "error": str(e)}
+
 
 def _safe_float(v) -> float | None:
     """Safely convert a value to float."""

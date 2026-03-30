@@ -162,6 +162,9 @@ _MARKET_METHODS: Set[str] = {
     "get_shareholder_holding_detail",
     "get_ipo_calendar",
     "get_ipo_info",
+    # Corporate event calendar (COL-226)
+    "get_earnings_calendar",
+    "get_dividend_calendar",
     # Technical signals
     "get_technical_signals",
     # Quantitative screener

@@ -44,6 +44,7 @@ from src.server.mcp.tools.canonical_data_tools import register_canonical_data_to
 from src.server.mcp.tools.entity_tools import register_entity_tools
 from src.server.mcp.tools.financial_analytics_tools import register_financial_analytics_tools
 from src.server.mcp.tools.stock_comparison_tools import register_stock_comparison_tools
+from src.server.mcp.tools.corporate_event_tools import register_corporate_event_tools
 
 
 @dataclass(frozen=True)
@@ -281,6 +282,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="多股对比 (2-5只股票横向对比)",
         count=1,
+    ),
+    ToolGroup(
+        name="corporate-event",
+        register=register_corporate_event_tools,
+        enabled=True,
+        description="企业事件日历 (财报披露/分红送股/限售解禁/回购/大宗交易)",
+        count=5,
     ),
 ]
 
