@@ -45,6 +45,7 @@ from src.server.mcp.tools.entity_tools import register_entity_tools
 from src.server.mcp.tools.financial_analytics_tools import register_financial_analytics_tools
 from src.server.mcp.tools.stock_comparison_tools import register_stock_comparison_tools
 from src.server.mcp.tools.corporate_event_tools import register_corporate_event_tools
+from src.server.mcp.tools.shareholder_behavior_tools import register_shareholder_behavior_tools
 
 
 @dataclass(frozen=True)
@@ -289,6 +290,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="企业事件日历 (财报披露/分红送股/限售解禁/回购/大宗交易)",
         count=5,
+    ),
+    ToolGroup(
+        name="shareholder-behavior",
+        register=register_shareholder_behavior_tools,
+        enabled=True,
+        description="股东行为/风险信号 (机构调研/股票质押)",
+        count=2,
     ),
 ]
 

@@ -4335,6 +4335,57 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"Failed to get dividend calendar: {e}")
             return {"data": [], "source": "akshare", "symbol": symbol, "error": str(e)}
 
+    async def get_stock_pledge_ratio(
+        self, symbol: str = "", date: str = "",
+    ) -> Dict[str, Any]:
+        """获取股票质押比例数据.
+
+        Args:
+            symbol: 股票代码 (如 600519)，为空返回全市场
+            date: 查询日期 (如 "20250101")，为空返回最新
+        """
+        cache_key = f"akshare:pledge_ratio:{symbol}:{date}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            if not date:
+                date = datetime.now().strftime("%Y%m%d")
+
+            df = await self._run(ak.stock_gpzy_pledge_ratio_em, date=date)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare", "date": date}
+
+            # Filter by symbol if provided
+            if symbol:
+                code_col = None
+                for col in ("股票代码", "代码", "证券代码"):
+                    if col in df.columns:
+                        code_col = col
+                        break
+                if code_col:
+                    df = df[df[code_col].astype(str).str.contains(symbol, na=False)]
+
+            data = df.to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "date": date,
+                "total": len(data),
+                "data": data,
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get stock pledge ratio: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
     async def get_repo_rates(
         self, start_date: str = "", end_date: str = ""
     ) -> Dict[str, Any]:
@@ -4798,6 +4849,61 @@ class AkshareAdapter(BaseDataAdapter):
 
         except Exception as e:
             self.logger.error(f"Failed to get stock institutional research: {e}")
+            return {"data": [], "date": date, "source": "akshare", "error": str(e)}
+
+    async def get_stock_pledge(self, date: str = "") -> Dict[str, Any]:
+        """获取股票质押比例数据.
+
+        Args:
+            date: 日期 (如 20250328), 为空时使用最近交易日
+        """
+        cache_key = f"akshare:stock_pledge:{date}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            if not date:
+                date = datetime.now().strftime("%Y%m%d")
+
+            df = await self._run(ak.stock_gpzy_pledge_ratio_em, date=date)
+            if df is None or df.empty:
+                return {"data": [], "date": date, "source": "akshare"}
+
+            col_map = {
+                "序号": "seq",
+                "股票代码": "stock_code",
+                "股票简称": "stock_name",
+                "交易日期": "trade_date",
+                "所属行业": "industry",
+                "质押比例": "pledge_ratio",
+                "质押股数": "pledged_shares",
+                "质押市值": "pledged_market_value",
+                "质押笔数": "pledge_count",
+                "无限售股质押数": "unrestricted_pledged_shares",
+                "限售股份质押数": "restricted_pledged_shares",
+                "近一年涨跌幅": "one_year_change_pct",
+                "所属行业代码": "industry_code",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "date": date,
+                "total": len(records),
+                "data": records[:100],
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get stock pledge data: {e}")
             return {"data": [], "date": date, "source": "akshare", "error": str(e)}
 
     # ------------------------------------------------------------------
