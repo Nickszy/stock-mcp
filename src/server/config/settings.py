@@ -150,6 +150,14 @@ class Settings(BaseAppSettings):
         default="data/security_master.sqlite",
         validation_alias="SECURITY_MASTER_SQLITE_PATH",
     )
+    news_mcp_base_url: str = Field(
+        default="http://localhost:9899",
+        validation_alias="NEWS_MCP_BASE_URL",
+    )
+    news_db_url: str = Field(
+        default="",
+        validation_alias="NEWS_DB_URL",
+    )
 
     # Other optional configs
     cors_origins: str = Field(default="*", validation_alias="CORS_ORIGINS")

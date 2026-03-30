@@ -34,6 +34,7 @@ from src.server.mcp.tools.corporate_action_tools import register_corporate_actio
 from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
 from src.server.mcp.tools.cn_macro_tools import register_cn_macro_tools
 from src.server.mcp.tools.fixed_income_tools import register_fixed_income_tools
+from src.server.mcp.tools.research_report_tools import register_research_report_tools
 
 
 @dataclass(frozen=True)
@@ -200,6 +201,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="固定收益/债券研究 (收益率曲线/可转债列表/可转债历史/可转债详情/信用利差/固收概览)",
         count=6,
+    ),
+    ToolGroup(
+        name="research-report",
+        register=register_research_report_tools,
+        enabled=True,
+        description="研报数据 (研报搜索/个股研报 — 接入news-mcp)",
+        count=2,
     ),
 ]
 
