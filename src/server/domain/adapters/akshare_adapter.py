@@ -1313,7 +1313,11 @@ class AkshareAdapter(BaseDataAdapter):
 
                 # Normalize date format to YYYYMMDD
                 try:
-                    df_work["end_date"] = df_work["end_date"].astype(str).str[:8]
+                    df_work["end_date"] = (
+                        df_work["end_date"].astype(str)
+                        .str.replace(r"[-/]", "", regex=True)
+                        .str[:8]
+                    )
                 except Exception:
                     pass
 

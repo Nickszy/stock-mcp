@@ -1144,6 +1144,22 @@ class TestExtractorRobustness:
         assert result["net_margin"] is None
         assert result["revenue_yoy"] is None
 
+    def test_extract_profitability_yoy_hyphenated_dates(self):
+        """YoY must work with hyphenated dates like '2024-12-31' from akshare."""
+        from src.server.api.routes.fact_pack import _extract_profitability
+        facts = {
+            "financial": {
+                "financial_indicators": [{"roe": 20.0}],
+                "income_statement": [
+                    {"报告期": "2024-12-31", "营业收入": 1500000, "净利润": 750000},
+                    {"报告期": "2023-12-31", "营业收入": 1200000, "净利润": 600000},
+                ],
+            },
+        }
+        result = _extract_profitability(facts)
+        assert result["revenue_yoy"] == 25.0
+        assert result["profit_yoy"] == 25.0
+
     def test_extract_valuation_akshare_fields(self):
         """Test with fields from stock_a_indicator_lg."""
         from src.server.api.routes.fact_pack import _extract_valuation

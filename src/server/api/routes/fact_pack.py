@@ -43,17 +43,19 @@ def _safe_num(value: Any) -> Optional[float]:
 def _fuzzy_get(d: Dict[str, Any], *keys: str) -> Any:
     """Get value from dict trying multiple key names (exact match first).
 
-    Also supports partial matching: if no exact match, tries contains-based
-    matching for single-key lookups.
+    Fallback: contains-based matching for the first key, but only when
+    target is >= 3 chars to avoid false positives (e.g. "pe" matching "dv_ratio").
     """
     for k in keys:
         v = d.get(k)
         if v is not None:
             return v
-    # Fallback: contains-based matching for the first key
+    # Fallback: contains-based matching for the first key (min 3 chars)
     target = keys[0] if keys else ""
+    if len(target) < 3:
+        return None
     for dk, dv in d.items():
-        if target and target in str(dk) and dv is not None:
+        if target in str(dk) and dv is not None:
             return dv
     return None
 
@@ -65,7 +67,7 @@ def _extract_valuation(facts: Dict[str, Any]) -> Dict[str, Any]:
     columns like: pe, pe_ttm, pb, ps, ps_ttm, dv_ratio, total_mv, etc.
     """
     market = facts.get("market", {})
-    raw = market if isinstance(market, dict) and ("pe" in market or "pe_ttm" in market) else {}
+    raw = dict(market) if isinstance(market, dict) and ("pe" in market or "pe_ttm" in market) else {}
     if not raw:
         val = market.get("valuation", {}) if isinstance(market, dict) else {}
         raw.update(val)
@@ -120,13 +122,15 @@ def _extract_profitability(facts: Dict[str, Any]) -> Dict[str, Any]:
         # income_data is sorted newest-first from stock_financial_report_sina
         cur = income_data[0] if isinstance(income_data[0], dict) else {}
         # Find year-ago entry: look for same month in previous year
-        cur_date = str(cur.get("报告期", cur.get("end_date", "")))[:8]
+        cur_date_raw = str(cur.get("报告期", cur.get("end_date", "")))
+        cur_date = cur_date_raw.replace("-", "").replace("/", "")[:8]
         cur_month = cur_date[4:6]
         prev = {}
         for entry in income_data[1:]:
             if not isinstance(entry, dict):
                 continue
-            ed = str(entry.get("报告期", entry.get("end_date", "")))[:8]
+            ed_raw = str(entry.get("报告期", entry.get("end_date", "")))
+            ed = ed_raw.replace("-", "").replace("/", "")[:8]
             if ed[4:6] == cur_month:
                 prev = entry
                 break
