@@ -46,6 +46,9 @@ from src.server.api.routes import (
     sentiment_router,
     hk_market_router,
     hk_connect_router,
+    structured_data_router,
+    admin_router,
+    admin_html_router,
 )
 from src.server.utils.logger import logger
 from src.server.middleware import JsonArgumentsFixMiddleware, MarkdownNegotiationMiddleware
@@ -209,6 +212,9 @@ def create_app():
     app.include_router(sentiment_router)
     app.include_router(hk_market_router)
     app.include_router(hk_connect_router)
+    app.include_router(structured_data_router)
+    app.include_router(admin_router)
+    app.include_router(admin_html_router)
 
     logger.info("✅ RESTful API routes registered")
     logger.info("   - Health check: /health")
@@ -233,6 +239,8 @@ def create_app():
     logger.info("   - Sentiment: /api/v1/sentiment/*")
     logger.info("   - HK Market: /api/v1/hk/*")
     logger.info("   - HK Connect: /api/v1/hk-connect/*")
+    logger.info("   - Structured Data: /api/v1/structured-data/*")
+    logger.info("   - Admin Workbench: /admin")
 
     # 6. Mount MCP protocol endpoint
     if mcp_app:

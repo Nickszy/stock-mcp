@@ -127,6 +127,12 @@ async def init_adapters() -> None:
             "Tushare > " if tushare_available else "",
         )
 
+        # Initialize Structured Data subsystem (requires PostgreSQL)
+        if postgres_ok:
+            await _init_structured_data(postgres)
+        else:
+            logger.info("ℹ️  Structured data subsystem skipped (PostgreSQL required)")
+
         _initialized = True
 
 
@@ -169,3 +175,97 @@ async def shutdown_adapters() -> None:
     except Exception:
         pass
     return None
+
+
+async def _init_structured_data(postgres_conn) -> None:
+    """Initialize the structured data subsystem — repos, registry, orchestrator, runner.
+
+    Best-effort: logs warnings if something fails but does not block app startup.
+    """
+    try:
+        from src.server.domain.structured_data.repositories.raw_repository import RawRepository
+        from src.server.domain.structured_data.repositories.candidate_repository import CandidateRepository
+        from src.server.domain.structured_data.repositories.canonical_repository import CanonicalRepository
+        from src.server.domain.structured_data.repositories.issue_repository import IssueRepository
+        from src.server.domain.structured_data.registry import build_default_registry
+        from src.server.domain.structured_data.orchestrator import Orchestrator
+        from src.server.domain.structured_data.scheduler.runner import TaskRunner
+        from src.server.domain.structured_data.approval_service import ApprovalService
+        from src.server.domain.structured_data.publish_service import PublishService
+
+        # Create repositories
+        raw_repo = RawRepository(postgres_conn)
+        candidate_repo = CandidateRepository(postgres_conn)
+        canonical_repo = CanonicalRepository(postgres_conn)
+        issue_repo = IssueRepository(postgres_conn)
+
+        # Ensure schemas (creates tables if missing)
+        await raw_repo.ensure_schema()
+        await candidate_repo.ensure_schema()
+        await canonical_repo.ensure_schema()
+        await issue_repo.ensure_schema()
+
+        # Build dataset registry with default configs
+        registry = build_default_registry()
+
+        # Register financial_statements normalizer + validator (if available)
+        try:
+            from src.server.domain.structured_data.normalize.financial_statements import FinancialStatementsNormalizer
+            registry.register_normalizer("financial_statements", FinancialStatementsNormalizer())
+        except Exception:
+            logger.debug("Financial statements normalizer not loaded")
+
+        try:
+            from src.server.domain.structured_data.validate.financial_statements import FinancialStatementsValidator
+            registry.register_validator("financial_statements", FinancialStatementsValidator())
+        except Exception:
+            logger.debug("Financial statements validator not loaded")
+
+        # Create orchestrator
+        orchestrator = Orchestrator(
+            registry=registry,
+            raw_repo=raw_repo,
+            candidate_repo=candidate_repo,
+            canonical_repo=canonical_repo,
+            issue_repo=issue_repo,
+        )
+
+        # Create runner
+        gateway = Container.market_gateway()
+        runner = TaskRunner(
+            registry=registry,
+            raw_repo=raw_repo,
+            gateway=gateway,
+        )
+
+        # Create services
+        approval_service = ApprovalService(
+            candidate_repo=candidate_repo,
+            canonical_repo=canonical_repo,
+            issue_repo=issue_repo,
+        )
+        publish_service = PublishService(
+            candidate_repo=candidate_repo,
+            canonical_repo=canonical_repo,
+        )
+
+        # Inject into route modules
+        from src.server.api.routes.structured_data import set_structured_data_components
+        from src.server.api.routes.admin import set_approval_service as _set_admin_approval_service
+        set_structured_data_components(
+            runner=runner,
+            orchestrator=orchestrator,
+            approval_service=approval_service,
+            publish_service=publish_service,
+        )
+        _set_admin_approval_service(approval_service)
+
+        logger.info(
+            "✅ Structured data subsystem initialized",
+            datasets=len(registry.list_all()),
+        )
+    except Exception as e:
+        logger.warning(
+            "⚠️  Structured data subsystem initialization failed (non-fatal)",
+            error=str(e),
+        )

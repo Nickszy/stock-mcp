@@ -164,6 +164,50 @@ class IssueRepository:
             )
             return "UPDATE 1" in result
 
+    async def list_tasks(
+        self,
+        dataset_key: Optional[str] = None,
+        resolved: Optional[bool] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """List approval tasks with optional filters.
+
+        Args:
+            dataset_key: Filter by dataset (None = all datasets).
+            resolved: None = all tasks, True = resolved only, False = pending only.
+            limit: Maximum rows to return.
+        """
+        pool = await self._get_pool()
+        if not pool:
+            return []
+
+        conditions: List[str] = []
+        params: List[Any] = []
+        idx = 1
+
+        if dataset_key is not None:
+            conditions.append(f"dataset_key = ${idx}")
+            params.append(dataset_key)
+            idx += 1
+
+        if resolved is not None:
+            conditions.append(f"is_resolved = ${idx}")
+            params.append(resolved)
+            idx += 1
+
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        params.append(limit)
+
+        sql = f"""
+            SELECT * FROM approval_tasks
+            {where_clause}
+            ORDER BY created_at DESC LIMIT ${idx}
+        """
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+        return [dict(r) for r in rows]
+
     async def get_task_for_candidate(self, candidate_id: str) -> Optional[Dict[str, Any]]:
         """Get the active (unresolved) approval task for a candidate."""
         pool = await self._get_pool()

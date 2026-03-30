@@ -121,6 +121,79 @@ async def get_dataset_info(dataset_key: str) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Financial statements fetcher
+# ---------------------------------------------------------------------------
+
+async def financial_statements_fetcher(
+    dataset_key: str,
+    source: str,
+    business_key: Optional[str] = None,
+    **kwargs,
+) -> Optional[Dict[str, Any]]:
+    """Fetcher that bridges MarketGateway → structured data pipeline.
+
+    Calls the existing gateway to get financial data, then wraps it
+    in a format suitable for the raw repository.
+    """
+    from src.server.core.dependencies import Container
+    gateway = Container.gateway()
+    if gateway is None:
+        logger.warning("Gateway not available for structured data fetch")
+        return None
+
+    # business_key should be a symbol like "600519" or "SSE:600519"
+    symbol = business_key or kwargs.get("symbol")
+    if not symbol:
+        return None
+
+    try:
+        result = await gateway.get_financial_statements(
+            ticker=symbol,
+            report_type="all",
+            periods=4,
+        )
+        if not result:
+            return None
+
+        # The gateway returns data with income/balance/cashflow sections
+        # Build the business key from normalized symbol
+        from src.server.domain.symbols.resolver import SymbolResolver
+        resolved = await SymbolResolver.resolve(symbol)
+        exchange = resolved.exchange if resolved else ""
+        clean_symbol = resolved.symbol if resolved else symbol
+
+        # Find the latest report period
+        report_period = ""
+        for section_key in ["income_statement", "balance_sheet", "cash_flow", "income", "balance", "cashflow"]:
+            section = result.get(section_key)
+            if isinstance(section, list) and section:
+                for row in section:
+                    if isinstance(row, dict):
+                        period = row.get("end_date") or row.get("报告期") or ""
+                        if period and (not report_period or period > report_period):
+                            report_period = str(period).replace("-", "")[:8]
+
+        biz_key = f"{exchange}:{clean_symbol}:{report_period}:all"
+
+        return {
+            "business_key": biz_key,
+            "source": source,
+            "data": result,
+            "symbol": clean_symbol,
+            "exchange": exchange,
+        }
+
+    except Exception as e:
+        logger.error(
+            "Financial statements fetcher failed",
+            symbol=symbol,
+            source=source,
+            error=str(e),
+        )
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Initialization
 # ---------------------------------------------------------------------------
 
@@ -157,6 +230,26 @@ async def init_structured_data(
     if issue_repo:
         await issue_repo.ensure_schema()
 
+    # Register normalizers
+    from src.server.domain.structured_data.normalize.financial_statements import (
+        FinancialStatementsNormalizer,
+    )
+    fs_normalizer = FinancialStatementsNormalizer()
+    registry.register_normalizer("financial_statements", fs_normalizer)
+
+    # Register validators
+    from src.server.domain.structured_data.validate.engine import ValidationEngine
+    from src.server.domain.structured_data.validate.financial_statements import (
+        register_financial_statement_rules,
+    )
+    validation_engine = ValidationEngine()
+    register_financial_statement_rules(validation_engine)
+    # Wrap validation_engine to have a validate() method compatible with orchestrator
+    registry.register_validator("financial_statements", _ValidatorAdapter(validation_engine))
+
+    # Register fetchers
+    registry.register_fetcher("financial_statements", financial_statements_fetcher)
+
     # Create runner
     runner = TaskRunner(
         registry=registry,
@@ -164,9 +257,56 @@ async def init_structured_data(
         gateway=gateway,
     )
 
+    # Create orchestrator
+    orchestrator = Orchestrator(
+        registry=registry,
+        raw_repo=raw_repo,
+        candidate_repo=candidate_repo,
+        canonical_repo=canonical_repo,
+        issue_repo=issue_repo,
+    )
+
+    # Store orchestrator reference for API routes
+    from src.server.api.routes.structured_data import set_structured_data_components
+    set_structured_data_components(runner=runner, orchestrator=orchestrator)
+
     logger.info(
         "Structured data subsystem initialized",
         datasets=len(registry.dataset_keys),
     )
 
     return runner
+
+
+class _ValidatorAdapter:
+    """Adapter to make ValidationEngine compatible with orchestrator's validator interface.
+
+    The orchestrator expects a validator with a validate(normalized_data, config) method
+    that returns a list of issue dicts.
+    """
+
+    def __init__(self, engine: "ValidationEngine"):
+        self._engine = engine
+
+    async def validate(self, normalized_data: dict, config: Any = None) -> list:
+        """Validate normalized data and return list of issue dicts."""
+        dataset_key = config.dataset_key if config else "financial_statements"
+        business_key = normalized_data.get("business_key", "unknown")
+
+        result = await self._engine.validate(
+            dataset_key=dataset_key,
+            business_key=business_key,
+            data=normalized_data,
+        )
+
+        return [
+            {
+                "rule_name": issue.rule_name,
+                "severity": issue.severity,
+                "field_path": issue.field_path,
+                "expected_value": issue.expected_value,
+                "actual_value": issue.actual_value,
+                "message": issue.message,
+            }
+            for issue in result.issues
+        ]
