@@ -49,6 +49,7 @@ from src.server.api.routes import (
     structured_data_router,
     admin_router,
     admin_html_router,
+    entity_registry_router,
 )
 from src.server.utils.logger import logger
 from src.server.middleware import JsonArgumentsFixMiddleware, MarkdownNegotiationMiddleware
@@ -215,6 +216,7 @@ def create_app():
     app.include_router(structured_data_router)
     app.include_router(admin_router)
     app.include_router(admin_html_router)
+    app.include_router(entity_registry_router)
 
     logger.info("✅ RESTful API routes registered")
     logger.info("   - Health check: /health")
