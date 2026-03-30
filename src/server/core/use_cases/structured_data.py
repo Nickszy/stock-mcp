@@ -19,10 +19,12 @@ from src.server.utils.logger import logger
 
 
 # ---------------------------------------------------------------------------
-# Singleton registry
+# Singleton registry + wired components
 # ---------------------------------------------------------------------------
 
 _registry: Optional[DatasetRegistry] = None
+_canonical_repo: Any = None
+_runner: Optional[TaskRunner] = None
 
 
 def get_registry() -> DatasetRegistry:
@@ -35,8 +37,10 @@ def get_registry() -> DatasetRegistry:
 
 def reset_registry() -> None:
     """Reset the registry (for testing)."""
-    global _registry
+    global _registry, _canonical_repo, _runner
     _registry = None
+    _canonical_repo = None
+    _runner = None
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +223,57 @@ async def _fetch_from_adapter(gateway, source: str, symbol: str) -> Optional[Dic
     return None
 
 
+async def company_profile_fetcher(
+    dataset_key: str,
+    source: str,
+    business_key: Optional[str] = None,
+    **kwargs,
+) -> Optional[Dict[str, Any]]:
+    """Fetcher for company profile data via MarketGateway adapters.
+
+    Calls get_asset_info on the appropriate adapter to retrieve company
+    basic information (name, industry, listing date, shares, etc.).
+    """
+    from src.server.core.dependencies import Container
+    gateway = Container.market_gateway()
+    if gateway is None:
+        logger.warning("Gateway not available for company profile fetch")
+        return None
+
+    symbol = business_key or kwargs.get("symbol")
+    if not symbol:
+        return None
+
+    # Resolve symbol to proper ticker format
+    if ":" in symbol:
+        ticker = symbol
+    else:
+        try:
+            from src.server.domain.symbols.resolver import SymbolResolver
+            resolved = await SymbolResolver.resolve(symbol)
+            ticker = f"{resolved.exchange}:{resolved.symbol}" if resolved else f"SSE:{symbol}"
+        except Exception:
+            ticker = f"SSE:{symbol}"
+
+    try:
+        adapter = gateway.get_adapter_by_provider(source)
+        if adapter is None:
+            return None
+
+        asset = await adapter.get_asset_info(ticker)
+        if asset is None:
+            return None
+
+        # Convert to dict for the pipeline
+        data = asset.model_dump(mode="json") if hasattr(asset, "model_dump") else asset.to_dict()
+        data["_source"] = source
+        return data
+
+    except Exception as e:
+        logger.warning("Company profile fetch failed", source=source, symbol=symbol, error=str(e))
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Initialization
 # ---------------------------------------------------------------------------
@@ -263,6 +318,11 @@ async def init_structured_data(
     fs_normalizer = FinancialStatementsNormalizer()
     registry.register_normalizer("financial_statements", fs_normalizer)
 
+    from src.server.domain.structured_data.normalize.company_profile import (
+        CompanyProfileNormalizer,
+    )
+    registry.register_normalizer("company_profile", CompanyProfileNormalizer())
+
     # Register validators
     from src.server.domain.structured_data.validate.engine import ValidationEngine
     from src.server.domain.structured_data.validate.financial_statements import (
@@ -273,8 +333,16 @@ async def init_structured_data(
     # Wrap validation_engine to have a validate() method compatible with orchestrator
     registry.register_validator("financial_statements", _ValidatorAdapter(validation_engine))
 
+    from src.server.domain.structured_data.validate.company_profile import (
+        register_company_profile_rules,
+    )
+    cp_validation_engine = ValidationEngine()
+    register_company_profile_rules(cp_validation_engine)
+    registry.register_validator("company_profile", _ValidatorAdapter(cp_validation_engine))
+
     # Register fetchers
     registry.register_fetcher("financial_statements", financial_statements_fetcher)
+    registry.register_fetcher("company_profile", company_profile_fetcher)
 
     # Create runner
     runner = TaskRunner(
@@ -291,6 +359,11 @@ async def init_structured_data(
         canonical_repo=canonical_repo,
         issue_repo=issue_repo,
     )
+
+    # Store references for canonical-first query
+    global _canonical_repo, _runner
+    _canonical_repo = canonical_repo
+    _runner = runner
 
     # Store orchestrator reference for API routes
     from src.server.api.routes.structured_data import set_structured_data_components
@@ -336,3 +409,140 @@ class _ValidatorAdapter:
             }
             for issue in result.issues
         ]
+
+
+# ---------------------------------------------------------------------------
+# Canonical-first query
+# ---------------------------------------------------------------------------
+
+
+async def get_canonical_financial_statements(
+    symbol: str,
+    report_type: str = "all",
+    periods: int = 4,
+) -> Dict[str, Any]:
+    """Fetch financial statements — canonical first, gateway fallback.
+
+    Resolution order:
+    1. Look up published canonical records for the symbol
+    2. If found and fresh enough, return with source="canonical"
+    3. Otherwise, fall back to MarketGateway (live adapter) with
+       source attribution, and optionally trigger a background refresh.
+
+    Returns a dict with:
+        data: the financial statements payload
+        source: "canonical" | "<adapter_name>" (e.g. "akshare", "tushare")
+        canonical_meta: {version, published_at} or None
+    """
+    from src.server.core.dependencies import Container
+    from src.server.domain.symbols.resolver import SymbolResolver
+
+    # Resolve symbol to get exchange + clean symbol for business_key lookup
+    resolved = await SymbolResolver.resolve(symbol)
+    exchange = resolved.exchange if resolved else ""
+    clean_symbol = resolved.symbol if resolved else symbol
+
+    # --- Attempt 1: canonical lookup ---
+    if _canonical_repo is not None:
+        try:
+            records = await _canonical_repo.find_by_symbol(
+                dataset_key="financial_statements",
+                exchange=exchange,
+                symbol=clean_symbol,
+                limit=periods,
+            )
+            if records:
+                data = records[0].get("data", {})
+                return {
+                    "data": data,
+                    "source": f"canonical:{records[0].get('source', 'auto')}",
+                    "canonical_meta": {
+                        "canonical_id": str(records[0].get("canonical_id", "")),
+                        "version": records[0].get("version"),
+                        "published_at": _iso(records[0].get("published_at")),
+                        "total_records": len(records),
+                    },
+                    "records": [_serialize_record(r) for r in records],
+                }
+        except Exception as e:
+            logger.debug(
+                "Canonical lookup failed, falling back to gateway",
+                symbol=symbol,
+                error=str(e),
+            )
+
+    # --- Attempt 2: gateway fallback ---
+    gateway = Container.market_gateway()
+    if gateway is None:
+        return {
+            "data": None,
+            "source": "unavailable",
+            "canonical_meta": None,
+            "error": "Neither canonical store nor gateway available",
+        }
+
+    result = await gateway.get_financial_statements(
+        ticker=symbol,
+        report_type=report_type,
+        periods=periods,
+    )
+
+    adapter_source = _detect_source(result)
+
+    # Trigger background refresh to populate canonical for next time
+    if _runner is not None:
+        try:
+            await _runner.refresh_on_demand(
+                dataset_key="financial_statements",
+                business_key=f"{exchange}:{clean_symbol}",
+                source=adapter_source,
+                force=False,
+            )
+        except Exception as e:
+            logger.debug(
+                "Background canonical refresh failed",
+                symbol=symbol,
+                error=str(e),
+            )
+
+    return {
+        "data": result,
+        "source": adapter_source,
+        "canonical_meta": None,
+    }
+
+
+def _iso(value) -> Optional[str]:
+    """Convert datetime to ISO string, or pass through."""
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _serialize_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert an asyncpg record dict to JSON-safe dict."""
+    out = {}
+    for k, v in record.items():
+        if hasattr(v, "isoformat"):
+            out[k] = v.isoformat()
+        elif isinstance(v, bytes):
+            out[k] = v.decode("utf-8", errors="replace")
+        else:
+            out[k] = v
+    return out
+
+
+def _detect_source(result: Any) -> str:
+    """Best-effort detection of which adapter produced the result."""
+    if not isinstance(result, dict):
+        return "gateway"
+    # Akshare responses often have Chinese field names
+    for _key, val in result.items():
+        if isinstance(val, list) and val and isinstance(val[0], dict):
+            first_keys = list(val[0].keys())
+            if any(k for k in first_keys if any(ord(c) > 0x4E00 for c in k)):
+                return "akshare"
+    # Default to gateway (could be tushare/yahoo/finnhub)
+    return "gateway"
