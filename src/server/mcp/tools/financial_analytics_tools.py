@@ -77,8 +77,8 @@ async def _fetch_financial_data(symbol: str, limit: int = 8) -> List[Dict[str, A
         )
         if data:
             return data
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Canonical fetch failed, trying gateway", symbol=symbol, error=str(e))
 
     # Fallback to gateway
     try:
@@ -96,8 +96,8 @@ async def _fetch_financial_data(symbol: str, limit: int = 8) -> List[Dict[str, A
                 return [
                     {"report_period": records.get("report_date", ""), "data": records, "source_type": "live"}
                 ]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Gateway fetch also failed", symbol=symbol, error=str(e))
 
     return []
 
@@ -449,10 +449,19 @@ def register_financial_analytics_tools(mcp: FastMCP):
             )
             rating = _score_to_rating(total_score)
 
+            # Data sufficiency check
+            available_fields = sum(1 for v in [
+                revenue, net_income, total_assets, total_liabilities,
+                operating_cf, current_assets, current_liabilities,
+            ] if v is not None)
+            data_sufficiency = available_fields / 7
+
             # Build markdown
             md = f"# 财务健康评分: {symbol}\n\n"
             md += f"**综合评分**: **{total_score}/100** ({rating})\n"
-            md += f"**数据来源**: {source_type} | **耗时**: {elapsed:.1f}s\n\n"
+            md += f"**数据来源**: {source_type} | **数据完整度**: {data_sufficiency:.0%} | **耗时**: {elapsed:.1f}s\n\n"
+            if data_sufficiency < 0.5:
+                md += "> **注意**: 数据完整度低于50%, 评分可能不具参考性\n\n"
 
             md += "| 维度 | 得分 | 满分 | 关键指标 |\n"
             md += "|------|------|------|----------|\n"

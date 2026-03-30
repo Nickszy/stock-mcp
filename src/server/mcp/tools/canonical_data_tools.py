@@ -11,6 +11,7 @@ Tools:
   - get_canonical_dataset_status: 查看结构化数据维度状态
 """
 
+import json
 import time
 from typing import Any, Dict, Optional
 
@@ -31,15 +32,6 @@ def _get_canonical_repo():
     """Lazily get the canonical repository from the structured_data route module."""
     try:
         from src.server.api.routes.structured_data import _get_canonical_repo as _get
-        return _get()
-    except Exception:
-        return None
-
-
-def _get_runner():
-    """Lazily get the task runner."""
-    try:
-        from src.server.api.routes.structured_data import _get_runner as _get
         return _get()
     except Exception:
         return None
@@ -280,7 +272,6 @@ def register_canonical_data_tools(mcp: FastMCP):
                     )
                     if records:
                         source_type = "canonical"
-                        import json
                         canonical_data = []
                         for rec in records:
                             data = rec.get("data", {})
