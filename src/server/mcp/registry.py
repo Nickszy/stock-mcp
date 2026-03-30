@@ -37,6 +37,7 @@ from src.server.mcp.tools.fixed_income_tools import register_fixed_income_tools
 from src.server.mcp.tools.research_report_tools import register_research_report_tools
 from src.server.mcp.tools.commodity_tools import register_commodity_tools
 from src.server.mcp.tools.option_tools import register_option_tools
+from src.server.mcp.tools.sentiment_tools import register_sentiment_tools
 
 
 @dataclass(frozen=True)
@@ -224,6 +225,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="期权数据 (合约列表/Greeks/历史行情)",
         count=3,
+    ),
+    ToolGroup(
+        name="sentiment",
+        register=register_sentiment_tools,
+        enabled=True,
+        description="市场情绪/QVIX (50ETF/300ETF/1000/CYB/总览)",
+        count=5,
     ),
 ]
 

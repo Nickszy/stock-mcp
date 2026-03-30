@@ -20,6 +20,7 @@ from .fixed_income import router as fixed_income_router
 from .research_reports import router as research_reports_router
 from .commodities import router as commodities_router
 from .options import router as options_router
+from .sentiment import router as sentiment_router
 
 __all__ = [
     "market_data_router",
@@ -41,4 +42,5 @@ __all__ = [
     "research_reports_router",
     "commodities_router",
     "options_router",
+    "sentiment_router",
 ]

@@ -139,6 +139,11 @@ _MARKET_METHODS: Set[str] = {
     "get_option_chain",
     "get_option_greeks",
     "get_option_price_history",
+    "get_qvix_50etf",
+    "get_qvix_300etf",
+    "get_qvix_1000index",
+    "get_qvix_cyb",
+    "get_market_sentiment_overview",
     "get_fund_holdings",
     "get_commodity_inventory",
     # Stock participant data (COL-144)

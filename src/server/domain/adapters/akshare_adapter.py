@@ -3188,6 +3188,150 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"Failed to get option price history: {e}")
             return {"data": [], "contract": contract, "source": "akshare", "error": str(e)}
 
+    async def get_qvix_50etf(self) -> Dict[str, Any]:
+        """获取50ETF QVIX（中国版VIX）历史数据."""
+        cache_key = "akshare:qvix:50etf"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.index_option_50etf_qvix)
+            data = df.to_dict(orient="records") if df is not None and not df.empty else []
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+            result = {"data": data, "symbol": "50ETF", "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get 50ETF QVIX: {e}")
+            return {"data": [], "symbol": "50ETF", "source": "akshare", "error": str(e)}
+
+    async def get_qvix_300etf(self) -> Dict[str, Any]:
+        """获取300ETF QVIX历史数据."""
+        cache_key = "akshare:qvix:300etf"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.index_option_300etf_qvix)
+            data = df.to_dict(orient="records") if df is not None and not df.empty else []
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+            result = {"data": data, "symbol": "300ETF", "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get 300ETF QVIX: {e}")
+            return {"data": [], "symbol": "300ETF", "source": "akshare", "error": str(e)}
+
+    async def get_qvix_1000index(self) -> Dict[str, Any]:
+        """获取中证1000 QVIX历史数据."""
+        cache_key = "akshare:qvix:1000index"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.index_option_1000index_qvix)
+            data = df.to_dict(orient="records") if df is not None and not df.empty else []
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+            result = {"data": data, "symbol": "CSI1000", "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get 1000index QVIX: {e}")
+            return {"data": [], "symbol": "CSI1000", "source": "akshare", "error": str(e)}
+
+    async def get_qvix_cyb(self) -> Dict[str, Any]:
+        """获取创业板 QVIX历史数据."""
+        cache_key = "akshare:qvix:cyb"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+        try:
+            df = await self._run(ak.index_option_cyb_qvix)
+            data = df.to_dict(orient="records") if df is not None and not df.empty else []
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+            result = {"data": data, "symbol": "CYB", "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get CYB QVIX: {e}")
+            return {"data": [], "symbol": "CYB", "source": "akshare", "error": str(e)}
+
+    async def get_market_sentiment_overview(self) -> Dict[str, Any]:
+        """获取市场情绪概览(QVIX聚合).
+
+        Aggregates latest QVIX levels across key A-share option markets.
+        """
+        import asyncio
+
+        indicators: Dict[str, Any] = {}
+        errors: list[str] = []
+
+        async def _safe(label: str, coro):
+            try:
+                indicators[label] = await coro
+            except Exception as exc:
+                errors.append(f"{label}: {exc}")
+
+        await asyncio.gather(
+            _safe("qvix_50etf", self.get_qvix_50etf()),
+            _safe("qvix_300etf", self.get_qvix_300etf()),
+            _safe("qvix_1000index", self.get_qvix_1000index()),
+            _safe("qvix_cyb", self.get_qvix_cyb()),
+        )
+
+        def _latest_value(entry: Dict[str, Any]) -> float | None:
+            rows = entry.get("data", []) if isinstance(entry, dict) else []
+            if not rows:
+                return None
+            latest = rows[-1]
+            for key in latest:
+                key_s = str(key).lower()
+                if key_s in {"close", "收盘", "收盘价", "qvix", "value"}:
+                    return _safe_float(latest.get(key))
+            for v in latest.values():
+                fv = _safe_float(v)
+                if fv is not None:
+                    return fv
+            return None
+
+        latest_values = {
+            key: _latest_value(val) for key, val in indicators.items()
+        }
+        valid = [v for v in latest_values.values() if v is not None]
+        avg_qvix = round(sum(valid) / len(valid), 2) if valid else None
+
+        regime = "unknown"
+        if avg_qvix is not None:
+            if avg_qvix >= 25:
+                regime = "fear"
+            elif avg_qvix <= 15:
+                regime = "greed"
+            else:
+                regime = "neutral"
+
+        return {
+            "data": {
+                "indicators": indicators,
+                "latest": latest_values,
+                "avg_qvix": avg_qvix,
+                "regime": regime,
+                "errors": errors,
+            },
+            "source": "akshare",
+        }
+
     # ------------------------------------------------------------------
     # COL-127: 行业估值PE/PB历史分位
     # ------------------------------------------------------------------
