@@ -195,13 +195,13 @@ class TestFixedIncomeRegistry:
         from src.server.mcp.registry import TOOL_GROUPS
         fi = [g for g in TOOL_GROUPS if g.name == "fixed-income"]
         assert len(fi) == 1
-        assert fi[0].count == 6
+        assert fi[0].count == 9
         assert fi[0].enabled is True
 
     def test_total_tool_count_increased(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        assert total >= 136, f"Expected >= 136, got {total}"
+        assert total >= 147, f"Expected >= 147, got {total}"
 
 
 # =====================================================================
@@ -237,7 +237,8 @@ class TestFixedIncomeRoutes:
         route_paths = [r.path for r in router.routes]
         expected_suffixes = [
             "/bond-yield", "/convertible-bonds", "/convertible-bond-history",
-            "/convertible-bond-detail", "/credit-spread", "/overview",
+            "/convertible-bond-detail", "/credit-spread", "/repo-rates",
+            "/interbank-rate", "/bond-issuance", "/overview",
         ]
         for suffix in expected_suffixes:
             full = f"/api/v1/fixed-income{suffix}"

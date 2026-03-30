@@ -3804,6 +3804,140 @@ def _safe_float(v) -> float | None:
     except (TypeError, ValueError):
         return None
 
+
+    async def get_repo_rates(
+        self, start_date: str = "", end_date: str = ""
+    ) -> Dict[str, Any]:
+        """获取银行间回购定盘利率历史数据.
+
+        Uses ak.repo_rate_hist (中国外汇交易中心回购定盘利率).
+        """
+        from datetime import datetime, timedelta
+
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=90)).strftime("%Y%m%d")
+        if not end_date:
+            end_date = datetime.now().strftime("%Y%m%d")
+
+        cache_key = f"akshare:repo_rates:{start_date}:{end_date}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(
+                ak.repo_rate_hist, start_date=start_date, end_date=end_date
+            )
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            data = df.to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {"data": data, "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get repo rates: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_interbank_rate(
+        self,
+        market: str = "上海银行间同业拆借市场",
+        symbol: str = "Shibor人民币",
+        indicator: str = "隔夜",
+    ) -> Dict[str, Any]:
+        """获取银行间同业拆借市场利率数据.
+
+        Uses ak.rate_interbank for interbank rates like Shibor.
+        """
+        cache_key = f"akshare:interbank_rate:{market}:{symbol}:{indicator}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(
+                ak.rate_interbank,
+                market=market,
+                symbol=symbol,
+                indicator=indicator,
+            )
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            data = df.to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "data": data,
+                "source": "akshare",
+                "market": market,
+                "symbol": symbol,
+                "indicator": indicator,
+            }
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get interbank rate: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_bond_issuance_overview(
+        self, days: int = 90
+    ) -> Dict[str, Any]:
+        """获取债券发行概览(国债/地方债/企业债/可转债).
+
+        Aggregates issuance statistics from cninfo via Akshare.
+        """
+        from datetime import datetime, timedelta
+
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
+        end_date = datetime.now().strftime("%Y%m%d")
+
+        cache_key = f"akshare:bond_issuance:{start_date}:{end_date}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        result: Dict[str, Any] = {"data": {}, "source": "akshare"}
+
+        sources = [
+            ("treasury", ak.bond_treasure_issue_cninfo),
+            ("local_government", ak.bond_local_government_issue_cninfo),
+            ("corporate", ak.bond_corporate_issue_cninfo),
+            ("convertible", ak.bond_cov_issue_cninfo),
+        ]
+
+        for label, func in sources:
+            try:
+                df = await self._run(func, start_date=start_date, end_date=end_date)
+                if df is not None and not df.empty:
+                    records = df.to_dict(orient="records")
+                    for item in records:
+                        for k, v in item.items():
+                            if hasattr(v, "item"):
+                                item[k] = v.item()
+                    result["data"][label] = {
+                        "count": len(records),
+                        "records": records[:50],  # cap at 50 for overview
+                    }
+                else:
+                    result["data"][label] = {"count": 0, "records": []}
+            except Exception as e:
+                self.logger.error(f"Failed to get {label} issuance: {e}")
+                result["data"][label] = {"count": 0, "records": [], "error": str(e)}
+
+        await self.cache.set(cache_key, result, ttl=3600)
+        return result
+
     async def get_fund_holdings(
         self, fund_code: str = "", quarter: str = "",
     ) -> Dict[str, Any]:

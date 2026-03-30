@@ -4,12 +4,15 @@
 Dedicated tool group for bond yield curves, convertible bonds,
 credit spreads, and fixed income market overview.
 
-Tool list (6):
+Tool list (9):
   - get_cn_bond_yield_curve      — government + corporate yield curves
   - get_cn_convertible_bonds      — real-time convertible bond list
   - get_cn_convertible_bond_history — individual CB historical K-line
   - get_cn_convertible_bond_detail  — CB terms and analytics
   - get_cn_credit_spread          — credit spread (AAA-CGB etc)
+  - get_cn_repo_rates             — repo fixing rate history
+  - get_cn_interbank_rate         — interbank rate (Shibor etc)
+  - get_cn_bond_issuance_overview — bond issuance overview
   - get_cn_fixed_income_overview  — aggregated FI dashboard
 """
 
@@ -334,7 +337,192 @@ def register_fixed_income_tools(mcp: FastMCP):
             )
 
     # ------------------------------------------------------------------
-    # 6. Fixed Income Overview
+    # 6. Repo Rates
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"fixed-income", "bond"})
+    async def get_cn_repo_rates(
+        start_date: str = "",
+        end_date: str = "",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取银行间回购定盘利率历史数据.
+
+        WHEN TO USE: 用户问"回购利率""资金价格""流动性松紧""DR001/DR007".
+        CONCEPT: 回购利率是银行间短期资金价格的核心指标, 直接反映市场流动性松紧.
+          回购利率走高=资金紧张, 走低=资金宽松.
+        DIFFERENTIATION: 回购/资金价格; 收益率曲线看 get_cn_bond_yield_curve;
+          政策利率看 get_cn_interest_rates.
+        next_recommended_tools: get_cn_bond_yield_curve -> get_cn_interbank_rate -> get_cn_credit_spread
+
+        Args:
+            start_date: 起始日期 YYYYMMDD (默认近90天)
+            end_date: 截止日期 YYYYMMDD (默认今天)
+            ctx: FastMCP Context
+        """
+        if ctx:
+            await ctx.info("📈 固收-回购利率")
+        try:
+            result = await fi_uc.get_repo_rates(start_date=start_date, end_date=end_date)
+            rows = result.get("data", []) if isinstance(result, dict) else []
+            summary = f"回购利率: {len(rows)}条记录"
+            if rows:
+                latest = rows[-1]
+                # Try common column names
+                for key in latest:
+                    if "定盘" in str(key) or "FR" in str(key) or "利率" in str(key):
+                        summary += f", 最新{key}={_fmt_pct(latest[key])}"
+                        break
+
+            artifact = create_artifact_envelope(
+                component_type="repo_rates",
+                name="回购定盘利率",
+                content={"data": rows},
+                description=summary,
+                metadata={"type": "cn_repo_rates"},
+                visible_to_llm=False,
+                display_in_report=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+        except Exception as e:
+            logger.error("get_cn_repo_rates error", error=str(e))
+            summary = f"获取回购利率失败: {e}"
+            return create_artifact_response(
+                summary=summary,
+                artifact=create_artifact_envelope(
+                    component_type="repo_rates",
+                    name="回购定盘利率",
+                    content={"error": str(e)},
+                    description=summary,
+                    visible_to_llm=True,
+                ),
+            )
+
+    # ------------------------------------------------------------------
+    # 7. Interbank Rate (Shibor etc)
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"fixed-income", "bond"})
+    async def get_cn_interbank_rate(
+        market: str = "上海银行间同业拆借市场",
+        symbol: str = "Shibor人民币",
+        indicator: str = "隔夜",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取银行间同业拆借市场利率(Shibor/Chibor等).
+
+        WHEN TO USE: 用户问"Shibor多少""银行间利率""隔夜拆借利率""同业拆借".
+        CONCEPT: Shibor(上海银行间同业拆放利率)是短端利率基准, 反映银行间流动性.
+          隔夜/1周/1M是最关键期限, 与央行公开市场操作高度联动.
+        DIFFERENTIATION: 同业拆借利率口径; 回购利率看 get_cn_repo_rates;
+          贷款基准看 get_cn_interest_rates(LPR).
+        next_recommended_tools: get_cn_repo_rates -> get_cn_bond_yield_curve -> get_cn_credit_spread
+
+        Args:
+            market: 市场 (默认"上海银行间同业拆借市场")
+            symbol: 币种 (默认"Shibor人民币")
+            indicator: 期限 (默认"隔夜", 可选"1周"/"2周"/"1个月"/"3个月"/"6个月"/"9个月"/"1年")
+            ctx: FastMCP Context
+        """
+        if ctx:
+            await ctx.info("📈 固收-同业拆借利率")
+        try:
+            result = await fi_uc.get_interbank_rate(market=market, symbol=symbol, indicator=indicator)
+            rows = result.get("data", []) if isinstance(result, dict) else []
+            summary = f"同业拆借利率({indicator}): {len(rows)}条记录"
+            if rows:
+                latest = rows[-1]
+                for key in latest:
+                    if "利率" in str(key) or "rate" in str(key).lower():
+                        summary += f", 最新={_fmt_pct(latest[key])}"
+                        break
+
+            artifact = create_artifact_envelope(
+                component_type="interbank_rate",
+                name=f"同业拆借利率({indicator})",
+                content={"data": rows},
+                description=summary,
+                metadata={"type": "cn_interbank_rate", "market": market, "symbol": symbol, "indicator": indicator},
+                visible_to_llm=False,
+                display_in_report=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+        except Exception as e:
+            logger.error("get_cn_interbank_rate error", error=str(e))
+            summary = f"获取同业拆借利率失败: {e}"
+            return create_artifact_response(
+                summary=summary,
+                artifact=create_artifact_envelope(
+                    component_type="interbank_rate",
+                    name=f"同业拆借利率({indicator})",
+                    content={"error": str(e)},
+                    description=summary,
+                    visible_to_llm=True,
+                ),
+            )
+
+    # ------------------------------------------------------------------
+    # 8. Bond Issuance Overview
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"fixed-income", "bond"})
+    async def get_cn_bond_issuance_overview(
+        days: int = 90,
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取债券发行概览(国债/地方债/企业债/可转债).
+
+        WHEN TO USE: 用户问"债券发行""发债规模""一级市场""新发债券".
+        CONCEPT: 债券发行是一级市场供给, 大规模发行可能推高收益率, 供给收缩则利好.
+          国债/地方债/企业债/可转债四大口径提供完整供给视角.
+        DIFFERENTIATION: 债券发行供给视角; 收益率看 get_cn_bond_yield_curve;
+          利差看 get_cn_credit_spread.
+        next_recommended_tools: get_cn_bond_yield_curve -> get_cn_credit_spread -> get_cn_repo_rates
+
+        Args:
+            days: 统计天数 (default 90)
+            ctx: FastMCP Context
+        """
+        if ctx:
+            await ctx.info("📈 固收-债券发行概览")
+        try:
+            result = await fi_uc.get_bond_issuance_overview(days=days)
+            data = result.get("data", {}) if isinstance(result, dict) else {}
+
+            parts: list[str] = []
+            labels = {"treasury": "国债", "local_government": "地方债", "corporate": "企业债", "convertible": "可转债"}
+            for key, label in labels.items():
+                entry = data.get(key, {})
+                cnt = entry.get("count", 0) if isinstance(entry, dict) else 0
+                if cnt:
+                    parts.append(f"{label}={cnt}只")
+
+            summary = "债券发行: " + ", ".join(parts) if parts else "债券发行: 暂无数据"
+            summary += f" (近{days}天)"
+
+            artifact = create_artifact_envelope(
+                component_type="bond_issuance",
+                name="债券发行概览",
+                content={"data": data},
+                description=summary,
+                metadata={"type": "cn_bond_issuance", "days": days},
+                visible_to_llm=False,
+                display_in_report=True,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+        except Exception as e:
+            logger.error("get_cn_bond_issuance_overview error", error=str(e))
+            summary = f"获取债券发行概览失败: {e}"
+            return create_artifact_response(
+                summary=summary,
+                artifact=create_artifact_envelope(
+                    component_type="bond_issuance",
+                    name="债券发行概览",
+                    content={"error": str(e)},
+                    description=summary,
+                    visible_to_llm=True,
+                ),
+            )
+
+    # ------------------------------------------------------------------
+    # 9. Fixed Income Overview
     # ------------------------------------------------------------------
     @mcp.tool(tags={"fixed-income", "bond"})
     async def get_cn_fixed_income_overview(
@@ -343,9 +531,9 @@ def register_fixed_income_tools(mcp: FastMCP):
         """获取中国固定收益全景概览.
 
         WHEN TO USE: 用户问"固收市场怎么样""债券市场概览""利率环境一览".
-        CONCEPT: 聚合收益率曲线+可转债市场+信用利差, 提供一屏式固收快照.
+        CONCEPT: 聚合收益率曲线+可转债市场+信用利差+回购利率+债券发行, 提供一屏式固收快照.
         DIFFERENTIATION: 固收全景聚合; 单指标深度看 get_cn_bond_yield_curve / get_cn_credit_spread 等.
-        next_recommended_tools: get_cn_bond_yield_curve -> get_cn_credit_spread -> get_cn_convertible_bonds
+        next_recommended_tools: get_cn_bond_yield_curve -> get_cn_credit_spread -> get_cn_repo_rates
 
         Args:
             ctx: FastMCP Context
@@ -374,6 +562,21 @@ def register_fixed_income_tools(mcp: FastMCP):
             cb_total = cb.get("total", 0) if isinstance(cb, dict) else 0
             if cb_total:
                 parts.append(f"可转债={cb_total}只")
+
+            repo = indicators.get("repo_rates", {})
+            repo_rows = repo.get("data", []) if isinstance(repo, dict) else []
+            if repo_rows:
+                parts.append(f"回购利率={len(repo_rows)}天")
+
+            iss = indicators.get("issuance", {})
+            iss_data = iss.get("data", {}) if isinstance(iss, dict) else {}
+            if iss_data:
+                iss_count = sum(
+                    v.get("count", 0) if isinstance(v, dict) else 0
+                    for v in iss_data.values()
+                )
+                if iss_count:
+                    parts.append(f"新发债券={iss_count}只")
 
             summary = "固收概览: " + ", ".join(parts) if parts else "固收概览: 部分指标获取失败"
             if errors:

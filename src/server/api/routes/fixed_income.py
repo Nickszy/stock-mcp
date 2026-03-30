@@ -73,6 +73,45 @@ async def get_cn_credit_spread(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/repo-rates", summary="银行间回购定盘利率")
+async def get_cn_repo_rates(
+    start_date: str = Query("", description="起始日期(YYYYMMDD)"),
+    end_date: str = Query("", description="截止日期(YYYYMMDD)"),
+) -> Dict[str, Any]:
+    try:
+        result = await fi_uc.get_repo_rates(start_date=start_date, end_date=end_date)
+        return rest_response(data=result, source="akshare")
+    except Exception as e:
+        logger.error(f"API error in get_cn_repo_rates: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/interbank-rate", summary="银行间同业拆借利率(Shibor)")
+async def get_cn_interbank_rate(
+    market: str = Query("上海银行间同业拆借市场", description="市场"),
+    symbol: str = Query("Shibor人民币", description="币种"),
+    indicator: str = Query("隔夜", description="期限"),
+) -> Dict[str, Any]:
+    try:
+        result = await fi_uc.get_interbank_rate(market=market, symbol=symbol, indicator=indicator)
+        return rest_response(data=result, source="akshare")
+    except Exception as e:
+        logger.error(f"API error in get_cn_interbank_rate: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/bond-issuance", summary="债券发行概览")
+async def get_cn_bond_issuance(
+    days: int = Query(90, ge=1, le=365, description="统计天数"),
+) -> Dict[str, Any]:
+    try:
+        result = await fi_uc.get_bond_issuance_overview(days=days)
+        return rest_response(data=result, source="akshare")
+    except Exception as e:
+        logger.error(f"API error in get_cn_bond_issuance: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/overview", summary="中国固定收益全景概览")
 async def get_cn_fixed_income_overview() -> Dict[str, Any]:
     try:

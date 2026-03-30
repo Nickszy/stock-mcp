@@ -133,6 +133,9 @@ _MARKET_METHODS: Set[str] = {
     "get_convertible_bond_history",
     "get_convertible_bond_detail",
     "get_credit_spread",
+    "get_repo_rates",
+    "get_interbank_rate",
+    "get_bond_issuance_overview",
     "get_fund_holdings",
     "get_commodity_inventory",
     # Stock participant data (COL-144)

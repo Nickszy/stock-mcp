@@ -200,8 +200,8 @@ TOOL_GROUPS: List[ToolGroup] = [
         name="fixed-income",
         register=register_fixed_income_tools,
         enabled=True,
-        description="固定收益/债券研究 (收益率曲线/可转债列表/可转债历史/可转债详情/信用利差/固收概览)",
-        count=6,
+        description="固定收益/债券研究 (收益率曲线/可转债列表/可转债历史/可转债详情/信用利差/回购利率/同业拆借/债券发行/固收概览)",
+        count=9,
     ),
     ToolGroup(
         name="research-report",
