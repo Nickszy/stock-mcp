@@ -245,7 +245,11 @@ class TaskRunner:
         source_override: Optional[str] = None,
         **kwargs,
     ) -> List[Dict[str, Any]]:
-        """Fetch data from sources using the registry's fetcher or gateway."""
+        """Fetch data from sources using the registry's fetcher or gateway.
+
+        Collects results from ALL enabled sources for multi-source
+        cross-validation. Each result is tagged with its source name.
+        """
         fetcher = self._registry.get_fetcher(config.dataset_key)
 
         if fetcher:
@@ -256,6 +260,7 @@ class TaskRunner:
                 if not sources:
                     sources = config.sorted_sources
 
+            all_results: List[Dict[str, Any]] = []
             for source_cfg in sources:
                 try:
                     result = await fetcher(
@@ -266,8 +271,9 @@ class TaskRunner:
                     )
                     if result:
                         if isinstance(result, list):
-                            return result
-                        return [result]
+                            all_results.extend(result)
+                        else:
+                            all_results.append(result)
                 except Exception as e:
                     logger.warning(
                         "Fetcher failed for source",
@@ -276,7 +282,7 @@ class TaskRunner:
                         error=str(e),
                     )
                     continue
-            return []
+            return all_results
 
         # Fallback: if no fetcher registered, return empty
         logger.warning(
