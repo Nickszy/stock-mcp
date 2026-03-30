@@ -3592,8 +3592,217 @@ class AkshareAdapter(BaseDataAdapter):
             return {"data": [], "source": "akshare", "error": str(e)}
 
     # ------------------------------------------------------------------
-    # 基金持仓数据
+    # Fixed income extended methods (COL-244)
     # ------------------------------------------------------------------
+
+    async def get_bond_yield_curve(
+        self, start_date: str = "", end_date: str = ""
+    ) -> Dict[str, Any]:
+        """获取中国债券收益率曲线(支持日期范围)."""
+        from datetime import date, timedelta
+
+        if not end_date:
+            end_date = date.today().strftime("%Y%m%d")
+        if not start_date:
+            start_date = (date.today() - timedelta(days=90)).strftime("%Y%m%d")
+
+        cache_key = f"akshare:bond_yield_curve:{start_date}:{end_date}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(
+                ak.bond_china_yield, start_date=start_date, end_date=end_date
+            )
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            data = df.to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+                    elif hasattr(v, "isoformat"):
+                        item[k] = v.isoformat()
+
+            result = {"data": data, "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get bond yield curve: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_convertible_bonds(
+        self, bond_code: str = ""
+    ) -> Dict[str, Any]:
+        """获取可转债实时行情数据(全市场)."""
+        cache_key = f"akshare:convertible_bonds:{bond_code}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.bond_zh_hs_cov_spot)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            if bond_code and "代码" in df.columns:
+                df = df[df["代码"].astype(str) == bond_code]
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "total": len(records),
+                "data": records[:200],
+            }
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get convertible bonds: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    async def get_convertible_bond_history(
+        self, symbol: str, days: int = 120
+    ) -> Dict[str, Any]:
+        """获取单只可转债历史K线."""
+        cache_key = f"akshare:cb_history:{symbol}:{days}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.bond_zh_hs_cov_daily, symbol=symbol)
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "source": "akshare"}
+
+            data = df.tail(days).to_dict(orient="records")
+            for item in data:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+                    elif hasattr(v, "isoformat"):
+                        item[k] = v.isoformat()
+
+            result = {"symbol": symbol, "data": data, "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=1800)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get CB history: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    async def get_convertible_bond_detail(
+        self, symbol: str
+    ) -> Dict[str, Any]:
+        """获取可转债条款详情(转股价/溢价率/到期收益率等)."""
+        cache_key = f"akshare:cb_detail:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.bond_zh_cov_info, symbol=symbol)
+            if df is None or df.empty:
+                return {"data": {}, "symbol": symbol, "source": "akshare"}
+
+            row = df.iloc[0].to_dict()
+            for k, v in row.items():
+                if hasattr(v, "item"):
+                    row[k] = v.item()
+                elif hasattr(v, "isoformat"):
+                    row[k] = v.isoformat()
+
+            # Extract key fields for AI consumption
+            detail = {
+                "bond_code": symbol,
+                "bond_name": row.get("SECURITY_NAME_ABBR", ""),
+                "stock_code": row.get("CONVERT_STOCK_CODE", ""),
+                "convert_price": row.get("CONVERT_STOCK_PRICE"),
+                "transfer_price": row.get("TRANSFER_PRICE"),
+                "transfer_value": row.get("TRANSFER_VALUE"),
+                "transfer_premium_ratio": row.get("TRANSFER_PREMIUM_RATIO"),
+                "current_bond_price": row.get("CURRENT_BOND_PRICE"),
+                "coupon_rate": row.get("COUPON_IR"),
+                "rating": row.get("RATING", ""),
+                "expire_date": str(row.get("EXPIRE_DATE", "")),
+                "listing_date": str(row.get("LISTING_DATE", "")),
+                "issue_scale": row.get("ACTUAL_ISSUE_SCALE"),
+                "initial_transfer_price": row.get("INITIAL_TRANSFER_PRICE"),
+                "resale_trig_price": row.get("RESALE_TRIG_PRICE"),
+                "redeem_trig_price": row.get("REDEEM_TRIG_PRICE"),
+                "pbv_ratio": row.get("PBV_RATIO"),
+                "full_detail": row,
+            }
+
+            result = {"data": detail, "symbol": symbol, "source": "akshare"}
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get CB detail: {e}")
+            return {"data": {}, "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    async def get_credit_spread(
+        self, start_date: str = "", end_date: str = ""
+    ) -> Dict[str, Any]:
+        """计算信用利差(AAA-国债, AA+-AAA等)基于收益率曲线数据."""
+        curve_data = await self.get_bond_yield_curve(start_date=start_date, end_date=end_date)
+        rows = curve_data.get("data", [])
+        if not rows:
+            return {"data": [], "source": "akshare"}
+
+        # Group by date and curve name, then compute spreads
+        import pandas as pd
+
+        df = pd.DataFrame(rows)
+        if "曲线名称" not in df.columns or "日期" not in df.columns:
+            return {"data": [], "source": "akshare"}
+
+        spreads = []
+        dates = sorted(df["日期"].unique())
+
+        for dt in dates[-30:]:  # last 30 dates
+            day_df = df[df["日期"] == dt]
+            row_map = {}
+            for _, r in day_df.iterrows():
+                row_map[r["曲线名称"]] = r.to_dict()
+
+            cgb = row_map.get("中债国债收益率曲线", {})
+            aaa = row_map.get("中债商业银行普通债收益率曲线(AAA)", {})
+            aaplus = row_map.get("中债企业债收益率曲线(AA+)", {})
+
+            spread_row = {"日期": dt}
+            for tenor in ["1年", "3年", "5年", "10年"]:
+                cgb_val = _safe_float(cgb.get(tenor))
+                aaa_val = _safe_float(aaa.get(tenor))
+                aaplus_val = _safe_float(aaplus.get(tenor))
+
+                if cgb_val is not None and aaa_val is not None:
+                    spread_row[f"AAA-{tenor}"] = round(aaa_val - cgb_val, 4)
+                if aaa_val is not None and aaplus_val is not None:
+                    spread_row[f"AA+-AAA-{tenor}"] = round(aaplus_val - aaa_val, 4)
+
+            spreads.append(spread_row)
+
+        return {"data": spreads, "source": "akshare"}
+
+
+def _safe_float(v) -> float | None:
+    """Safely convert a value to float."""
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
 
     async def get_fund_holdings(
         self, fund_code: str = "", quarter: str = "",

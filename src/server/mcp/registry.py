@@ -33,6 +33,7 @@ from src.server.mcp.tools.factor_tools import register_factor_tools
 from src.server.mcp.tools.corporate_action_tools import register_corporate_action_tools
 from src.server.mcp.tools.fact_pack_tools import register_fact_pack_tools
 from src.server.mcp.tools.cn_macro_tools import register_cn_macro_tools
+from src.server.mcp.tools.fixed_income_tools import register_fixed_income_tools
 
 
 @dataclass(frozen=True)
@@ -192,6 +193,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="中国宏观经济数据 (GDP/CPI/PPI/PMI/M2/利率/贸易差额/社融/宏观概览)",
         count=9,
+    ),
+    ToolGroup(
+        name="fixed-income",
+        register=register_fixed_income_tools,
+        enabled=True,
+        description="固定收益/债券研究 (收益率曲线/可转债列表/可转债历史/可转债详情/信用利差/固收概览)",
+        count=6,
     ),
 ]
 

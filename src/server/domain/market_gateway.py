@@ -127,6 +127,12 @@ _MARKET_METHODS: Set[str] = {
     "get_dragon_tiger_list",
     "get_block_trade",
     "get_convertible_bond",
+    # Fixed income extended (COL-244)
+    "get_bond_yield_curve",
+    "get_convertible_bonds",
+    "get_convertible_bond_history",
+    "get_convertible_bond_detail",
+    "get_credit_spread",
     "get_fund_holdings",
     "get_commodity_inventory",
     # Stock participant data (COL-144)
