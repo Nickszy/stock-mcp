@@ -4335,17 +4335,6 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"Failed to get dividend calendar: {e}")
             return {"data": [], "source": "akshare", "symbol": symbol, "error": str(e)}
 
-
-def _safe_float(v) -> float | None:
-    """Safely convert a value to float."""
-    if v is None:
-        return None
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None
-
-
     async def get_repo_rates(
         self, start_date: str = "", end_date: str = ""
     ) -> Dict[str, Any]:
@@ -7895,4 +7884,17 @@ def _safe_float(v) -> float | None:
 
         await self.cache.set(cache_key, result, ttl=market_aware_ttl(300))
         return result
+
+
+def _safe_float(v) -> float | None:
+    """Safely convert a value to float.
+
+    Module-level helper used by methods that call it without ``self.`` prefix.
+    """
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
 
