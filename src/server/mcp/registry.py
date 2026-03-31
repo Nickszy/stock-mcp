@@ -46,6 +46,7 @@ from src.server.mcp.tools.financial_analytics_tools import register_financial_an
 from src.server.mcp.tools.stock_comparison_tools import register_stock_comparison_tools
 from src.server.mcp.tools.corporate_event_tools import register_corporate_event_tools
 from src.server.mcp.tools.shareholder_behavior_tools import register_shareholder_behavior_tools
+from src.server.mcp.tools.earnings_forecast_tools import register_earnings_forecast_tools
 
 
 @dataclass(frozen=True)
@@ -296,6 +297,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         register=register_shareholder_behavior_tools,
         enabled=True,
         description="股东行为/风险信号 (机构调研/股票质押)",
+        count=2,
+    ),
+    ToolGroup(
+        name="earnings-forecast",
+        register=register_earnings_forecast_tools,
+        enabled=True,
+        description="业绩预期 (业绩预告/分析师一致预期EPS)",
         count=2,
     ),
 ]

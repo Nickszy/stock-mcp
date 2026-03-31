@@ -4906,6 +4906,124 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"Failed to get stock pledge data: {e}")
             return {"data": [], "date": date, "source": "akshare", "error": str(e)}
 
+    async def get_earnings_preview(
+        self, period: str = "",
+    ) -> Dict[str, Any]:
+        """获取A股业绩预告数据.
+
+        Args:
+            period: 报告期 (如 20250331, 20241231), 为空自动推断
+        """
+        if not period:
+            now = datetime.now()
+            month = now.month
+            if month <= 4:
+                period = f"{now.year - 1}1231"
+            elif month <= 8:
+                period = f"{now.year}0630"
+            elif month <= 10:
+                period = f"{now.year}0930"
+            else:
+                period = f"{now.year}0930"
+
+        cache_key = f"akshare:earnings_preview:{period}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_yjyg_em, date=period)
+            if df is None or df.empty:
+                return {"data": [], "period": period, "source": "akshare"}
+
+            col_map = {
+                "序号": "seq",
+                "股票代码": "stock_code",
+                "股票简称": "stock_name",
+                "预测指标": "forecast_indicator",
+                "业绩变动": "performance_change",
+                "预测数值": "forecast_value",
+                "业绩变动幅度": "change_range",
+                "业绩变动原因": "change_reason",
+                "预告类型": "preview_type",
+                "上年同期值": "prior_year_value",
+                "公告日期": "announce_date",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "period": period,
+                "total": len(records),
+                "data": records[:200],
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get earnings preview: {e}")
+            return {"data": [], "period": period, "source": "akshare", "error": str(e)}
+
+    async def get_analyst_consensus(
+        self, symbol: str,
+    ) -> Dict[str, Any]:
+        """获取A股分析师一致预期 (同花顺盈利预测).
+
+        Args:
+            symbol: 股票代码 (如 600519)
+        """
+        if not symbol:
+            return {"data": [], "symbol": "", "source": "akshare", "error": "symbol required"}
+
+        cache_key = f"akshare:analyst_consensus:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(
+                ak.stock_profit_forecast_ths,
+                symbol=symbol,
+                indicator="预测年报每股收益",
+            )
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "source": "akshare"}
+
+            col_map = {
+                "年份": "year",
+                "预测机构数": "analyst_count",
+                "最小值": "eps_min",
+                "均值": "eps_mean",
+                "最大值": "eps_max",
+                "行业平均数": "industry_avg",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "symbol": symbol,
+                "total": len(records),
+                "data": records,
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get analyst consensus: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
     # ------------------------------------------------------------------
     # A-share corporate action data (COL-147)
     # ------------------------------------------------------------------
