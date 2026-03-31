@@ -41,12 +41,19 @@ async def admin_workbench() -> HTMLResponse:
 # ---------------------------------------------------------------------------
 
 _approval_service = None
+_board_catalog_service = None
 
 
 def set_approval_service(service) -> None:
     """Inject the ApprovalService instance (called from bootstrap)."""
     global _approval_service
     _approval_service = service
+
+
+def set_board_catalog_components(service=None) -> None:
+    """Inject the board catalog service instance (called from bootstrap)."""
+    global _board_catalog_service
+    _board_catalog_service = service
 
 
 def _require_service():
@@ -255,4 +262,29 @@ async def add_comment(task_id: str, body: CommentRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         logger.error("Comment failed", task_id=task_id, error=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Board catalog admin
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/board-catalog/refresh",
+    summary="Refresh board catalog",
+    description="Trigger manual refresh of persisted board catalog from akshare.",
+)
+async def refresh_board_catalog() -> Dict[str, Any]:
+    """Refresh board catalog into PostgreSQL."""
+    if _board_catalog_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Board catalog service not initialized (PostgreSQL required)",
+        )
+    try:
+        result = await _board_catalog_service.refresh_catalog()
+        return rest_response(data=result)
+    except Exception as exc:
+        logger.error("Board catalog refresh failed", error=str(exc))
         raise HTTPException(status_code=500, detail=str(exc))

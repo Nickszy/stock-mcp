@@ -19,6 +19,7 @@ from src.server.utils.logger import logger
 
 _bootstrap_lock = asyncio.Lock()
 _initialized: bool = False
+_board_catalog_refresher = None
 
 
 async def init_adapters() -> None:
@@ -34,6 +35,8 @@ async def init_adapters() -> None:
 
         from src.server.api.routes.watchlist import set_watchlist_components
         from src.server.api.routes.scheduler import set_scheduler_components
+        from src.server.api.routes.sector import set_sector_components
+        from src.server.api.routes.admin import set_board_catalog_components
         from src.server.mcp.tools.scheduler_tools import set_scheduler_tools_runner
 
         logger.info("🚀 Bootstrapping application dependencies")
@@ -135,9 +138,11 @@ async def init_adapters() -> None:
         if postgres_ok:
             await _init_entity_registry(postgres, security_master_repo)
             await _init_structured_data(postgres)
+            await _init_board_catalog(postgres)
         else:
             logger.info("ℹ️  Entity registry subsystem skipped (PostgreSQL required)")
             logger.info("ℹ️  Structured data subsystem skipped (PostgreSQL required)")
+            logger.info("ℹ️  Board catalog subsystem skipped (PostgreSQL required)")
 
         # Inject watchlist and scheduler components
         watchlist_service = Container.watchlist_service()
@@ -193,6 +198,12 @@ async def _load_alias_seeds(security_master_repo) -> None:
 
 async def shutdown_adapters() -> None:
     """Placeholder for future graceful shutdown logic."""
+    global _board_catalog_refresher
+    try:
+        if _board_catalog_refresher is not None:
+            await _board_catalog_refresher.stop()
+    except Exception:
+        pass
     try:
         scheduler_engine = Container.scheduler_engine()
         await scheduler_engine.stop()
@@ -235,6 +246,53 @@ async def _init_entity_registry(postgres_conn, security_master_repo) -> None:
     except Exception as e:
         logger.warning(
             "⚠️  Entity registry subsystem initialization failed (non-fatal)",
+            error=str(e),
+        )
+
+
+async def _init_board_catalog(postgres_conn) -> None:
+    """Initialize the board catalog subsystem — PG catalog + periodic refresh.
+
+    Best-effort: logs warnings if something fails but does not block app startup.
+    """
+    global _board_catalog_refresher
+    try:
+        from src.server.domain.board_catalog import (
+            BoardCatalogRepository,
+            BoardCatalogService,
+            BoardCatalogRefresher,
+        )
+        from src.server.api.routes.sector import set_sector_components
+        from src.server.api.routes.admin import set_board_catalog_components
+
+        repo = BoardCatalogRepository(postgres_conn)
+        ok = await repo.ensure_schema()
+        if not ok:
+            logger.warning("⚠️  Board catalog schema ensure failed (non-fatal)")
+            return
+
+        service = BoardCatalogService(
+            repo=repo,
+            gateway=Container.market_gateway(),
+            cache=Container.cache(),
+        )
+
+        set_sector_components(service=service)
+        set_board_catalog_components(service=service)
+
+        _board_catalog_refresher = BoardCatalogRefresher(service=service)
+        await _board_catalog_refresher.start()
+
+        if await repo.count_boards(active_only=False) == 0:
+            try:
+                await service.refresh_catalog()
+            except Exception as e:
+                logger.warning("⚠️  Initial board catalog refresh failed (non-fatal)", error=str(e))
+
+        logger.info("✅ Board catalog subsystem initialized")
+    except Exception as e:
+        logger.warning(
+            "⚠️  Board catalog subsystem initialization failed (non-fatal)",
             error=str(e),
         )
 

@@ -198,6 +198,36 @@ class AkshareAdapter(BaseDataAdapter):
             await self.cache.set(cache_key, catalog, ttl=3600)
         return catalog
 
+    async def fetch_board_catalog_fresh(self) -> List[Dict[str, str]]:
+        """Fetch board catalog directly from akshare, bypassing Redis cache.
+
+        Returns list of dicts with keys: name, code, board_type.
+        Used by the board_catalog subsystem for periodic DB refresh.
+        """
+        catalog: List[Dict[str, str]] = []
+        try:
+            ind_df, concept_df = await asyncio.gather(
+                self._run(ak.stock_board_industry_name_em),
+                self._run(ak.stock_board_concept_name_em),
+                return_exceptions=True,
+            )
+            if isinstance(ind_df, pd.DataFrame) and not ind_df.empty:
+                for _, row in ind_df.iterrows():
+                    name = str(row.get("板块名称", "")).strip()
+                    code = str(row.get("板块代码", "")).strip()
+                    if name:
+                        catalog.append({"name": name, "code": code, "board_type": "industry"})
+            if isinstance(concept_df, pd.DataFrame) and not concept_df.empty:
+                for _, row in concept_df.iterrows():
+                    name = str(row.get("板块名称", "")).strip()
+                    code = str(row.get("板块代码", "")).strip()
+                    if name:
+                        catalog.append({"name": name, "code": code, "board_type": "concept"})
+        except Exception as e:
+            self.logger.warning(f"fetch_board_catalog_fresh failed: {e}")
+
+        return catalog
+
     async def _resolve_board(
         self, sector_name: str
     ) -> tuple[Optional[Dict[str, str]], Optional[List[str]]]:
@@ -6429,6 +6459,82 @@ class AkshareAdapter(BaseDataAdapter):
             "returned": len(results),
             "sort_by": sort_by,
             "sort_order": sort_order,
+            "source": "akshare",
+        }
+
+    # ------------------------------------------------------------------
+    # A-share concept board list (full catalog)
+    # ------------------------------------------------------------------
+    async def get_concept_list(
+        self,
+        keyword: str = "",
+    ) -> Dict[str, Any]:
+        """Get full list of all A-share concept boards with summary data.
+
+        Args:
+            keyword: Optional keyword to filter concept board names.
+
+        Returns:
+            Dict with list of all concept boards, each containing:
+            code, name, change_pct, stock_count, rise_count, fall_count,
+            turnover_rate, amplitude, top_stock, top_stock_change.
+        """
+        cache_key = "akshare:concept_list:snapshot"
+        cached_df = await self.cache.get(cache_key)
+
+        if cached_df is not None:
+            df = pd.DataFrame(cached_df)
+        else:
+            try:
+                df = await self._run(ak.stock_board_concept_name_em)
+                if df is None or df.empty:
+                    return {"data": [], "total": 0, "source": "akshare"}
+                await self.cache.set(cache_key, df.to_dict(orient="records"), ttl=300)
+            except Exception as e:
+                self.logger.error(f"get_concept_list: failed to fetch: {e}")
+                return {"data": [], "total": 0, "source": "akshare", "error": str(e)}
+
+        col_map = {
+            "板块名称": "name", "板块代码": "code", "最新价": "price",
+            "涨跌幅": "change_pct", "涨跌额": "change_amt", "成交量": "volume",
+            "成交额": "turnover", "振幅": "amplitude", "最高": "high", "最低": "low",
+            "今开": "open", "昨收": "prev_close", "换手率": "turnover_rate",
+            "上涨家数": "rise_count", "下跌家数": "fall_count",
+            "领涨股票": "top_stock", "领涨股票涨跌幅": "top_stock_change",
+            "总市值": "total_market_cap",
+        }
+        df = df.rename(columns=col_map)
+
+        # Filter by keyword if provided
+        if keyword:
+            kw = keyword.strip().upper()
+            mask = df["name"].str.upper().str.contains(kw, na=False)
+            df = df[mask]
+
+        results = []
+        for _, row in df.iterrows():
+            rise = int(self._safe_float(row.get("rise_count")) or 0)
+            fall = int(self._safe_float(row.get("fall_count")) or 0)
+            entry = {
+                "code": str(row.get("code", "")),
+                "name": str(row.get("name", "")),
+                "change_pct": round(self._safe_float(row.get("change_pct")) or 0, 2),
+                "stock_count": rise + fall,
+                "rise_count": rise,
+                "fall_count": fall,
+                "turnover_rate": round(self._safe_float(row.get("turnover_rate")) or 0, 2),
+                "amplitude": round(self._safe_float(row.get("amplitude")) or 0, 2),
+                "top_stock": str(row.get("top_stock", "")),
+                "top_stock_change": round(self._safe_float(row.get("top_stock_change")) or 0, 2),
+            }
+            mkt_cap = self._safe_float(row.get("total_market_cap"))
+            if mkt_cap is not None:
+                entry["total_market_cap"] = round(mkt_cap, 2)
+            results.append(entry)
+
+        return {
+            "data": results,
+            "total": len(results),
             "source": "akshare",
         }
 

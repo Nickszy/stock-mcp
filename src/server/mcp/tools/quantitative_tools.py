@@ -387,3 +387,93 @@ def register_quantitative_tools(mcp: FastMCP):
                 summary=f"概念板块排名查询失败: {e}",
                 artifact=error_artifact,
             )
+
+    # ------------------------------------------------------------------
+    # get_concept_list
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"quantitative"})
+    async def get_concept_list(
+        keyword: str = "",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """A股概念板块完整列表(返回所有约400个概念板块的名称/代码/涨跌幅/成分股数/领涨股).
+
+        WHEN TO USE: 用户需要浏览所有概念板块, 或按关键词搜索特定概念板块时调用.
+        典型触发: "有哪些概念板块" "概念板块列表" "ChatGPT概念" "搜索新能源相关概念".
+        CONCEPT: 返回所有概念板块(约400个)的完整列表, 包含板块代码/名称/涨跌幅/
+        成分股数/领涨股等信息, 支持按名称关键词筛选.
+        DIFFERENTIATION: 本工具返回完整板块列表, 不排序/不分页; 排名用get_concept_ranking;
+        行业板块用get_industry_ranking.
+        next_recommended_tools: get_concept_ranking, get_industry_ranking
+        """
+        if ctx:
+            await ctx.info(f"获取概念板块列表: keyword={keyword or '(全部)'}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_concept_list", keyword=keyword)
+
+            result = await Container.market_gateway().get_concept_list(
+                keyword=keyword,
+            )
+
+            elapsed = time.perf_counter() - t0
+            data = result.get("data", [])
+            total = result.get("total", 0)
+
+            summary = f"概念板块列表: 共 {total} 个概念 (耗时 {elapsed:.1f}s)"
+
+            # Sanitize data
+            clean_rows = []
+            for r in data:
+                row = {}
+                for k, v in r.items():
+                    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                        row[k] = None
+                    else:
+                        row[k] = v
+                clean_rows.append(row)
+
+            # Markdown output (top 50 for readability)
+            display_rows = clean_rows[:50]
+            md = f"## A股概念板块列表"
+            if keyword:
+                md += f" (筛选: {keyword})"
+            md += "\n\n"
+            md += f"**概念总数**: {total} | **耗时**: {elapsed:.1f}s"
+            if total > 50:
+                md += f" | (仅展示前50个, 完整数据见data字段)"
+            md += "\n\n"
+            md += "| 概念 | 代码 | 涨跌幅% | 成分股 | 上涨 | 下跌 | 领涨股 | 领涨涨幅 |\n"
+            md += "|------|------|---------|--------|------|------|--------|----------|\n"
+            for r in display_rows:
+                md += (
+                    f"| {r.get('name', '')} "
+                    f"| {r.get('code', '')} "
+                    f"| {_safe_fmt(r.get('change_pct'), '+.2f')} "
+                    f"| {r.get('stock_count', 0)} "
+                    f"| {r.get('rise_count', 0)} "
+                    f"| {r.get('fall_count', 0)} "
+                    f"| {r.get('top_stock', '')} "
+                    f"| {_safe_fmt(r.get('top_stock_change'), '+.2f')} |\n"
+                )
+
+            artifact = create_artifact_envelope(
+                component_type=ComponentType.STOCK_SCREENER,
+                name="A股概念板块列表",
+                content={"markdown": md, "data": clean_rows},
+                description=summary,
+            )
+            return create_artifact_response(summary=summary, artifact=artifact)
+
+        except Exception as e:
+            logger.error(f"get_concept_list failed: {e}")
+            error_artifact = create_artifact_envelope(
+                component_type=ComponentType.STOCK_SCREENER,
+                name="概念列表错误",
+                content={"error": str(e)},
+                description=f"概念板块列表查询失败: {e}",
+            )
+            return create_artifact_response(
+                summary=f"概念板块列表查询失败: {e}",
+                artifact=error_artifact,
+            )

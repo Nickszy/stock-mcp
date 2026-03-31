@@ -187,6 +187,7 @@ _MARKET_METHODS: Set[str] = {
     "get_industry_ranking",
     "get_industry_list",
     "get_concept_ranking",
+    "get_concept_list",
     # US market overview
     "get_us_market_overview",
     # Fund data (COL-145)
