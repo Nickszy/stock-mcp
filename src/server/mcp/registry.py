@@ -47,6 +47,7 @@ from src.server.mcp.tools.stock_comparison_tools import register_stock_compariso
 from src.server.mcp.tools.corporate_event_tools import register_corporate_event_tools
 from src.server.mcp.tools.shareholder_behavior_tools import register_shareholder_behavior_tools
 from src.server.mcp.tools.earnings_forecast_tools import register_earnings_forecast_tools
+from src.server.mcp.tools.market_activity_tools import register_market_activity_tools
 
 
 @dataclass(frozen=True)
@@ -305,6 +306,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         enabled=True,
         description="业绩预期 (业绩预告/分析师一致预期EPS/业绩快报)",
         count=3,
+    ),
+    ToolGroup(
+        name="market-activity",
+        register=register_market_activity_tools,
+        enabled=True,
+        description="市场异动监控 (涨停池/跌停池/个股热度/板块异动)",
+        count=4,
     ),
 ]
 

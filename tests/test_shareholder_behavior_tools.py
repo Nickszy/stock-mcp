@@ -141,4 +141,4 @@ class TestShareholderBehaviorRegistry:
     def test_total_tool_count_updated(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        assert total == 187, f"Expected 187, got {total}"
+        assert total == 191, f"Expected 191, got {total}"

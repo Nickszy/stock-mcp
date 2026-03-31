@@ -5094,6 +5094,170 @@ class AkshareAdapter(BaseDataAdapter):
             return {"data": [], "period": period, "source": "akshare", "error": str(e)}
 
     # ------------------------------------------------------------------
+    # A-share market activity monitoring (hot rank / limit pools / board change)
+    # ------------------------------------------------------------------
+
+    async def get_limit_up_pool(self, date: str = "") -> Dict[str, Any]:
+        """Get A-share limit-up stock pool."""
+        cache_key = f"limit_up_pool:{date or 'latest'}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        if not date:
+            date = datetime.now().strftime("%Y%m%d")
+
+        try:
+            df = await self._run(ak.stock_zt_pool_em, date=date)
+            if df is None or df.empty:
+                return {"data": [], "date": date, "source": "akshare"}
+
+            col_map = {
+                "代码": "stock_code",
+                "名称": "stock_name",
+                "最新价": "latest_price",
+                "涨跌幅": "pct_change",
+                "成交额": "turnover",
+                "流通市值": "float_market_cap",
+                "总市值": "total_market_cap",
+                "换手率": "turnover_rate",
+                "连板数": "limit_up_streak",
+                "首次封板时间": "first_limit_time",
+                "最后封板时间": "last_limit_time",
+                "封板资金": "seal_amount",
+                "炸板次数": "broken_limit_count",
+                "所属行业": "industry",
+                "涨停统计": "limit_up_stats",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {"source": "akshare", "date": date, "total": len(records), "data": records[:200]}
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get limit up pool: {e}")
+            return {"data": [], "date": date, "source": "akshare", "error": str(e)}
+
+    async def get_limit_down_pool(self, date: str = "") -> Dict[str, Any]:
+        """Get A-share limit-down stock pool."""
+        cache_key = f"limit_down_pool:{date or 'latest'}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        if not date:
+            date = datetime.now().strftime("%Y%m%d")
+
+        try:
+            df = await self._run(ak.stock_zt_pool_dtgc_em, date=date)
+            if df is None or df.empty:
+                return {"data": [], "date": date, "source": "akshare"}
+
+            col_map = {
+                "代码": "stock_code",
+                "名称": "stock_name",
+                "最新价": "latest_price",
+                "涨跌幅": "pct_change",
+                "成交额": "turnover",
+                "流通市值": "float_market_cap",
+                "总市值": "total_market_cap",
+                "动态市盈率": "pe_dynamic",
+                "换手率": "turnover_rate",
+                "封单资金": "seal_amount",
+                "最后封板时间": "last_limit_time",
+                "板上成交额": "board_turnover",
+                "连续跌停": "limit_down_streak",
+                "开板次数": "open_board_count",
+                "所属行业": "industry",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {"source": "akshare", "date": date, "total": len(records), "data": records[:200]}
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get limit down pool: {e}")
+            return {"data": [], "date": date, "source": "akshare", "error": str(e)}
+
+    async def get_hot_stock_rank(self, symbol: str = "全部股票") -> Dict[str, Any]:
+        """Get A-share hot stock ranking."""
+        cache_key = f"hot_stock_rank:{symbol or '全部股票'}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_hot_rank_em, symbol=symbol or "全部股票")
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol or "全部股票", "source": "akshare"}
+
+            col_map = {
+                "当前排名": "rank",
+                "股票代码": "stock_code",
+                "股票名称": "stock_name",
+                "最新价": "latest_price",
+                "涨跌额": "price_change",
+                "涨跌幅": "pct_change",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {"source": "akshare", "symbol": symbol or "全部股票", "total": len(records), "data": records[:200]}
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get hot stock rank: {e}")
+            return {"data": [], "symbol": symbol or "全部股票", "source": "akshare", "error": str(e)}
+
+    async def get_sector_change_alert(self) -> Dict[str, Any]:
+        """Get A-share sector change alerts."""
+        cache_key = "sector_change_alert:latest"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_board_change_em)
+            if df is None or df.empty:
+                return {"data": [], "source": "akshare"}
+
+            col_map = {
+                "时间": "time",
+                "板块名称": "sector_name",
+                "涨跌幅": "pct_change",
+                "主力净流入": "main_net_inflow",
+                "板块异动总次数": "change_count",
+                "板块具体异动类型列表及出现次数": "change_types",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {"source": "akshare", "total": len(records), "data": records[:200]}
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get sector change alert: {e}")
+            return {"data": [], "source": "akshare", "error": str(e)}
+
+    # ------------------------------------------------------------------
     # A-share corporate action data (COL-147)
     # ------------------------------------------------------------------
 
