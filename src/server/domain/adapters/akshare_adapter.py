@@ -6425,6 +6425,9 @@ class AkshareAdapter(BaseDataAdapter):
                 "return_ytd", "return_since_inception", "fee",
             )
             records = self._clean_records(df.to_dict(orient="records"), float_fields)
+            for rec in records:
+                rec["type"] = "fund"
+                rec["market"] = "A股"
             result = {
                 "results": records, "total": total, "returned": len(records),
                 "keyword": keyword, "sort_by": sort_by, "sort_order": sort_order,
@@ -6509,6 +6512,9 @@ class AkshareAdapter(BaseDataAdapter):
                 "return_ytd", "return_since_inception", "fee",
             )
             results = self._clean_records(df.to_dict(orient="records"), float_fields)
+            for rec in results:
+                rec["type"] = "fund"
+                rec["market"] = "A股"
             result = {
                 "results": results, "total": total, "returned": len(results),
                 "fund_type": fund_type, "sort_by": sort_by, "sort_order": sort_order,
