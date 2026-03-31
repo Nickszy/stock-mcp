@@ -298,8 +298,8 @@ TOOL_GROUPS: List[ToolGroup] = [
         name="shareholder-behavior",
         register=register_shareholder_behavior_tools,
         enabled=True,
-        description="股东行为/风险信号 (机构调研/股票质押)",
-        count=2,
+        description="股东行为/风险信号 (机构调研/股票质押/质押比例查询)",
+        count=3,
     ),
     ToolGroup(
         name="earnings-forecast",

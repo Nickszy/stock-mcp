@@ -157,6 +157,7 @@ _MARKET_METHODS: Set[str] = {
     # Stock participant data (COL-144)
     "get_stock_northbound_ranking",
     "get_stock_shareholder_changes",
+    "get_stock_pledge_ratio",
     "get_limit_up_pool",
     "get_limit_down_pool",
     "get_hot_stock_rank",

@@ -155,4 +155,4 @@ class TestMarketActivityRegistry:
     def test_total_tool_count_updated(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        assert total == 195, f"Expected 195, got {total}"
+        assert total == 196, f"Expected 196, got {total}"

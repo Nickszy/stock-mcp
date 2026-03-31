@@ -89,6 +89,32 @@ class TestStockPledgeAdapter:
         assert "error" in result
 
 
+class TestStockPledgeRatioAdapter:
+    @pytest.fixture
+    def adapter(self, mock_cache):
+        from src.server.domain.adapters.akshare_adapter import AkshareAdapter
+        return AkshareAdapter(mock_cache)
+
+    def test_returns_filtered_pledge_ratio_data(self, adapter):
+        mock_df = pd.DataFrame({
+            "股票代码": ["600519", "000001"],
+            "股票简称": ["贵州茅台", "平安银行"],
+            "质押比例": [12.5, 3.2],
+            "所属行业": ["白酒", "银行"],
+        })
+
+        async def mock_run(func, *args, **kwargs):
+            return mock_df
+
+        with patch.object(adapter, "_run", AsyncMock(side_effect=mock_run)):
+            result = _run(adapter.get_stock_pledge_ratio(symbol="600519", date="20250328"))
+
+        assert result["source"] == "akshare"
+        assert result["date"] == "20250328"
+        assert result["total"] == 1
+        assert result["data"][0]["股票代码"] == "600519"
+
+
 class TestShareholderBehaviorToolRegistration:
     def test_registers_two_tools(self):
         from src.server.mcp.tools.shareholder_behavior_tools import register_shareholder_behavior_tools
@@ -105,7 +131,7 @@ class TestShareholderBehaviorToolRegistration:
         mcp.tool = capture_tool
         register_shareholder_behavior_tools(mcp)
 
-        expected = ["get_institutional_research", "get_stock_pledge"]
+        expected = ["get_institutional_research", "get_stock_pledge", "get_stock_pledge_ratio"]
         for name in expected:
             assert name in registered, f"Missing tool: {name}"
 
@@ -136,9 +162,9 @@ class TestShareholderBehaviorRegistry:
         groups = [g for g in TOOL_GROUPS if g.name == "shareholder-behavior"]
         assert len(groups) == 1, "shareholder-behavior group must exist"
         assert groups[0].enabled is True
-        assert groups[0].count == 2
+        assert groups[0].count == 3
 
     def test_total_tool_count_updated(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        assert total == 195, f"Expected 195, got {total}"
+        assert total == 196, f"Expected 196, got {total}"

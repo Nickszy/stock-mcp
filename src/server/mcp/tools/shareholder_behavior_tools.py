@@ -4,6 +4,7 @@
 Exposes adapter-level shareholder behavior data as unified MCP tools:
   - get_institutional_research: 机构调研统计
   - get_stock_pledge: 股票质押比例
+  - get_stock_pledge_ratio: 按股票代码/日期查询质押比例
 """
 
 import time
@@ -112,27 +113,7 @@ def register_shareholder_behavior_tools(mcp: FastMCP):
         date: str = "",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取A股股票质押比例数据 (股东质押风险).
-
-        WHEN TO USE: 用户问"股票质押"、"质押比例"、"质押风险"、"哪些股票质押高".
-        CONCEPT: 股票质押是股东以股票为质押物进行融资的行为, 质押比例过高
-        意味着股东资金链紧张, 平仓风险较大, 是重要的风险指标.
-        DIFFERENTIATION: 质押比例概览; 股东增减持用 get_shareholder_holding_detail;
-        机构调研用 get_institutional_research.
-        next_recommended_tools: get_shareholder_holding_detail -> get_institutional_research
-
-        Typical use cases:
-        - "最近股票质押比例最高的公司有哪些？"
-        - "查看全市场质押风险概览"
-        - "哪些行业质押比例较高？"
-
-        Args:
-            date: 日期 (如 20250328), 为空使用最近交易日
-            ctx: FastMCP Context.
-
-        Returns:
-            股票质押比例数据
-        """
+        """获取A股股票质押比例数据 (股东质押风险)."""
         if ctx:
             await ctx.info(f"获取股票质押数据: date={date}")
         try:
@@ -188,4 +169,62 @@ def register_shareholder_behavior_tools(mcp: FastMCP):
                 data={"error": str(e)},
                 source="akshare",
                 description=f"获取股票质押数据失败: {e}",
+            )
+
+    # ------------------------------------------------------------------
+    # get_stock_pledge_ratio — 按股票代码查询质押比例
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"shareholder-behavior", "pledge"})
+    async def get_stock_pledge_ratio(
+        symbol: str = "",
+        date: str = "",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """按股票代码筛选股票质押比例数据。"""
+        if ctx:
+            await ctx.info(f"获取股票质押比例查询: symbol={symbol}, date={date}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_stock_pledge_ratio", symbol=symbol, date=date)
+
+            gateway = Container.market_gateway()
+            result = await gateway.get_stock_pledge_ratio(symbol=symbol, date=date)
+
+            elapsed = time.perf_counter() - t0
+            data = result.get("data", [])
+            total = result.get("total", 0)
+            resolved_date = result.get("date", date)
+            summary = f"股票质押比例查询({symbol or '全市场'}/{resolved_date or '最新'}): 共{total}条 (耗时 {elapsed:.1f}s)"
+
+            md = f"## 股票质押比例查询 - {symbol or '全市场'}\n\n"
+            md += f"**日期**: {resolved_date or '最新'} | **条数**: {total} | **耗时**: {elapsed:.1f}s\n\n"
+            if data:
+                md += "| 代码 | 名称 | 质押比例 | 所属行业 |\n|------|------|----------|----------|\n"
+                for r in data[:50]:
+                    code = r.get("股票代码", r.get("代码", r.get("证券代码", "")))
+                    name = r.get("股票简称", r.get("名称", ""))
+                    ratio = r.get("质押比例", r.get("pledge_ratio", "-"))
+                    industry = r.get("所属行业", r.get("industry", "-"))
+                    md += f"| {code} | {name} | {ratio} | {industry} |\n"
+
+            return create_standard_artifact_response(
+                summary=summary,
+                component_type=ComponentType.TABLE,
+                name=f"股票质押比例查询: {symbol or '全市场'}",
+                data=data[:100],
+                source="akshare",
+                description=summary,
+                markdown=md,
+                symbol=symbol,
+                date=resolved_date,
+            )
+        except Exception as e:
+            logger.error(f"get_stock_pledge_ratio failed: {e}")
+            return create_standard_artifact_response(
+                summary=f"获取股票质押比例查询失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="股票质押比例查询错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取股票质押比例查询失败: {e}",
             )
