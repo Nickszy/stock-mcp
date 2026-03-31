@@ -32,6 +32,10 @@ async def init_adapters() -> None:
         if _initialized:
             return
 
+        from src.server.api.routes.watchlist import set_watchlist_components
+        from src.server.api.routes.scheduler import set_scheduler_components
+        from src.server.mcp.tools.scheduler_tools import set_scheduler_tools_runner
+
         logger.info("🚀 Bootstrapping application dependencies")
 
         redis = Container.redis()
@@ -127,11 +131,31 @@ async def init_adapters() -> None:
             "Tushare > " if tushare_available else "",
         )
 
-        # Initialize Structured Data subsystem (requires PostgreSQL)
+        # Initialize Entity Registry subsystem (requires PostgreSQL)
         if postgres_ok:
+            await _init_entity_registry(postgres, security_master_repo)
             await _init_structured_data(postgres)
         else:
+            logger.info("ℹ️  Entity registry subsystem skipped (PostgreSQL required)")
             logger.info("ℹ️  Structured data subsystem skipped (PostgreSQL required)")
+
+        # Inject watchlist and scheduler components
+        watchlist_service = Container.watchlist_service()
+        scheduler_service = Container.scheduler_service()
+        scheduler_runner = Container.scheduler_runner()
+        scheduler_engine = Container.scheduler_engine()
+        scheduler_repo = Container.scheduler_repository()
+
+        set_watchlist_components(service=watchlist_service)
+        set_scheduler_components(
+            service=scheduler_service,
+            runner=scheduler_runner,
+            engine=scheduler_engine,
+            repo=scheduler_repo,
+        )
+        set_scheduler_tools_runner(scheduler_runner)
+        await scheduler_engine.start()
+        logger.info("✅ Watchlist and scheduler subsystems initialized")
 
         _initialized = True
 
@@ -170,11 +194,49 @@ async def _load_alias_seeds(security_master_repo) -> None:
 async def shutdown_adapters() -> None:
     """Placeholder for future graceful shutdown logic."""
     try:
+        scheduler_engine = Container.scheduler_engine()
+        await scheduler_engine.stop()
+    except Exception:
+        pass
+    try:
         postgres = Container.postgres()
         await postgres.disconnect()
     except Exception:
         pass
     return None
+
+
+async def _init_entity_registry(postgres_conn, security_master_repo) -> None:
+    """Initialize the entity registry subsystem — extends security_master.
+
+    Best-effort: logs warnings if something fails but does not block app startup.
+    """
+    try:
+        from src.server.domain.entity_registry.repository import EntityRegistryRepository
+        from src.server.domain.entity_registry.service import EntityRegistryService
+        from src.server.api.routes.entity_registry import set_entity_registry_components
+
+        # Create repository + service
+        repo = EntityRegistryRepository(postgres_conn)
+        await repo.ensure_schema()
+
+        service = EntityRegistryService(
+            repo=repo,
+            security_master_repo=security_master_repo,
+        )
+
+        # Inject into route module
+        set_entity_registry_components(
+            service=service,
+            repo=repo,
+        )
+
+        logger.info("✅ Entity registry subsystem initialized")
+    except Exception as e:
+        logger.warning(
+            "⚠️  Entity registry subsystem initialization failed (non-fatal)",
+            error=str(e),
+        )
 
 
 async def _init_structured_data(postgres_conn) -> None:

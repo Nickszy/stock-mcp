@@ -49,6 +49,8 @@ from src.server.mcp.tools.shareholder_behavior_tools import register_shareholder
 from src.server.mcp.tools.earnings_forecast_tools import register_earnings_forecast_tools
 from src.server.mcp.tools.market_activity_tools import register_market_activity_tools
 from src.server.mcp.tools.attention_sentiment_tools import register_attention_sentiment_tools
+from src.server.mcp.tools.watchlist_tools import register_watchlist_tools
+from src.server.mcp.tools.scheduler_tools import register_scheduler_tools
 
 
 @dataclass(frozen=True)
@@ -87,7 +89,7 @@ TOOL_GROUPS: List[ToolGroup] = [
         register=register_money_flow_tools,
         enabled=True,
         description="资金流向",
-        count=42,
+        count=43,
     ),
     ToolGroup(
         name="filings",
@@ -319,7 +321,21 @@ TOOL_GROUPS: List[ToolGroup] = [
         name="attention-sentiment",
         register=register_attention_sentiment_tools,
         enabled=True,
-        description="多源关注度/情绪 (百度热搜/雪球讨论热度/雪球关注热度/雪球交易热度)",
+        description="多源关注度/情绪 (百度热搜/雪球讨论热度/雪球关注热度/雪球交易热度/龙虎榜上榜统计)",
+        count=5,
+    ),
+    ToolGroup(
+        name="watchlist",
+        register=register_watchlist_tools,
+        enabled=True,
+        description="自选股组合管理 (创建/列表/添加持仓/移除持仓)",
+        count=4,
+    ),
+    ToolGroup(
+        name="scheduler",
+        register=register_scheduler_tools,
+        enabled=True,
+        description="定时分析任务 (创建/列表/立即执行/查询结果)",
         count=4,
     ),
 ]

@@ -50,6 +50,8 @@ from src.server.api.routes import (
     admin_router,
     admin_html_router,
     entity_registry_router,
+    watchlist_router,
+    scheduler_router,
 )
 from src.server.utils.logger import logger
 from src.server.middleware import JsonArgumentsFixMiddleware, MarkdownNegotiationMiddleware
@@ -217,6 +219,8 @@ def create_app():
     app.include_router(admin_router)
     app.include_router(admin_html_router)
     app.include_router(entity_registry_router)
+    app.include_router(watchlist_router)
+    app.include_router(scheduler_router)
 
     logger.info("✅ RESTful API routes registered")
     logger.info("   - Health check: /health")
@@ -243,6 +247,8 @@ def create_app():
     logger.info("   - HK Connect: /api/v1/hk-connect/*")
     logger.info("   - Structured Data: /api/v1/structured-data/*")
     logger.info("   - Admin Workbench: /admin")
+    logger.info("   - Watchlist: /api/v1/watchlists/*")
+    logger.info("   - Scheduler: /api/v1/scheduler/*")
 
     # 6. Mount MCP protocol endpoint
     if mcp_app:

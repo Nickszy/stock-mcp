@@ -82,8 +82,33 @@ class TestXueqiuHotnessAdapter:
         assert result["data"][0]["heat"] == 3578798
 
 
+class TestDragonTigerStatisticsAdapter:
+    @pytest.fixture
+    def adapter(self, mock_cache):
+        from src.server.domain.adapters.akshare_adapter import AkshareAdapter
+        return AkshareAdapter(mock_cache)
+
+    def test_returns_dragon_tiger_statistics(self, adapter):
+        mock_df = pd.DataFrame([
+            [1, "600519", "贵州茅台", "2026-03-31", 1688.0, 2.5, 3, 120000000, 320000000, 200000000, 560000000, None, None, None, None, None, 8.2, 15.6, 28.1, 45.0],
+        ])
+
+        async def mock_run(func, *args, **kwargs):
+            return mock_df
+
+        with patch.object(adapter, "_run", AsyncMock(side_effect=mock_run)):
+            result = _run(adapter.get_dragon_tiger_statistics(symbol="近一月"))
+
+        assert result["source"] == "akshare"
+        assert result["symbol"] == "近一月"
+        assert result["total"] == 1
+        assert result["data"][0]["stock_code"] == "600519"
+        assert result["data"][0]["list_count"] == 3
+        assert result["data"][0]["net_buy"] == 120000000
+
+
 class TestAttentionSentimentToolRegistration:
-    def test_registers_four_tools(self):
+    def test_registers_five_tools(self):
         from src.server.mcp.tools.attention_sentiment_tools import register_attention_sentiment_tools
 
         mcp = MagicMock()
@@ -103,6 +128,7 @@ class TestAttentionSentimentToolRegistration:
             "get_xueqiu_tweet_hotness",
             "get_xueqiu_follow_hotness",
             "get_xueqiu_deal_hotness",
+            "get_dragon_tiger_statistics",
         ]
         for name in expected:
             assert name in registered
@@ -114,9 +140,9 @@ class TestAttentionSentimentRegistry:
         groups = [g for g in TOOL_GROUPS if g.name == "attention-sentiment"]
         assert len(groups) == 1
         assert groups[0].enabled is True
-        assert groups[0].count == 4
+        assert groups[0].count == 5
 
     def test_total_tool_count_updated(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        assert total == 196, f"Expected 196, got {total}"
+        assert total == 206, f"Expected 206, got {total}"

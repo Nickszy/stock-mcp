@@ -27,6 +27,8 @@ from .structured_data import router as structured_data_router
 from .admin import router as admin_router
 from .admin import html_router as admin_html_router
 from .entity_registry import router as entity_registry_router
+from .watchlist import router as watchlist_router
+from .scheduler import router as scheduler_router
 
 __all__ = [
     "market_data_router",
@@ -55,4 +57,6 @@ __all__ = [
     "admin_router",
     "admin_html_router",
     "entity_registry_router",
+    "watchlist_router",
+    "scheduler_router",
 ]

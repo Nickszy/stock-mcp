@@ -36,6 +36,14 @@ from src.server.domain.services.technical_service import TechnicalService
 from src.server.domain.services.filings_service import FilingsService
 from src.server.domain.services.money_flow_service import MoneyFlowService
 from src.server.domain.services.chip_service import ChipService
+from src.server.domain.services.research_report_service import ResearchReportService
+from src.server.domain.watchlist import RedisWatchlistRepository, WatchlistService
+from src.server.domain.scheduler import (
+    RedisSchedulerRepository,
+    SchedulerService,
+    SchedulerRunner,
+    SchedulerEngine,
+)
 
 # Import domain classes
 from src.server.domain.market_gateway import MarketGateway
@@ -86,6 +94,8 @@ class Container(containers.DeclarativeContainer):
 
     # Cache
     cache = providers.Singleton(AsyncRedisCache, redis_client=redis)
+    watchlist_repository = providers.Singleton(RedisWatchlistRepository, redis_conn=redis)
+    scheduler_repository = providers.Singleton(RedisSchedulerRepository, redis_conn=redis)
 
     # Quote cache (real-time price caching with single-flight protection)
     quote_cache = providers.Singleton(QuoteCache, cache=cache)
@@ -249,4 +259,27 @@ class Container(containers.DeclarativeContainer):
         ChipService,
         adapter_manager=market_gateway,
         cache=cache,
+    )
+    watchlist_service = providers.Factory(
+        WatchlistService,
+        repository=watchlist_repository,
+    )
+    research_report_service = providers.Factory(ResearchReportService)
+    scheduler_service = providers.Factory(
+        SchedulerService,
+        repository=scheduler_repository,
+    )
+    scheduler_runner = providers.Factory(
+        SchedulerRunner,
+        scheduler_repo=scheduler_repository,
+        watchlist_repo=watchlist_repository,
+        gateway=market_gateway,
+        news_service=news_service,
+        filings_service=filings_service,
+        research_report_service=research_report_service,
+    )
+    scheduler_engine = providers.Singleton(
+        SchedulerEngine,
+        scheduler_repo=scheduler_repository,
+        runner=scheduler_runner,
     )
