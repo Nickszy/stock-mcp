@@ -278,10 +278,59 @@ async def _init_structured_data(postgres_conn) -> None:
             logger.debug("Financial statements normalizer not loaded")
 
         try:
-            from src.server.domain.structured_data.validate.financial_statements import FinancialStatementsValidator
-            registry.register_validator("financial_statements", FinancialStatementsValidator())
+            from src.server.domain.structured_data.validate.financial_statements import register_financial_statement_rules
+            register_financial_statement_rules(orchestrator._validator)
         except Exception:
             logger.debug("Financial statements validator not loaded")
+
+        # Register fetcher — pulls data from adapters via gateway
+        gateway = Container.market_gateway()
+
+        async def _financial_statements_fetcher(
+            dataset_key: str,
+            source: str,
+            business_key: Optional[str] = None,
+            **kwargs,
+        ) -> List[Dict[str, Any]]:
+            """Fetch financial statements from akshare/tushare.
+
+            Args:
+                business_key: EXCHANGE:SYMBOL format (e.g. "SSE:600519")
+                source: "akshare" or "tushare"
+            """
+            if not business_key:
+                logger.warning("Financial statements fetcher: no business_key provided")
+                return []
+
+            # Parse exchange:symbol from business_key
+            parts = business_key.split(":")
+            if len(parts) < 2:
+                logger.warning("Financial statements fetcher: invalid business_key", business_key=business_key)
+                return []
+
+            exchange, symbol = parts[0], parts[1]
+
+            results = []
+
+            try:
+                raw = await gateway.get_financials(f"{exchange}:{symbol}")
+                if raw and isinstance(raw, dict):
+                    results.append({
+                        "business_key": business_key,
+                        "data": raw,
+                        "source": source or "akshare",
+                    })
+            except Exception as e:
+                logger.warning(
+                    "Financial statements fetcher failed",
+                    source=source or "akshare",
+                    business_key=business_key,
+                    error=str(e),
+                )
+
+            return results
+
+        registry.register_fetcher("financial_statements", _financial_statements_fetcher)
 
         # Create orchestrator
         orchestrator = Orchestrator(
