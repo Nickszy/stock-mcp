@@ -117,7 +117,7 @@ async def resolve_sector_scope(req: SectorScopeRequest) -> Dict[str, Any]:
             "horizon_days": safe_horizon,
             "peer_count": safe_peer_count,
             "angle": req.angle,
-            "as_of_date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "as_of_date": datetime.now(datetime.UTC).strftime("%Y-%m-%d"),
         }
 
         recommended_tools = (
@@ -390,7 +390,7 @@ async def build_sector_evidence_pack(req: EvidencePackRequest) -> Dict[str, Any]
                     "sector_name": req.sector_name,
                     "market": detected_market,
                     "days": safe_days,
-                    "generated_at": datetime.utcnow().isoformat(),
+                    "generated_at": datetime.now(datetime.UTC).isoformat(),
                 },
                 "universe": universe,
                 "sector_snapshot": sector_snapshot,

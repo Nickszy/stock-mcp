@@ -342,7 +342,7 @@ def register_sector_research_tools(mcp: FastMCP):
             "horizon_days": safe_horizon,
             "peer_count": safe_peer_count,
             "angle": angle,
-            "as_of_date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "as_of_date": datetime.now(datetime.UTC).strftime("%Y-%m-%d"),
         }
 
         recommended_tools = (
@@ -743,7 +743,7 @@ def register_sector_research_tools(mcp: FastMCP):
                 "sector_name": sector_name,
                 "market": detected_market,
                 "days": safe_days,
-                "generated_at": datetime.utcnow().isoformat(),
+                "generated_at": datetime.now(datetime.UTC).isoformat(),
             },
             "universe": universe,
             "sector_snapshot": sector_snapshot,
