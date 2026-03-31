@@ -166,6 +166,7 @@ _MARKET_METHODS: Set[str] = {
     # Earnings preview + analyst consensus
     "get_earnings_preview",
     "get_analyst_consensus",
+    "get_earnings_flash",
     # Corporate event calendar (COL-226)
     "get_earnings_calendar",
     "get_dividend_calendar",

@@ -110,8 +110,51 @@ class TestAnalystConsensusAdapter:
         assert "error" in result
 
 
+class TestEarningsFlashAdapter:
+    @pytest.fixture
+    def adapter(self, mock_cache):
+        from src.server.domain.adapters.akshare_adapter import AkshareAdapter
+        return AkshareAdapter(mock_cache)
+
+    def test_returns_flash_data(self, adapter):
+        mock_df = pd.DataFrame({
+            "股票代码": ["600519"],
+            "股票简称": ["贵州茅台"],
+            "每股收益": [41.76],
+            "营业收入-营业收入": [1500.0],
+            "营业收入-同比增长": [18.5],
+            "净利润-净利润": [750.0],
+            "净利润-同比增长": [15.2],
+            "每股净资产": [180.0],
+            "净资产收益率": [23.2],
+            "公告日期": ["2025-04-15"],
+        })
+
+        async def mock_run(func, *args, **kwargs):
+            return mock_df
+
+        with patch.object(adapter, "_run", AsyncMock(side_effect=mock_run)):
+            result = _run(adapter.get_earnings_flash(period="20250331"))
+
+        assert result["source"] == "akshare"
+        assert result["period"] == "20250331"
+        assert result["total"] == 1
+        assert result["data"][0]["stock_code"] == "600519"
+        assert result["data"][0]["eps"] == 41.76
+
+    def test_returns_empty_on_failure(self, adapter):
+        async def mock_run(func, *args, **kwargs):
+            raise RuntimeError("API down")
+
+        with patch.object(adapter, "_run", AsyncMock(side_effect=mock_run)):
+            result = _run(adapter.get_earnings_flash())
+
+        assert result["data"] == []
+        assert "error" in result
+
+
 class TestEarningsForecastToolRegistration:
-    def test_registers_two_tools(self):
+    def test_registers_three_tools(self):
         from src.server.mcp.tools.earnings_forecast_tools import register_earnings_forecast_tools
 
         mcp = MagicMock()
@@ -128,6 +171,7 @@ class TestEarningsForecastToolRegistration:
 
         assert "get_earnings_preview" in registered
         assert "get_analyst_consensus" in registered
+        assert "get_earnings_flash" in registered
 
 
 class TestEarningsForecastRegistry:
@@ -136,9 +180,9 @@ class TestEarningsForecastRegistry:
         groups = [g for g in TOOL_GROUPS if g.name == "earnings-forecast"]
         assert len(groups) == 1
         assert groups[0].enabled is True
-        assert groups[0].count == 2
+        assert groups[0].count == 3
 
     def test_total_tool_count_updated(self):
         from src.server.mcp.registry import get_enabled_tool_count
         total = get_enabled_tool_count()
-        assert total == 186, f"Expected 186, got {total}"
+        assert total == 187, f"Expected 187, got {total}"

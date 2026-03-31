@@ -303,8 +303,8 @@ TOOL_GROUPS: List[ToolGroup] = [
         name="earnings-forecast",
         register=register_earnings_forecast_tools,
         enabled=True,
-        description="业绩预期 (业绩预告/分析师一致预期EPS)",
-        count=2,
+        description="业绩预期 (业绩预告/分析师一致预期EPS/业绩快报)",
+        count=3,
     ),
 ]
 

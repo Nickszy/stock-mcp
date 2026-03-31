@@ -197,3 +197,78 @@ def register_earnings_forecast_tools(mcp: FastMCP):
                 source="akshare",
                 description=f"获取分析师预期失败: {e}",
             )
+
+    # ------------------------------------------------------------------
+    # get_earnings_flash — 业绩快报
+    # ------------------------------------------------------------------
+    @mcp.tool(tags={"earnings-forecast", "flash"})
+    async def get_earnings_flash(
+        period: str = "",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取A股业绩快报数据 (比正式财报更早的核心经营快照).
+
+        WHEN TO USE: 用户问"业绩快报"、"快报营收净利"、"哪些公司先披露快报".
+        CONCEPT: 业绩快报通常早于正式财报, 提供营收、净利润、ROE、EPS 等关键指标的快速披露.
+        DIFFERENTIATION: 业绩快报(初步披露); 业绩预告用 get_earnings_preview; 正式财报用 get_financial_statements.
+        next_recommended_tools: get_earnings_preview -> get_financial_statements
+
+        Args:
+            period: 报告期 (如 20250331, 20241231), 为空自动推断
+            ctx: FastMCP Context.
+
+        Returns:
+            业绩快报数据
+        """
+        if ctx:
+            await ctx.info(f"获取业绩快报: period={period}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_earnings_flash", period=period)
+
+            gateway = Container.market_gateway()
+            result = await gateway.get_earnings_flash(period=period)
+
+            elapsed = time.perf_counter() - t0
+            data = result.get("data", [])
+            total = result.get("total", 0)
+            resolved_period = result.get("period", period)
+
+            summary = f"业绩快报({resolved_period}): 共{total}家 (耗时 {elapsed:.1f}s)"
+
+            md = f"## 业绩快报 - {resolved_period}\n\n"
+            md += f"**公司数**: {total} | **耗时**: {elapsed:.1f}s\n\n"
+
+            if data:
+                md += "| 代码 | 名称 | EPS | 营收同比 | 净利润同比 | ROE | 行业 | 公告日期 |\n"
+                md += "|------|------|-----|---------|-----------|-----|------|----------|\n"
+                for r in data[:50]:
+                    md += (
+                        f"| {r.get('stock_code', '')} | {r.get('stock_name', '')} "
+                        f"| {r.get('eps', '-')} | {r.get('revenue_yoy', '-')} "
+                        f"| {r.get('net_profit_yoy', '-')} | {r.get('roe', '-')} "
+                        f"| {r.get('industry', '-')} | {r.get('announce_date', '-')} |\n"
+                    )
+                if total > 50:
+                    md += f"\n*... 还有 {total - 50} 家*\n"
+
+            return create_standard_artifact_response(
+                summary=summary,
+                component_type=ComponentType.TABLE,
+                name=f"业绩快报: {resolved_period}",
+                data=data[:200],
+                source="akshare",
+                description=summary,
+                markdown=md,
+            )
+
+        except Exception as e:
+            logger.error(f"get_earnings_flash failed: {e}")
+            return create_standard_artifact_response(
+                summary=f"获取业绩快报失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="业绩快报错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取业绩快报失败: {e}",
+            )

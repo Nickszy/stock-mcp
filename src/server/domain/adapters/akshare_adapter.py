@@ -5024,6 +5024,75 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"Failed to get analyst consensus: {e}")
             return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
 
+    async def get_earnings_flash(
+        self, period: str = "",
+    ) -> Dict[str, Any]:
+        """获取A股业绩快报数据.
+
+        Args:
+            period: 报告期 (如 20250331, 20241231), 为空自动推断
+        """
+        if not period:
+            now = datetime.now()
+            month = now.month
+            if month <= 4:
+                period = f"{now.year - 1}1231"
+            elif month <= 8:
+                period = f"{now.year}0630"
+            elif month <= 10:
+                period = f"{now.year}0930"
+            else:
+                period = f"{now.year}1231"
+
+        cache_key = f"akshare:earnings_flash:{period}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_yjkb_em, date=period)
+            if df is None or df.empty:
+                return {"data": [], "period": period, "source": "akshare"}
+
+            col_map = {
+                "序号": "seq",
+                "股票代码": "stock_code",
+                "股票简称": "stock_name",
+                "每股收益": "eps",
+                "营业收入-营业收入": "revenue",
+                "营业收入-去年同期": "revenue_prior",
+                "营业收入-同比增长": "revenue_yoy",
+                "营业收入-季度环比增长": "revenue_qoq",
+                "净利润-净利润": "net_profit",
+                "净利润-去年同期": "net_profit_prior",
+                "净利润-同比增长": "net_profit_yoy",
+                "净利润-季度环比增长": "net_profit_qoq",
+                "每股净资产": "bps",
+                "净资产收益率": "roe",
+                "所处行业": "industry",
+                "公告日期": "announce_date",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+
+            records = df.to_dict(orient="records")
+            for item in records:
+                for k, v in item.items():
+                    if hasattr(v, "item"):
+                        item[k] = v.item()
+
+            result = {
+                "source": "akshare",
+                "period": period,
+                "total": len(records),
+                "data": records[:200],
+            }
+            await self.cache.set(cache_key, result, ttl=3600)
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to get earnings flash: {e}")
+            return {"data": [], "period": period, "source": "akshare", "error": str(e)}
+
     # ------------------------------------------------------------------
     # A-share corporate action data (COL-147)
     # ------------------------------------------------------------------
