@@ -5257,6 +5257,124 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"Failed to get sector change alert: {e}")
             return {"data": [], "source": "akshare", "error": str(e)}
 
+    async def get_baidu_hot_search(self, symbol: str = "A股", date: str = "", time_period: str = "今日") -> Dict[str, Any]:
+        """Get Baidu hot search ranking for A-share stocks."""
+        cache_key = f"baidu_hot_search:{symbol}:{date or 'latest'}:{time_period}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        if not date:
+            date = datetime.now().strftime("%Y%m%d")
+
+        try:
+            df = await self._run(ak.stock_hot_search_baidu, symbol=symbol, date=date, time=time_period)
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "date": date, "time_period": time_period, "source": "akshare"}
+
+            records = []
+            for _, row in df.iterrows():
+                values = list(row.values)
+                records.append({
+                    "keyword": str(values[0]) if len(values) > 0 else "",
+                    "rank_change": str(values[1]) if len(values) > 1 else "",
+                    "heat": values[2] if len(values) > 2 and not hasattr(values[2], "item") else (values[2].item() if len(values) > 2 and hasattr(values[2], "item") else None),
+                })
+
+            result = {"source": "akshare", "symbol": symbol, "date": date, "time_period": time_period, "total": len(records), "data": records[:200]}
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get baidu hot search: {e}")
+            return {"data": [], "symbol": symbol, "date": date, "time_period": time_period, "source": "akshare", "error": str(e)}
+
+    async def get_xueqiu_tweet_hotness(self, symbol: str = "最热门") -> Dict[str, Any]:
+        """Get Xueqiu tweet hotness ranking."""
+        cache_key = f"xueqiu_tweet_hotness:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_hot_tweet_xq, symbol=symbol)
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "source": "akshare"}
+
+            records = []
+            for _, row in df.iterrows():
+                values = list(row.values)
+                records.append({
+                    "stock_code": str(values[0]) if len(values) > 0 else "",
+                    "stock_name": str(values[1]) if len(values) > 1 else "",
+                    "heat": values[2] if len(values) > 2 and not hasattr(values[2], "item") else (values[2].item() if len(values) > 2 and hasattr(values[2], "item") else None),
+                    "latest_price": values[3] if len(values) > 3 and not hasattr(values[3], "item") else (values[3].item() if len(values) > 3 and hasattr(values[3], "item") else None),
+                })
+
+            result = {"source": "akshare", "symbol": symbol, "total": len(records), "data": records[:200]}
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get xueqiu tweet hotness: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    async def get_xueqiu_follow_hotness(self, symbol: str = "最热门") -> Dict[str, Any]:
+        """Get Xueqiu follow hotness ranking."""
+        cache_key = f"xueqiu_follow_hotness:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_hot_follow_xq, symbol=symbol)
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "source": "akshare"}
+
+            records = []
+            for _, row in df.iterrows():
+                values = list(row.values)
+                records.append({
+                    "stock_code": str(values[0]) if len(values) > 0 else "",
+                    "stock_name": str(values[1]) if len(values) > 1 else "",
+                    "heat": values[2] if len(values) > 2 and not hasattr(values[2], "item") else (values[2].item() if len(values) > 2 and hasattr(values[2], "item") else None),
+                    "latest_price": values[3] if len(values) > 3 and not hasattr(values[3], "item") else (values[3].item() if len(values) > 3 and hasattr(values[3], "item") else None),
+                })
+
+            result = {"source": "akshare", "symbol": symbol, "total": len(records), "data": records[:200]}
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get xueqiu follow hotness: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
+    async def get_xueqiu_deal_hotness(self, symbol: str = "最热门") -> Dict[str, Any]:
+        """Get Xueqiu deal hotness ranking."""
+        cache_key = f"xueqiu_deal_hotness:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_hot_deal_xq, symbol=symbol)
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "source": "akshare"}
+
+            records = []
+            for _, row in df.iterrows():
+                values = list(row.values)
+                records.append({
+                    "stock_code": str(values[0]) if len(values) > 0 else "",
+                    "stock_name": str(values[1]) if len(values) > 1 else "",
+                    "heat": values[2] if len(values) > 2 and not hasattr(values[2], "item") else (values[2].item() if len(values) > 2 and hasattr(values[2], "item") else None),
+                    "latest_price": values[3] if len(values) > 3 and not hasattr(values[3], "item") else (values[3].item() if len(values) > 3 and hasattr(values[3], "item") else None),
+                })
+
+            result = {"source": "akshare", "symbol": symbol, "total": len(records), "data": records[:200]}
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get xueqiu deal hotness: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
     # ------------------------------------------------------------------
     # A-share corporate action data (COL-147)
     # ------------------------------------------------------------------

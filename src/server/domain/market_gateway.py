@@ -161,6 +161,10 @@ _MARKET_METHODS: Set[str] = {
     "get_limit_down_pool",
     "get_hot_stock_rank",
     "get_sector_change_alert",
+    "get_baidu_hot_search",
+    "get_xueqiu_tweet_hotness",
+    "get_xueqiu_follow_hotness",
+    "get_xueqiu_deal_hotness",
     "get_stock_institutional_research",
     # Corporate action data (COL-147)
     "get_shareholder_holding_detail",

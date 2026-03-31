@@ -48,6 +48,7 @@ from src.server.mcp.tools.corporate_event_tools import register_corporate_event_
 from src.server.mcp.tools.shareholder_behavior_tools import register_shareholder_behavior_tools
 from src.server.mcp.tools.earnings_forecast_tools import register_earnings_forecast_tools
 from src.server.mcp.tools.market_activity_tools import register_market_activity_tools
+from src.server.mcp.tools.attention_sentiment_tools import register_attention_sentiment_tools
 
 
 @dataclass(frozen=True)
@@ -312,6 +313,13 @@ TOOL_GROUPS: List[ToolGroup] = [
         register=register_market_activity_tools,
         enabled=True,
         description="市场异动监控 (涨停池/跌停池/个股热度/板块异动)",
+        count=4,
+    ),
+    ToolGroup(
+        name="attention-sentiment",
+        register=register_attention_sentiment_tools,
+        enabled=True,
+        description="多源关注度/情绪 (百度热搜/雪球讨论热度/雪球关注热度/雪球交易热度)",
         count=4,
     ),
 ]
