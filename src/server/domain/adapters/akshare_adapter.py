@@ -6277,6 +6277,86 @@ class AkshareAdapter(BaseDataAdapter):
         }
 
     # ------------------------------------------------------------------
+    # A-share industry board list (COL-257)
+    # ------------------------------------------------------------------
+    async def get_industry_list(self) -> Dict[str, Any]:
+        """Return all A-share industry boards with summary data.
+
+        Returns a flat list of all industry sectors from the East Money board
+        catalog.  Each entry includes the board code (usable for subsequent
+        detail queries), name, change_pct, stock_count (derived from
+        rise/fall counts), and the leading stock info.
+
+        Note: avg_pe / avg_pb / total_market_cap are **not** included here
+        because they require fetching constituent stocks for every board,
+        which is prohibitively expensive for a bulk-list endpoint.  Use the
+        sector detail / valuation endpoints for those metrics.
+
+        Returns:
+            Dict with ``data`` list, ``total`` count, and ``source``.
+        """
+        cache_key = "akshare:industry_list:snapshot"
+        cached_df = await self.cache.get(cache_key)
+
+        if cached_df is not None:
+            df = pd.DataFrame(cached_df)
+        else:
+            try:
+                df = await self._run(ak.stock_board_industry_name_em)
+                if df is None or df.empty:
+                    return {"data": [], "total": 0, "source": "akshare"}
+                await self.cache.set(cache_key, df.to_dict(orient="records"), ttl=300)
+            except Exception as e:
+                self.logger.error(f"get_industry_list: failed to fetch: {e}")
+                return {"data": [], "total": 0, "source": "akshare", "error": str(e)}
+
+        col_map = {
+            "板块名称": "name",
+            "板块代码": "code",
+            "最新价": "price",
+            "涨跌幅": "change_pct",
+            "涨跌额": "change_amt",
+            "成交量": "volume",
+            "成交额": "turnover",
+            "振幅": "amplitude",
+            "换手率": "turnover_rate",
+            "上涨家数": "rise_count",
+            "下跌家数": "fall_count",
+            "领涨股票": "top_stock_name",
+            "领涨股票涨跌幅": "top_stock_change_pct",
+        }
+        df = df.rename(columns=col_map)
+
+        results: list[Dict[str, Any]] = []
+        for _, row in df.iterrows():
+            rise = int(self._safe_float(row.get("rise_count")) or 0)
+            fall = int(self._safe_float(row.get("fall_count")) or 0)
+            results.append({
+                "code": str(row.get("code", "")),
+                "name": str(row.get("name", "")),
+                "change_pct": round(self._safe_float(row.get("change_pct")) or 0, 2),
+                "stock_count": rise + fall,
+                "rise_count": rise,
+                "fall_count": fall,
+                "turnover_rate": round(self._safe_float(row.get("turnover_rate")) or 0, 2),
+                "amplitude": round(self._safe_float(row.get("amplitude")) or 0, 2),
+                "top_stocks": [
+                    {
+                        "name": str(row.get("top_stock_name", "")),
+                        "change_pct": round(
+                            self._safe_float(row.get("top_stock_change_pct")) or 0, 2
+                        ),
+                    }
+                ] if row.get("top_stock_name") else [],
+            })
+
+        return {
+            "data": results,
+            "total": len(results),
+            "source": "akshare",
+        }
+
+    # ------------------------------------------------------------------
     # A-share concept board ranking
     # ------------------------------------------------------------------
     async def get_concept_ranking(

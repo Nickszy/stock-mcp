@@ -52,6 +52,7 @@ from src.server.api.routes import (
     entity_registry_router,
     watchlist_router,
     scheduler_router,
+    sector_router,
 )
 from src.server.utils.logger import logger
 from src.server.middleware import JsonArgumentsFixMiddleware, MarkdownNegotiationMiddleware
@@ -221,6 +222,7 @@ def create_app():
     app.include_router(entity_registry_router)
     app.include_router(watchlist_router)
     app.include_router(scheduler_router)
+    app.include_router(sector_router)
 
     logger.info("✅ RESTful API routes registered")
     logger.info("   - Health check: /health")

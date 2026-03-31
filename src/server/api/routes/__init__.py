@@ -29,6 +29,7 @@ from .admin import html_router as admin_html_router
 from .entity_registry import router as entity_registry_router
 from .watchlist import router as watchlist_router
 from .scheduler import router as scheduler_router
+from .sector import router as sector_router
 
 __all__ = [
     "market_data_router",
@@ -59,4 +60,5 @@ __all__ = [
     "entity_registry_router",
     "watchlist_router",
     "scheduler_router",
+    "sector_router",
 ]
