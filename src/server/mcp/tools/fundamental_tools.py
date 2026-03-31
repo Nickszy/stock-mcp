@@ -39,7 +39,7 @@ def create_artifact_envelope(
 ) -> Dict[str, Any]:
     """Create a standardized artifact envelope."""
     from uuid import uuid4
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     return {
         "id": str(uuid4()),
@@ -48,7 +48,7 @@ def create_artifact_envelope(
         "component_type": component_type,
         "description": description,
         "metadata": metadata or {},
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "visible_to_llm": visible_to_llm,
         "display_in_report": display_in_report,
     }
@@ -762,7 +762,7 @@ def register_fundamental_tools(mcp: FastMCP):
             holder_trade = holder_data.get("holder_trade", [])
             if holder_trade:
                 # Filter last 1 year by ann_date if available
-                from datetime import datetime, timedelta
+                from datetime import datetime, timedelta, timezone
 
                 cutoff = datetime.now() - timedelta(days=365)
                 filtered = []

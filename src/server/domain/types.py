@@ -5,7 +5,7 @@ aligned with ValueCell's architecture.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
@@ -155,7 +155,7 @@ class Asset(BaseModel):
     def set_source_ticker(self, source: DataSource, ticker: str) -> None:
         """Set ticker format for specific data source."""
         self.source_mappings[source] = ticker
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     model_config = {"arbitrary_types_allowed": True}
 

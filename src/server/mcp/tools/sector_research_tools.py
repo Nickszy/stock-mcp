@@ -12,7 +12,7 @@ Tools:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -342,7 +342,7 @@ def register_sector_research_tools(mcp: FastMCP):
             "horizon_days": safe_horizon,
             "peer_count": safe_peer_count,
             "angle": angle,
-            "as_of_date": datetime.now(datetime.UTC).strftime("%Y-%m-%d"),
+            "as_of_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         }
 
         recommended_tools = (
@@ -743,7 +743,7 @@ def register_sector_research_tools(mcp: FastMCP):
                 "sector_name": sector_name,
                 "market": detected_market,
                 "days": safe_days,
-                "generated_at": datetime.now(datetime.UTC).isoformat(),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
             },
             "universe": universe,
             "sector_snapshot": sector_snapshot,
