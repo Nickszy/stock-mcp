@@ -1,0 +1,1298 @@
+{
+  "A股": {
+    "SSE:600519": {
+      "price": {
+        "tushare": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 1,
+            "null_ratio": 0.08,
+            "issues": [
+              "market_cap 为空"
+            ]
+          }
+        },
+        "baostock": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 3,
+            "null_ratio": 0.23,
+            "issues": [
+              "change 为空",
+              "change_percent 为空",
+              "market_cap 为空"
+            ]
+          }
+        },
+        "akshare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "yahoo": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "finnhub": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        }
+      },
+      "financials": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 89,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "forecast": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 19,
+            "null_count": 4,
+            "null_ratio": 0.21,
+            "issues": [
+              "rows.[0].业绩摘要 为空",
+              "rows.[0].上年同期净利润 为空",
+              "rows.[1].业绩摘要 为空",
+              "rows.[2].业绩摘要 为空"
+            ]
+          }
+        }
+      },
+      "ratios": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 27,
+            "null_count": 5,
+            "null_ratio": 0.19,
+            "issues": [
+              "ratios.solvency.current_ratio 为空",
+              "ratios.solvency.quick_ratio 为空",
+              "ratios.growth.revenue_growth 为空",
+              "ratios.growth.earnings_growth 为空",
+              "ratios.growth.assets_growth 为空"
+            ]
+          }
+        }
+      },
+      "news": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 22,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "technical_indicators": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 67,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "support_resistance": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 9,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "trading_signals": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 10,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      }
+    },
+    "SZSE:000001": {
+      "price": {
+        "tushare": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 3,
+            "null_ratio": 0.23,
+            "issues": [
+              "change 为空",
+              "change_percent 为空",
+              "market_cap 为空"
+            ]
+          }
+        },
+        "baostock": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 3,
+            "null_ratio": 0.23,
+            "issues": [
+              "change 为空",
+              "change_percent 为空",
+              "market_cap 为空"
+            ]
+          }
+        },
+        "akshare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "yahoo": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "finnhub": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        }
+      },
+      "financials": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 89,
+            "null_count": 9,
+            "null_ratio": 0.1,
+            "issues": [
+              "financial_indicators.[0].roa 为空",
+              "financial_indicators.[0].grossprofit_margin 为空",
+              "financial_indicators.[0].current_ratio 为空",
+              "financial_indicators.[1].roa 为空",
+              "financial_indicators.[1].grossprofit_margin 为空"
+            ]
+          }
+        }
+      },
+      "forecast": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 19,
+            "null_count": 3,
+            "null_ratio": 0.16,
+            "issues": [
+              "rows.[0].业绩摘要 为空",
+              "rows.[1].业绩摘要 为空",
+              "rows.[2].业绩摘要 为空"
+            ]
+          }
+        }
+      },
+      "ratios": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 27,
+            "null_count": 5,
+            "null_ratio": 0.19,
+            "issues": [
+              "ratios.solvency.current_ratio 为空",
+              "ratios.solvency.quick_ratio 为空",
+              "ratios.growth.revenue_growth 为空",
+              "ratios.growth.earnings_growth 为空",
+              "ratios.growth.assets_growth 为空"
+            ]
+          }
+        }
+      },
+      "news": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 22,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "technical_indicators": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 67,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "support_resistance": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 9,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "trading_signals": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 10,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      }
+    },
+    "SZSE:300750": {
+      "price": {
+        "tushare": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 1,
+            "null_ratio": 0.08,
+            "issues": [
+              "market_cap 为空"
+            ]
+          }
+        },
+        "baostock": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 3,
+            "null_ratio": 0.23,
+            "issues": [
+              "change 为空",
+              "change_percent 为空",
+              "market_cap 为空"
+            ]
+          }
+        },
+        "akshare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "yahoo": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "finnhub": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        }
+      },
+      "financials": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 89,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "forecast": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 19,
+            "null_count": 3,
+            "null_ratio": 0.16,
+            "issues": [
+              "rows.[0].业绩摘要 为空",
+              "rows.[1].业绩摘要 为空",
+              "rows.[2].业绩摘要 为空"
+            ]
+          }
+        }
+      },
+      "ratios": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 27,
+            "null_count": 5,
+            "null_ratio": 0.19,
+            "issues": [
+              "ratios.solvency.current_ratio 为空",
+              "ratios.solvency.quick_ratio 为空",
+              "ratios.growth.revenue_growth 为空",
+              "ratios.growth.earnings_growth 为空",
+              "ratios.growth.assets_growth 为空"
+            ]
+          }
+        }
+      },
+      "news": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 22,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "technical_indicators": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 67,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "support_resistance": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 9,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "trading_signals": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 10,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      }
+    }
+  },
+  "美股": {
+    "NASDAQ:AAPL": {
+      "price": {
+        "tushare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "baostock": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "akshare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "yahoo": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        },
+        "finnhub": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 2,
+            "null_ratio": 0.15,
+            "issues": [
+              "volume 为空",
+              "market_cap 为空"
+            ]
+          }
+        }
+      },
+      "financials": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 279,
+            "null_count": 15,
+            "null_ratio": 0.05,
+            "issues": [
+              "balance_sheet.[0].2025-09-30 00:00:00 为空",
+              "balance_sheet.[0].2024-09-30 00:00:00 为空",
+              "balance_sheet.[0].2022-09-30 00:00:00 为空",
+              "balance_sheet.[0].2021-09-30 00:00:00 为空",
+              "balance_sheet.[1].2021-09-30 00:00:00 为空"
+            ]
+          }
+        }
+      },
+      "forecast": {
+        "default": {
+          "error": "{\"detail\":\"Failed to get profit forecast: All adapters faile"
+        }
+      },
+      "ratios": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 27,
+            "null_count": 19,
+            "null_ratio": 0.7,
+            "issues": [
+              "ratios.valuation.pe_ratio 为空",
+              "ratios.valuation.pb_ratio 为空",
+              "ratios.valuation.ps_ratio 为空",
+              "ratios.profitability.roe 为空",
+              "ratios.profitability.roa 为空"
+            ]
+          }
+        }
+      },
+      "news": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 19,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "technical_indicators": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 1,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "support_resistance": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 9,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "trading_signals": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 10,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      }
+    },
+    "NASDAQ:MSFT": {
+      "price": {
+        "tushare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "baostock": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "akshare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "yahoo": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        },
+        "finnhub": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 2,
+            "null_ratio": 0.15,
+            "issues": [
+              "volume 为空",
+              "market_cap 为空"
+            ]
+          }
+        }
+      },
+      "financials": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 276,
+            "null_count": 9,
+            "null_ratio": 0.03,
+            "issues": [
+              "balance_sheet.[0].2021-06-30 00:00:00 为空",
+              "balance_sheet.[1].2021-06-30 00:00:00 为空",
+              "balance_sheet.[2].2021-06-30 00:00:00 为空",
+              "cash_flow.[0].2021-06-30 00:00:00 为空",
+              "cash_flow.[1].2021-06-30 00:00:00 为空"
+            ]
+          }
+        }
+      },
+      "forecast": {
+        "default": {
+          "error": "{\"detail\":\"Failed to get profit forecast: All adapters faile"
+        }
+      },
+      "ratios": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 27,
+            "null_count": 19,
+            "null_ratio": 0.7,
+            "issues": [
+              "ratios.valuation.pe_ratio 为空",
+              "ratios.valuation.pb_ratio 为空",
+              "ratios.valuation.ps_ratio 为空",
+              "ratios.profitability.roe 为空",
+              "ratios.profitability.roa 为空"
+            ]
+          }
+        }
+      },
+      "news": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 19,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "technical_indicators": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 1,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "support_resistance": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 9,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "trading_signals": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 10,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      }
+    },
+    "NASDAQ:GOOGL": {
+      "price": {
+        "tushare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "baostock": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "akshare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "yahoo": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        },
+        "finnhub": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 2,
+            "null_ratio": 0.15,
+            "issues": [
+              "volume 为空",
+              "market_cap 为空"
+            ]
+          }
+        }
+      },
+      "financials": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 276,
+            "null_count": 15,
+            "null_ratio": 0.05,
+            "issues": [
+              "balance_sheet.[0].2025-12-31 00:00:00 为空",
+              "balance_sheet.[0].2024-12-31 00:00:00 为空",
+              "balance_sheet.[0].2022-12-31 00:00:00 为空",
+              "balance_sheet.[0].2021-12-31 00:00:00 为空",
+              "balance_sheet.[1].2021-12-31 00:00:00 为空"
+            ]
+          }
+        }
+      },
+      "forecast": {
+        "default": {
+          "error": "{\"detail\":\"Failed to get profit forecast: All adapters faile"
+        }
+      },
+      "ratios": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 27,
+            "null_count": 19,
+            "null_ratio": 0.7,
+            "issues": [
+              "ratios.valuation.pe_ratio 为空",
+              "ratios.valuation.pb_ratio 为空",
+              "ratios.valuation.ps_ratio 为空",
+              "ratios.profitability.roe 为空",
+              "ratios.profitability.roa 为空"
+            ]
+          }
+        }
+      },
+      "news": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 19,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "technical_indicators": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 1,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "support_resistance": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 9,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "trading_signals": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 10,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      }
+    }
+  },
+  "港股": {
+    "HKEX:00700": {
+      "price": {
+        "tushare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "baostock": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "akshare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "yahoo": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        },
+        "finnhub": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        }
+      },
+      "financials": {
+        "default": {
+          "quality": {
+            "has_data": false,
+            "field_count": 5,
+            "null_count": 5,
+            "null_ratio": 1.0,
+            "issues": [
+              "balance_sheet 为空",
+              "income_statement 为空",
+              "cash_flow 为空",
+              "financial_indicators 为空",
+              "company_info 为空"
+            ]
+          }
+        }
+      },
+      "forecast": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 4,
+            "null_count": 1,
+            "null_ratio": 0.25,
+            "issues": [
+              "rows 为空"
+            ]
+          }
+        }
+      },
+      "ratios": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 27,
+            "null_count": 20,
+            "null_ratio": 0.74,
+            "issues": [
+              "ratios.valuation.pe_ratio 为空",
+              "ratios.valuation.pb_ratio 为空",
+              "ratios.valuation.ps_ratio 为空",
+              "ratios.valuation.dividend_yield 为空",
+              "ratios.profitability.roe 为空"
+            ]
+          }
+        }
+      },
+      "news": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 22,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "technical_indicators": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 1,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "support_resistance": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 9,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "trading_signals": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 10,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      }
+    },
+    "HKEX:09988": {
+      "price": {
+        "tushare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "baostock": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "akshare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "yahoo": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        },
+        "finnhub": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        }
+      },
+      "financials": {
+        "default": {
+          "quality": {
+            "has_data": false,
+            "field_count": 5,
+            "null_count": 5,
+            "null_ratio": 1.0,
+            "issues": [
+              "balance_sheet 为空",
+              "income_statement 为空",
+              "cash_flow 为空",
+              "financial_indicators 为空",
+              "company_info 为空"
+            ]
+          }
+        }
+      },
+      "forecast": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 4,
+            "null_count": 1,
+            "null_ratio": 0.25,
+            "issues": [
+              "rows 为空"
+            ]
+          }
+        }
+      },
+      "ratios": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 27,
+            "null_count": 20,
+            "null_ratio": 0.74,
+            "issues": [
+              "ratios.valuation.pe_ratio 为空",
+              "ratios.valuation.pb_ratio 为空",
+              "ratios.valuation.ps_ratio 为空",
+              "ratios.valuation.dividend_yield 为空",
+              "ratios.profitability.roe 为空"
+            ]
+          }
+        }
+      },
+      "news": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 22,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "technical_indicators": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 1,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "support_resistance": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 9,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "trading_signals": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 10,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      }
+    },
+    "HKEX:01810": {
+      "price": {
+        "tushare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "baostock": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "akshare": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        },
+        "yahoo": {
+          "quality": {
+            "has_data": true,
+            "field_count": 13,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        },
+        "finnhub": {
+          "quality": {
+            "has_data": false,
+            "field_count": 0,
+            "null_ratio": 1.0,
+            "issues": [
+              "数据为空"
+            ]
+          }
+        }
+      },
+      "financials": {
+        "default": {
+          "quality": {
+            "has_data": false,
+            "field_count": 5,
+            "null_count": 5,
+            "null_ratio": 1.0,
+            "issues": [
+              "balance_sheet 为空",
+              "income_statement 为空",
+              "cash_flow 为空",
+              "financial_indicators 为空",
+              "company_info 为空"
+            ]
+          }
+        }
+      },
+      "forecast": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 4,
+            "null_count": 1,
+            "null_ratio": 0.25,
+            "issues": [
+              "rows 为空"
+            ]
+          }
+        }
+      },
+      "ratios": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 27,
+            "null_count": 20,
+            "null_ratio": 0.74,
+            "issues": [
+              "ratios.valuation.pe_ratio 为空",
+              "ratios.valuation.pb_ratio 为空",
+              "ratios.valuation.ps_ratio 为空",
+              "ratios.valuation.dividend_yield 为空",
+              "ratios.profitability.roe 为空"
+            ]
+          }
+        }
+      },
+      "news": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 22,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "technical_indicators": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 1,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "support_resistance": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 9,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      },
+      "trading_signals": {
+        "default": {
+          "quality": {
+            "has_data": true,
+            "field_count": 10,
+            "null_count": 0,
+            "null_ratio": 0.0,
+            "issues": []
+          }
+        }
+      }
+    }
+  }
+}
