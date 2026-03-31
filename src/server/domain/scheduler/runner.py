@@ -122,19 +122,25 @@ class SchedulerRunner:
     ) -> AnalysisRunItem:
         """Collect all requested data for a single ticker."""
         item = AnalysisRunItem(ticker=ticker)
-        type_set = set(analysis_types)
+        # Normalize to string values to ensure consistent comparisons,
+        # since analysis_types may contain enum members or strings.
+        type_set = {t.value if isinstance(t, AnalysisType) else t for t in analysis_types}
         if requested_sources is None:
-            requested_sources = type_set
+            requested_sources = set(type_set)
+        else:
+            requested_sources = {
+                s.value if isinstance(s, AnalysisType) else s for s in requested_sources
+            }
 
         tasks: List[asyncio.Task] = []
 
-        if AnalysisType.news in type_set and self._news_service:
+        if AnalysisType.news.value in type_set and self._news_service:
             tasks.append(self._collect_news(ticker, item))
-        if AnalysisType.filings in type_set and self._filings_service:
+        if AnalysisType.filings.value in type_set and self._filings_service:
             tasks.append(self._collect_filings(ticker, item))
-        if AnalysisType.research_reports in type_set and self._research_report_service:
+        if AnalysisType.research_reports.value in type_set and self._research_report_service:
             tasks.append(self._collect_reports(ticker, item))
-        if AnalysisType.fact_pack in type_set and self._gateway:
+        if AnalysisType.fact_pack.value in type_set and self._gateway:
             tasks.append(self._collect_fact_pack(ticker, item))
 
         # Run collections concurrently, each updates `item` in-place
@@ -201,11 +207,12 @@ class SchedulerRunner:
         requested_sources: set,
     ) -> None:
         """Compute coverage / quality / key-points for a single ticker."""
+        # Use string keys consistently — matches AnalysisType.validate_list() output
         source_map: Dict[str, Any] = {
-            AnalysisType.news: item.news_items,
-            AnalysisType.filings: item.filing_items,
-            AnalysisType.research_reports: item.report_items,
-            AnalysisType.fact_pack: item.fact_snapshot,
+            AnalysisType.news.value: item.news_items,
+            AnalysisType.filings.value: item.filing_items,
+            AnalysisType.research_reports.value: item.report_items,
+            AnalysisType.fact_pack.value: item.fact_snapshot,
         }
 
         counts: Dict[str, int] = {}
@@ -213,19 +220,19 @@ class SchedulerRunner:
         missing: List[str] = []
 
         for src_type in requested_sources:
-            data = source_map.get(src_type)
+            key = src_type if isinstance(src_type, str) else src_type.value
+            data = source_map.get(key)
             if isinstance(data, list):
                 n = len(data)
             elif isinstance(data, dict):
                 n = 1 if data else 0
             else:
                 n = 0
-            counts[src_type if isinstance(src_type, str) else src_type.value] = n
-            target = src_type if isinstance(src_type, str) else src_type.value
+            counts[key] = n
             if n > 0:
-                available.append(target)
+                available.append(key)
             else:
-                missing.append(target)
+                missing.append(key)
 
         item.source_counts = counts
         item.available_sources = available
@@ -240,10 +247,7 @@ class SchedulerRunner:
 
         # Quality: high ≥3 sources OR 2+fact_pack; medium 1-2; low 0
         hit = len(available)
-        has_fact_pack = (
-            AnalysisType.fact_pack in available
-            or "fact_pack" in available
-        )
+        has_fact_pack = "fact_pack" in available
         if hit >= 3 or (hit >= 2 and has_fact_pack):
             item.data_quality = "high"
         elif hit >= 1:
