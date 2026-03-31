@@ -1,0 +1,92 @@
+# Development Docker Compose with Hot Reload
+# Use this for local development with code mounting
+
+services:
+  stock-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: stock-mcp:dev
+    container_name: stock-mcp-dev
+    restart: unless-stopped
+    ports:
+      - "${MCP_PORT:-9898}:9898"
+    environment:
+      # Server
+      MCP_TRANSPORT: streamable-http
+      CORS_ORIGINS: "*"
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # PostgreSQL
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-stockmcp123}@postgres:5432/${POSTGRES_DB:-stockmcp}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stockmcp123}
+      POSTGRES_DB: ${POSTGRES_DB:-stockmcp}
+      # Data Sources
+      TUSHARE_ENABLED: ${TUSHARE_ENABLED:-False}
+      TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}
+      FINNHUB_ENABLED: ${FINNHUB_ENABLED:-False}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      BAOSTOCK_ENABLED: "True"
+      # Proxy
+      PROXY_ENABLED: ${PROXY_ENABLED:-False}
+    volumes:
+      # Mount source code for hot reload
+      - ./src:/app/src:ro
+      - ./logs:/app/logs
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - stock-mcp-dev-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: stock-mcp-dev-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-dev-data:/data
+    networks:
+      - stock-mcp-dev-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: stock-mcp-dev-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stockmcp123}
+      POSTGRES_DB: ${POSTGRES_DB:-stockmcp}
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+    networks:
+      - stock-mcp-dev-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  stock-mcp-dev-network:
+    driver: bridge
+
+volumes:
+  redis-dev-data:
+  postgres-dev-data:
