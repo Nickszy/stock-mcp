@@ -29,35 +29,15 @@ def register_fact_pack_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取股票事实包(Fact Pack)：一次调用聚合全维度结构化事实数据。
+        """A股股票事实包(一次调用聚合公司全维度结构化事实数据).
 
-        聚合 10 大事实类别: 证券主数据、财务、市场估值(含融资融券)、公司治理、
-        事件(分红/回购/解禁)、业务结构(主营构成)、公司主档、同行、限售解禁、回购数据。
-        返回统一结构: entity + facts + source_trace + coverage。
-
-        WHEN TO USE:
-        - First call for any A-share stock analysis (entry point tool)
-        - "Give me everything about 600519" / "Complete data for Moutai"
-        - Need comprehensive stock data without calling multiple individual tools
-
-        CONCEPT:
-        One-call aggregated fact pack covering security master, financials, valuation,
-        governance, events (dividends/repurchase/lockup), business structure, company profile,
-        peers, restricted release, and repurchase data.
-
-        DIFFERENTIATION:
-        - vs get_us_stock_fact_pack: This is A-share only; us version for US stocks
-        - vs individual tools (get_financials, get_valuation, etc): This aggregates ALL dimensions
-        - vs get_market_fact_pack: This focuses on company fundamentals; market focuses on trading data
-
-        next_recommended_tools: get_us_stock_fact_pack, get_market_fact_pack, get_sector_fact_pack
-
-        Args:
-            symbol: 股票代码 (如 600519, 300750)
-            ctx: FastMCP Context.
-
-        Returns:
-            股票事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        WHEN TO USE: 用户要快速获得单只A股的完整事实底稿时调用, 适合作为股票研究入口工具.
+        典型触发: "给我600519的完整资料" "这家公司全貌" "先拉一个fact pack".
+        CONCEPT: 聚合证券主数据/财务/估值/公司治理/分红回购解禁/主营构成/公司主档/同行等多类事实,
+        返回统一结构 entity + facts + source_trace + coverage, 方便后续分析链路复用.
+        DIFFERENTIATION: 这是A股公司级综合聚合工具; 与get_market_fact_pack不同(后者偏交易与行情维度),
+        与get_us_stock_fact_pack不同(后者面向美股), 与单一基本面工具不同(本工具一次拉全维度).
+        next_recommended_tools: get_market_fact_pack, get_sector_fact_pack, get_us_stock_fact_pack
         """
         if ctx:
             await ctx.info(f"获取股票事实包: {symbol}")
@@ -136,33 +116,15 @@ def register_fact_pack_tools(mcp: FastMCP):
         fund_code: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取基金事实包(Fact Pack)：一次调用聚合全维度基金结构化事实数据。
+        """基金事实包(一次调用聚合基金全维度结构化事实数据).
 
-        WHEN TO USE:
-        - First call for any fund analysis (entry point for funds)
-        - "Give me everything about fund 110011"
-        - Need comprehensive fund data: holdings, performance, manager, fees, allocation
-        - Comparing fund vs fund on all dimensions
-
-        CONCEPT:
-        One-call aggregated fact pack covering 8 categories: fund master data,
-        NAV & returns, portfolio holdings, fund manager info, scale & shares,
-        asset allocation, fees & dividends, peer comparison.
-        Returns: entity + facts + source_trace + coverage.
-
-        DIFFERENTIATION:
-        - vs get_stock_fact_pack: This is for mutual funds; stock version for equities
-        - vs get_etf_fact_pack: This covers open-end mutual funds; ETF version for ETFs
-        - vs individual fund tools: This aggregates ALL dimensions in one call
-
-        next_recommended_tools: get_stock_fact_pack, get_etf_fact_pack, get_index_fact_pack
-
-        Args:
-            fund_code: 基金代码 (如 110011, 005827)
-            ctx: FastMCP Context.
-
-        Returns:
-            基金事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        WHEN TO USE: 用户要快速了解公募基金全貌时调用, 是基金研究的入口工具.
+        典型触发: "给我110011的完整资料" "这只基金怎么样" "基金fact pack".
+        CONCEPT: 聚合基金主档/净值与收益/持仓/基金经理/规模份额/资产配置/费率分红/同类对比等维度,
+        形成统一基金事实底稿, 便于后续比较和配置分析.
+        DIFFERENTIATION: 这是开放式基金综合聚合工具; 与get_etf_fact_pack不同(ETF更偏交易与技术信号),
+        与get_stock_fact_pack不同(股票而非基金), 与单一基金明细工具不同(本工具一次返回多维事实).
+        next_recommended_tools: get_etf_fact_pack, get_index_fact_pack, get_stock_fact_pack
         """
         if ctx:
             await ctx.info(f"获取基金事实包: {fund_code}")
@@ -226,31 +188,15 @@ def register_fact_pack_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取行情事实包(Fact Pack)：聚合全维度行情结构化事实数据.
+        """A股行情事实包(聚合交易维度全量结构化事实数据).
 
-        WHEN TO USE:
-        - Need trading-oriented data for a stock (not fundamental/company data)
-        - Technical analysis entry: valuation snapshot + K-line factors + money flow
-        - Pre-trade analysis: check margin data, money flow, relative strength
-
-        CONCEPT:
-        Aggregates trading data: valuation metrics, technical snapshot, K-line factors,
-        money flow, market breadth, sector/index, derivatives, relative strength,
-        north-bound capital, margin trading.
-
-        DIFFERENTIATION:
-        - vs get_stock_fact_pack: This focuses on trading data; stock focuses on fundamentals
-        - vs get_technical_indicators: This aggregates multiple dimensions; technical is single-dim
-        - vs get_money_flow: This includes money flow plus 9 other dimensions
-
-        next_recommended_tools: get_stock_fact_pack, get_technical_indicators, get_money_flow
-
-        Args:
-            symbol: 股票代码 (如 600519, 000001)
-            ctx: FastMCP Context.
-
-        Returns:
-            行情事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        WHEN TO USE: 用户要快速了解单只A股的交易面/技术面全貌时调用.
+        典型触发: "这只票行情怎么样" "交易面fact pack" "盘前分析需要行情数据".
+        CONCEPT: 聚合行情相关维度: 估值快照/技术面快照/K线因子/资金流向/市场广度/行业指数/衍生指标/相对强度/北向资金/融资融券,
+        返回交易导向的结构化事实, 适合盘前分析和交易决策辅助.
+        DIFFERENTIATION: 本工具偏交易与行情维度; 与get_stock_fact_pack不同(公司基本面为主),
+        与单一技术指标工具不同(本工具聚合多维行情数据), 与get_sector_fact_pack不同(个股vs行业).
+        next_recommended_tools: get_stock_fact_pack, get_sector_fact_pack
         """
         if ctx:
             await ctx.info(f"获取行情事实包: {symbol}")
@@ -310,32 +256,15 @@ def register_fact_pack_tools(mcp: FastMCP):
         ticker: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取美股事实包(Fact Pack)：一次调用聚合全维度美股结构化事实数据.
+        """美股股票事实包(一次调用聚合美股公司全维度结构化事实数据).
 
-        WHEN TO USE:
-        - First call for any US stock analysis (entry point for US equities)
-        - "Give me everything about AAPL" / "Complete data for Tesla"
-        - Need comprehensive US stock data without calling multiple individual tools
-
-        CONCEPT:
-        One-call aggregated fact pack covering 6 categories: company profile,
-        valuation metrics, financial health, institutional holdings & insider trading,
-        analyst ratings & revenue segments, price-volume technical analysis.
-        Returns: entity + facts + source_trace + coverage.
-
-        DIFFERENTIATION:
-        - vs get_stock_fact_pack: This is US stocks; stock version is for A-shares
-        - vs individual US tools: This aggregates ALL dimensions in one call
-        - vs get_market_fact_pack: This focuses on company fundamentals; market on trading data
-
-        next_recommended_tools: get_stock_fact_pack, get_us_valuation_metrics, get_us_financial_health
-
-        Args:
-            ticker: 美股代码 (如 AAPL, TSLA, MSFT)
-            ctx: FastMCP Context.
-
-        Returns:
-            美股事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        WHEN TO USE: 用户要快速获取单只美股的完整研究底稿时调用, 是美股公司研究入口工具.
+        典型触发: "给我AAPL的完整资料" "特斯拉全貌" "先拉一个美股fact pack".
+        CONCEPT: 聚合公司画像/估值/财务健康/机构持仓与内幕交易/分析师评级与收入结构/量价技术面等维度,
+        形成可直接复用的美股结构化事实底稿.
+        DIFFERENTIATION: 这是美股公司级综合聚合工具; 与get_stock_fact_pack不同(后者面向A股),
+        与get_market_fact_pack不同(后者偏交易行情), 与单一美股基本面工具不同(本工具一次拉全维度).
+        next_recommended_tools: get_stock_fact_pack, get_market_fact_pack
         """
         if ctx:
             await ctx.info(f"获取美股事实包: {ticker}")
@@ -400,31 +329,15 @@ def register_fact_pack_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取ETF事实包(Fact Pack)：聚合全维度ETF结构化事实数据.
+        """ETF事实包(聚合ETF全维度结构化事实数据).
 
-        WHEN TO USE:
-        - First call for any ETF analysis (entry point for ETF research)
-        - Need ETF fundamentals + trading data + technical signals in one call
-        - Evaluating ETF for portfolio allocation decisions
-
-        CONCEPT:
-        Aggregates 5 categories: ETF master data, real-time quotes, historical performance,
-        capital flow/redemptions, technical signals (RSI/MACD/BOLL).
-        Returns: entity + facts + source_trace + coverage.
-
-        DIFFERENTIATION:
-        - vs get_stock_fact_pack: This is for ETFs; stock version for individual equities
-        - vs get_etf_detail + get_etf_performance: This aggregates both plus more
-        - vs get_fund_fact_pack: This is ETF-specific with technical signals; fund is for mutual funds
-
-        next_recommended_tools: get_stock_fact_pack, get_etf_detail, get_etf_performance
-
-        Args:
-            symbol: ETF代码 (如 510300, 159919)
-            ctx: FastMCP Context.
-
-        Returns:
-            ETF事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        WHEN TO USE: 用户研究ETF产品或做资产配置时调用, 适合作为ETF研究入口工具.
+        典型触发: "给我510300的完整资料" "这只ETF怎么样" "ETF fact pack".
+        CONCEPT: 聚合ETF主档/实时行情/历史表现/资金申赎或资金流/技术信号等维度,
+        帮助判断ETF的产品属性、交易活跃度和跟踪表现.
+        DIFFERENTIATION: 本工具面向ETF; 与get_fund_fact_pack不同(公募基金更偏持仓经理费率),
+        与get_index_fact_pack不同(指数本身而非跟踪基金), 与单一ETF详情工具不同(本工具一次聚合多维事实).
+        next_recommended_tools: get_index_fact_pack, get_fund_fact_pack, get_stock_fact_pack
         """
         if ctx:
             await ctx.info(f"获取ETF事实包: {symbol}")
@@ -490,30 +403,15 @@ def register_fact_pack_tools(mcp: FastMCP):
         symbol: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取指数事实包(Fact Pack)：聚合全维度指数结构化事实数据.
+        """指数事实包(聚合指数全维度结构化事实数据).
 
-        WHEN TO USE:
-        - Index-level analysis (CSI 300, SSE 50, ChiNext, etc.)
-        - Need index PE/PB percentile ranking for market timing
-        - Checking index constituent list or technical signals
-
-        CONCEPT:
-        Aggregates 5 categories: index master data, PE/PB valuation with historical percentile,
-        price performance, constituent stocks, technical signals (RSI/MACD/BOLL).
-
-        DIFFERENTIATION:
-        - vs get_stock_fact_pack: This is for market indices; stock is for individual equities
-        - vs get_etf_fact_pack: This analyzes the index itself; ETF analyzes the tracking fund
-        - vs get_valuation_metrics: This includes valuation plus 4 more dimensions
-
-        next_recommended_tools: get_etf_fact_pack, get_sector_fact_pack, get_valuation_metrics
-
-        Args:
-            symbol: 指数代码 (如 000300=沪深300, 000001=上证指数, 399006=创业板指)
-            ctx: FastMCP Context.
-
-        Returns:
-            指数事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        WHEN TO USE: 用户做指数层面的研究/择时/估值判断时调用.
+        典型触发: "沪深300现在贵不贵" "上证指数全貌" "创业板指估值和技术面".
+        CONCEPT: 聚合指数主档/PE-PB估值及历史分位/价格表现/成分股/技术信号等维度,
+        形成指数研究底稿, 常用于大盘择时和宽基比较.
+        DIFFERENTIATION: 本工具研究的是指数本体; 与get_etf_fact_pack不同(ETF是跟踪该指数的基金),
+        与get_stock_fact_pack不同(个股vs指数), 与单一估值工具不同(本工具还包含成分和技术维度).
+        next_recommended_tools: get_etf_fact_pack, get_sector_fact_pack, get_market_fact_pack
         """
         if ctx:
             await ctx.info(f"获取指数事实包: {symbol}")
@@ -575,31 +473,16 @@ def register_fact_pack_tools(mcp: FastMCP):
         sector_name: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取行业事实包(Fact Pack)：聚合全维度行业结构化事实数据.
+        """行业事实包(聚合行业全维度结构化事实数据).
 
-        WHEN TO USE:
-        - Sector/industry analysis entry point (banking, semiconductor, liquor, etc.)
-        - Need sector composition, valuation, money flow, and peer comparison
-        - Evaluating sector rotation opportunities
-
-        CONCEPT:
-        Aggregates 5 categories: sector positioning, constituent stocks,
-        structure snapshot, peer comparison, evidence summary (money flow + PE/PB history).
-        Returns: entity + facts + source_trace + coverage.
-
-        DIFFERENTIATION:
-        - vs get_stock_fact_pack: This analyzes a whole industry; stock is for individual equities
-        - vs get_sector_fact_pack: Same concept but with deeper peer comparison
-        - vs get_industry_ranking: That shows real-time ranking; this is deep structural analysis
-
-        next_recommended_tools: get_stock_fact_pack, get_industry_ranking, get_sector_money_flow_history
-
-        Args:
-            sector_name: 行业名称 (如 白酒, 半导体, 新能源, 银行)
-            ctx: FastMCP Context.
-
-        Returns:
-            行业事实包，包含 entity, facts, source_trace, coverage, missing_fields
+        WHEN TO USE: 用户做行业/板块研究时调用, 适合作为行业研究的入口工具.
+        典型触发: "白酒行业全貌" "半导体板块怎么样" "给我一个行业fact pack".
+        CONCEPT: 聚合行业定位/成分股/结构快照/同业对比/证据摘要等维度,
+        帮助快速建立对行业基本结构、估值位置和资金信号的整体认知.
+        DIFFERENTIATION: 本工具是行业级深度聚合; 与get_stock_fact_pack不同(行业vs个股),
+        与get_industry_ranking不同(后者是实时横向排名, 本工具是单行业纵向研究),
+        与sector_research_tools中的单一工具不同(本工具把多个行业维度聚合在一起).
+        next_recommended_tools: get_stock_fact_pack, get_market_fact_pack
         """
         if ctx:
             await ctx.info(f"获取行业事实包: {sector_name}", extra={"sector_name": sector_name})

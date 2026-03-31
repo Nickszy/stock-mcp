@@ -38,15 +38,17 @@ def register_us_technical_tools(mcp: FastMCP):
         days: int = 60,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """美股技术指标分析。
+        """美股技术指标分析(MA/RSI/MACD/布林带/ATR).
 
-WHEN TO USE: 用户要看美股单只股票的 MA/RSI/MACD/布林带/ATR，或先做技术面快照判断时使用；输入通常是“苹果 RSI 怎么样”“NVDA 技术指标如何”。
-CONCEPT: 基于价格与成交量衍生的技术指标，用于观察趋势、动量、波动和超买超卖状态。
-DIFFERENTIATION: 这是美股专用指标工具；A股技术指标请用 technical_tools.py 中的 get_technical_indicators。若只需K线用 get_us_price_history，若想要整合结论用 us_technical_analysis_summary。
-next_recommended_tools: get_us_price_history, get_us_volume_analysis, us_technical_analysis_summary
-"""
+        WHEN TO USE: 用户要看美股单只股票的MA/RSI/MACD/布林带/ATR, 或先做技术面快照判断时使用;
+        输入通常是 "苹果RSI怎么样" "NVDA技术指标如何".
+        CONCEPT: 基于价格与成交量衍生的技术指标, 用于观察趋势/动量/波动和超买超卖状态.
+        DIFFERENTIATION: 这是美股专用指标工具; A股技术指标请用technical_tools.py中的get_technical_indicators.
+        若只需K线用get_us_price_history, 若想要整合结论用us_technical_analysis_summary.
+        next_recommended_tools: get_us_price_history, get_us_volume_analysis, us_technical_analysis_summary
+        """
         if ctx:
-            await ctx.info(f"📉 计算美股技术指标: {symbol} ({days}d)")
+            await ctx.info(f"计算美股技术指标: {symbol} ({days}d)")
         try:
             logger.info(
                 "MCP tool: get_us_technical_indicators", symbol=symbol, days=days
@@ -124,15 +126,17 @@ next_recommended_tools: get_us_price_history, get_us_volume_analysis, us_technic
         days: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """美股量价关系分析。
+        """美股量价关系分析(RVol/OBV趋势/放量缩量判断).
 
-WHEN TO USE: 用户关心放量突破、缩量回调、OBV 背离、相对成交量异常时使用；常见问法如“TSLA 今天是不是放量”“QQQ 量价是否配合上涨”。
-CONCEPT: 量价分析用成交量、相对成交量(RVol)和 OBV 判断资金参与度与趋势确认度。
-DIFFERENTIATION: 这是美股专用的量能工具；不直接给全套技术指标，也不同于仅返回K线的 get_us_price_history。A股技术分析请用 technical_tools.py。
-next_recommended_tools: get_us_technical_indicators, get_us_price_history, us_technical_analysis_summary
-"""
+        WHEN TO USE: 用户关心放量突破/缩量回调/OBV背离/相对成交量异常时使用;
+        常见问法如 "TSLA今天是不是放量" "QQQ量价是否配合上涨".
+        CONCEPT: 量价分析用成交量/相对成交量(RVol)和OBV判断资金参与度与趋势确认度.
+        DIFFERENTIATION: 这是美股专用的量能工具; 不直接给全套技术指标,
+        也不同于仅返回K线的get_us_price_history. A股技术分析请用technical_tools.py.
+        next_recommended_tools: get_us_technical_indicators, get_us_price_history, us_technical_analysis_summary
+        """
         if ctx:
-            await ctx.info(f"📊 量价分析: {symbol} ({days}d)")
+            await ctx.info(f"量价分析: {symbol} ({days}d)")
         try:
             logger.info("MCP tool: get_us_volume_analysis", symbol=symbol, days=days)
             data = await technical_use_cases.get_us_volume_analysis(
@@ -196,15 +200,17 @@ next_recommended_tools: get_us_technical_indicators, get_us_price_history, us_te
         interval: str = "1d",
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """美股K线历史数据 (OHLCV)。
+        """美股K线历史数据(OHLCV, 支持日/周/月线).
 
-WHEN TO USE: 用户要画K线图、看历史走势、找区间高低点时使用；常见问法如“AAPL 最近60天K线”“TSLA周线数据”。
-CONCEPT: OHLCV(开盘/最高/最低/收盘/成交量)是技术分析的基础数据，按日/周/月聚合。
-DIFFERENTIATION: 这是美股专用K线工具；返回原始价格数据而非衍生指标。需要技术指标请用 get_us_technical_indicators。A股K线用 asset_tools.py 的 get_kline_data。
-next_recommended_tools: get_us_technical_indicators, get_us_volume_analysis
-"""
+        WHEN TO USE: 用户要画K线图/看历史走势/找区间高低点时使用;
+        常见问法如 "AAPL最近60天K线" "TSLA周线数据".
+        CONCEPT: OHLCV(开盘/最高/最低/收盘/成交量)是技术分析的基础数据, 按日/周/月聚合.
+        DIFFERENTIATION: 这是美股专用K线工具; 返回原始价格数据而非衍生指标.
+        需要技术指标请用get_us_technical_indicators. A股K线用asset_tools.py的get_kline_data.
+        next_recommended_tools: get_us_technical_indicators, get_us_volume_analysis
+        """
         if ctx:
-            await ctx.info(f"📈 获取K线数据: {symbol} ({days}d/{interval})")
+            await ctx.info(f"获取K线数据: {symbol} ({days}d/{interval})")
         try:
             logger.info(
                 "MCP tool: get_us_price_history",
@@ -263,7 +269,7 @@ next_recommended_tools: get_us_technical_indicators, get_us_volume_analysis
             return create_artifact_response(summary=summary, artifact=artifact)
 
     # ------------------------------------------------------------------
-    # us_technical_analysis_summary  (综合技术分析，对齐竞品同名工具)
+    # us_technical_analysis_summary  (综合技术分析, 对齐竞品同名工具)
     # ------------------------------------------------------------------
     @mcp.tool(tags={"us-technical", "summary"})
     async def us_technical_analysis_summary(
@@ -271,25 +277,19 @@ next_recommended_tools: get_us_technical_indicators, get_us_volume_analysis
         days: int = 60,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Comprehensive US stock technical analysis summary.
+        """美股综合技术分析摘要(一键聚合K线+量价+指标, 输出趋势判断).
 
-        Combines price history, volume analysis, and technical indicators
-        into a single structured report. Identifies trend, momentum,
-        support/resistance levels, and key signals.
-
-        Use this as the primary entry point for US stock technical analysis.
-
-        Args:
-            symbol: US stock ticker. Format: EXCHANGE:SYMBOL
-                Examples: NASDAQ:AAPL, NYSE:TSLA, NASDAQ:NVDA, NYSE:SPY
-            days: Analysis window in calendar days (default 60)
-            ctx: FastMCP Context
-
-        Returns:
-            ArtifactResponse with comprehensive technical analysis
+        WHEN TO USE: 用户需要对单只美股做全面技术面判断时调用, 是美股技术分析的primary入口.
+        典型触发: "AAPL技术面怎么样" "NVDA技术分析" "TSLA走势判断" "帮我分析这只美股的技术面".
+        CONCEPT: 并行获取K线数据/量价分析和技术指标, 综合输出趋势信号(MA趋势/RSI状态/量能确认),
+        是三个子工具(get_us_price_history + get_us_volume_analysis + get_us_technical_indicators)的聚合版.
+        DIFFERENTIATION: 本工具是聚合型入口工具, 内部并行调用三个子工具并整合结论.
+        如只需单一维度: K线数据用get_us_price_history, 量价分析用get_us_volume_analysis,
+        技术指标用get_us_technical_indicators. 与A股技术分析不同(A股用technical_tools.py).
+        next_recommended_tools: get_us_technical_indicators, get_us_volume_analysis, get_us_price_history
         """
         if ctx:
-            await ctx.info(f"🔬 美股技术综合分析: {symbol} ({days}d)")
+            await ctx.info(f"美股技术综合分析: {symbol} ({days}d)")
         try:
             import asyncio
 
@@ -451,18 +451,16 @@ next_recommended_tools: get_us_technical_indicators, get_us_volume_analysis
     async def get_us_market_overview(
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get US market overview: major indices, VIX, sector performance, and sentiment.
+        """美股市场全景概览(主要指数+VIX+板块表现+市场情绪).
 
-        Provides a comprehensive snapshot of the US stock market including:
-        - Major index performance (SPY/QQQ/DIA/IWM)
-        - CBOE VIX volatility level and signal
-        - Sector ETF performance (11 GICS sectors ranked by change%)
-        - Market breadth and sentiment assessment
-
-        No arguments needed — always returns the full market snapshot.
-
-        Returns:
-            Market overview with indices, sector rankings, VIX, and sentiment.
+        WHEN TO USE: 用户想了解美股大盘整体状况时调用, 无需任何参数即可获取全景快照.
+        典型触发: "美股今天怎么样" "大盘表现" "美股市场概览" "SPY/QQQ怎么样" "市场情绪如何".
+        CONCEPT: 聚合四大维度: (1)主要指数表现(SPY/QQQ/DIA/IWM), (2)VIX波动率水平和信号,
+        (3)11个GICS行业板块ETF按涨跌幅排名, (4)市场广度和情绪评估. 数据源为实时行情.
+        DIFFERENTIATION: 本工具是美股市场级别的宏观概览, 不是个股分析.
+        与个股技术分析(us_technical_analysis_summary)不同, 与A股行业排名(get_industry_ranking)不同.
+        与sector_research中的build_sector_structure_snapshot不同(那是单行业深度评分, 本工具是全市场横向扫描).
+        next_recommended_tools: get_us_technical_indicators, us_technical_analysis_summary
         """
         if ctx:
             await ctx.info("获取美股市场概览")

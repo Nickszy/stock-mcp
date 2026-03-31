@@ -111,12 +111,18 @@ def register_quantitative_tools(mcp: FastMCP):
         limit: int = 50,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """量化选股筛选 (多条件过滤).
+        """A股量化选股筛选(多条件过滤, 返回符合条件的股票列表).
 
-        WHEN TO USE: 用户想按条件筛股, 如"PE<15且ROE>15%的白酒股".
-        CONCEPT: 多维度条件筛选(估值/成长/质量/技术), 返回符合条件的股票列表.
-        DIFFERENTIATION: 多条件过滤; 排名用 get_stock_ranking; 因子分析用 get_factor_analysis.
-        next_recommended_tools: get_stock_ranking -> get_valuation_metrics"""
+        WHEN TO USE: 用户想按条件筛选A股股票时调用.
+        典型触发: "PE<15且市值>100亿的股票" "低估值高增长筛选" "放量突破的股票".
+        CONCEPT: 多维度条件筛选(估值PE/PB/成长涨跌幅/质量换手率量比/技术振幅),
+        支持复合条件叠加, 按指定字段排序, 返回符合条件的股票列表.
+        DIFFERENTIATION: 本工具是多条件筛选器, 返回符合条件的多只股票;
+        单只股票估值分析用get_valuation_metrics(fundamental_tools),
+        行业排名用get_industry_ranking或get_concept_ranking,
+        因子分析用get_factor_analysis(money_flow_tools).
+        next_recommended_tools: get_industry_ranking, get_concept_ranking
+        """
         if ctx:
             await ctx.info(f"Running stock screener: {sort_by} {sort_order}, limit={limit}")
         try:
@@ -222,28 +228,15 @@ def register_quantitative_tools(mcp: FastMCP):
         limit: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取行业板块实时排名.
+        """A股行业板块实时排名(按涨跌幅/换手率等对约100个申万行业板块排名).
 
-        WHEN TO USE: 用户问"今天哪些行业涨得好"、"行业板块排名"、"哪个板块最强/最弱".
-        CONCEPT: 按涨跌幅/换手率/成交量等对~100个申万行业板块排名, 把握板块轮动.
-        DIFFERENTIATION: 行业板块排名; 概念板块用 get_concept_ranking; 个股筛选用 screen_stocks.
-        next_recommended_tools: get_concept_ranking -> screen_stocks
-        sectors and sector rotation trends.
-
-        Typical use cases:
-        - "Which industry sectors are leading today?"
-        - "Show me the top 10 sectors by turnover rate"
-        - "Which sectors have the most falling stocks?"
-
-        Args:
-            sort_by: Sort field. Options: change_pct (default), turnover_rate,
-                volume, turnover, amplitude, rise_count, fall_count.
-            sort_order: "desc" (default, best first) or "asc".
-            limit: Max sectors to return (default 30, max 100).
-            ctx: FastMCP Context.
-
-        Returns:
-            Ranked list of industry sectors with performance metrics.
+        WHEN TO USE: 用户想看今天哪些行业板块涨得好/跌得多, 或行业轮动热度排名时调用.
+        典型触发: "今天哪些行业涨得好" "行业板块排名" "哪个板块最强最弱" "板块轮动".
+        CONCEPT: 按涨跌幅/换手率/成交量等对约100个申万行业板块排名, 展示涨跌家数/振幅/领涨股,
+        用于把握板块轮动和行业强弱.
+        DIFFERENTIATION: 本工具是行业板块排名; 概念板块排名用get_concept_ranking;
+        个股多条件筛选用screen_stocks; 行业深度分析用sector_research_tools中的工具.
+        next_recommended_tools: get_concept_ranking, screen_stocks
         """
         if ctx:
             await ctx.info(f"获取行业板块排名: sort_by={sort_by}, limit={limit}")
@@ -320,27 +313,15 @@ def register_quantitative_tools(mcp: FastMCP):
         limit: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """获取概念板块实时排名.
+        """A股概念板块实时排名(按涨跌幅等对约400个概念题材板块排名).
 
-        WHEN TO USE: 用户问"今天AI概念怎么样"、"概念板块排名"、"新能源题材".
-        CONCEPT: 按涨跌幅等对~400个概念板块(半导体/AI/碳中和等)排名, 追踪市场题材.
-        DIFFERENTIATION: 概念板块排名; 行业板块用 get_industry_ranking; 个股筛选用 screen_stocks.
-        next_recommended_tools: get_industry_ranking -> screen_stocks
-
-        Typical use cases:
-        - "What are the hottest concept themes today?"
-        - "Show top 20 concept sectors by money flow (turnover)"
-        - "Which concepts have the most stocks rising?"
-
-        Args:
-            sort_by: Sort field. Options: change_pct (default), turnover_rate,
-                volume, turnover, amplitude, rise_count, fall_count.
-            sort_order: "desc" (default) or "asc".
-            limit: Max sectors to return (default 30, max 100).
-            ctx: FastMCP Context.
-
-        Returns:
-            Ranked list of concept sectors with performance metrics.
+        WHEN TO USE: 用户想看今天哪些概念/题材板块活跃, 或追踪市场热点时调用.
+        典型触发: "今天AI概念怎么样" "概念板块排名" "新能源题材" "热点题材" "概念轮动".
+        CONCEPT: 按涨跌幅/换手率等对约400个概念板块(半导体/AI/碳中和/元宇宙等)排名,
+        展示涨跌家数/振幅/领涨股, 用于追踪市场题材和热点轮动.
+        DIFFERENTIATION: 本工具是概念/题材板块排名; 行业板块排名用get_industry_ranking;
+        个股多条件筛选用screen_stocks; 美股板块表现用get_us_market_overview.
+        next_recommended_tools: get_industry_ranking, screen_stocks
         """
         if ctx:
             await ctx.info(f"获取概念板块排名: sort_by={sort_by}, limit={limit}")

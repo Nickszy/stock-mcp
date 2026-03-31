@@ -195,56 +195,15 @@ def register_filings_tools(mcp: FastMCP):
         limit: int = 10,
         ctx: Context = None
     ) -> Dict[str, Any]:
-        """Get SEC periodic filings (10-K/10-Q) for US stocks.
+        """获取SEC定期报告(10-K/10-Q/20-F/6-K).
 
-        WHEN TO USE:
-        - Fundamental analysis requiring official SEC filings (10-K annual, 10-Q quarterly)
-        - Earnings tracking and financial statement extraction from filings
-        - Research on foreign companies via 20-F (e.g., BABA, JD, PDD)
-
-        CONCEPT:
-        Retrieves SEC periodic filings by ticker, form type, year, and quarter.
-        Returns filing metadata with URLs for further processing. Supports 10-K, 10-Q,
-        20-F (foreign issuers), and 6-K forms.
-
-        DIFFERENTIATION:
-        - vs fetch_event_sec_filings: This returns periodic scheduled reports; event returns 8-K/3/4/5
-        - vs process_document: This finds filings; process_document downloads and extracts text
-        - vs fetch_ashare_filings: This is US SEC filings; ashare is for CNINFO announcements
-
-        next_recommended_tools: process_document, extract_filing_key_metrics, get_filing_markdown
-
-        Designed for regular, scheduled reports with fiscal year/quarter.
-        Use this for fundamental analysis and earnings tracking.
-
-        Args:
-            ticker: US stock ticker (e.g., "AAPL", "TSLA", "BABA")
-            forms: Filing types. Defaults to ["10-K", "10-Q", "20-F", "6-K"]
-                - "10-K": Annual reports (US companies)
-                - "10-Q": Quarterly reports (US companies)
-                - "20-F": Annual reports (Foreign Private Issuers, e.g., BABA)
-                - "6-K": Current/Quarterly reports (Foreign Private Issuers)
-                Example: ["10-K", "10-Q"]
-            year: Fiscal year or list of years (e.g., 2024, [2023, 2024])
-                When omitted, returns latest filings using `limit`
-            quarter: Fiscal quarter (1-4) or list of quarters
-                Requires `year` to be provided
-                Example: 3 or [1, 3]
-            limit: Max results when year is omitted (default: 10)
-            ctx: FastMCP Context for logging
-
-        Returns:
-            List of filing dictionaries with metadata
-
-        Examples:
-            # Get AAPL's 2024 annual report
-            ticker="AAPL", forms=["10-K"], year=2024
-
-            # Get TSLA's Q3 2024 quarterly report
-            ticker="TSLA", forms=["10-Q"], year=2024, quarter=3
-
-            # Get latest 5 quarterly reports
-            ticker="MSFT", forms=["10-Q"], limit=5
+        WHEN TO USE: 用户需要查看美股公司的正式定期披露文件时调用, 适合基本面与财报研究入口.
+        典型触发: "AAPL最近10-K" "TSLA 2024Q3 10-Q" "BABA 20-F".
+        CONCEPT: 按ticker/表单类型/年份/季度检索SEC定期报告元数据, 返回报告列表和访问入口,
+        适合追踪年报/季报等计划性披露.
+        DIFFERENTIATION: 本工具只返回定期报告列表, 不下载正文; 与fetch_event_sec_filings不同(后者是8-K/3/4/5等事件驱动披露),
+        与process_document和get_filing_markdown不同(那两个用于读取正文内容).
+        next_recommended_tools: get_filing_markdown, process_document, extract_filing_key_metrics
         """
         if ctx:
             await ctx.info(
@@ -326,54 +285,15 @@ def register_filings_tools(mcp: FastMCP):
         limit: int = 10,
         ctx: Context = None
     ) -> Dict[str, Any]:
-        """Get SEC event-driven filings (8-K, Forms 3/4/5) for US stocks.
+        """获取SEC事件驱动报告(8-K/3/4/5/6-K).
 
-        WHEN TO USE:
-        - Track corporate events: M&A, leadership changes, material agreements (8-K)
-        - Monitor insider buying/selling (Forms 3/4/5)
-        - Event-driven investment research and alert monitoring
-
-        CONCEPT:
-        Retrieves event-driven SEC filings (8-K for material events, Form 3/4/5 for insider
-        transactions) filtered by date range. Unlike periodic filings, these are unscheduled.
-
-        DIFFERENTIATION:
-        - vs fetch_periodic_sec_filings: This returns unscheduled event filings; periodic returns 10-K/10-Q
-        - vs get_us_insider_trading: That extracts structured insider trade data; this returns raw filings
-
-        next_recommended_tools: fetch_periodic_sec_filings, get_us_insider_trading, process_document
-
-        Designed for irregular, event-triggered reports.
-        Use this for news tracking and material event monitoring.
-
-        Args:
-            ticker: US stock ticker (e.g., "AAPL", "TSLA", "BABA")
-            forms: Filing types. Defaults to ["8-K", "6-K"]
-                - "8-K": Current reports (US companies)
-                - "6-K": Current reports (Foreign Private Issuers, e.g., BABA)
-                - "3": Initial insider ownership
-                - "4": Changes in insider ownership
-                - "5": Annual insider ownership
-                Example: ["8-K", "4"]
-            start_date: Start date in YYYY-MM-DD format (optional)
-            end_date: End date in YYYY-MM-DD format (optional)
-            limit: Max results after filtering (default: 10)
-            ctx: FastMCP Context for logging
-
-        Returns:
-            List of filing dictionaries with metadata
-
-        Examples:
-            # Get AAPL's latest 8-K filings
-            ticker="AAPL", forms=["8-K"], limit=10
-
-            # Get insider trading in past 30 days
-            ticker="TSLA", forms=["4"],
-            start_date="2024-11-01", end_date="2024-11-30"
-
-            # Get all event filings in a date range
-            ticker="MSFT", start_date="2024-10-01",
-            end_date="2024-10-31"
+        WHEN TO USE: 用户要追踪美股公司的突发事项或内幕交易披露时调用.
+        典型触发: "AAPL最近8-K" "TSLA最近高管减持" "过去30天Form 4".
+        CONCEPT: 检索SEC事件驱动披露, 包括重大事项(8-K)和内幕交易(Form 3/4/5),
+        支持按日期区间筛选, 适合事件监控和公告驱动研究.
+        DIFFERENTIATION: 本工具关注非定期/事件驱动披露; 与fetch_periodic_sec_filings不同(后者是10-K/10-Q等定期报告),
+        与get_us_insider_trading不同(后者抽取结构化内幕交易数据, 本工具返回原始披露列表).
+        next_recommended_tools: get_filing_markdown, process_document, fetch_periodic_sec_filings
         """
         if ctx:
             await ctx.info(
@@ -455,53 +375,15 @@ def register_filings_tools(mcp: FastMCP):
         limit: int = 10,
         ctx: Context = None
     ) -> Dict[str, Any]:
-        """Get A-share announcements from CNINFO (巨潮信息网).
+        """获取A股公告与披露文件(CNINFO/巨潮信息).
 
-        WHEN TO USE:
-        - Track A-share company announcements, prospectus, and regulatory filings
-        - CN market event monitoring (dividends, splits, management changes)
-        - A-share corporate governance and disclosure research
-
-        CONCEPT:
-        Retrieves announcements from CNINFO for A-share stocks by category
-        and date range. Supports categories like annual reports, interim reports,
-        IPO prospectus, board resolutions, and shareholder meeting notices.
-
-        DIFFERENTIATION:
-        - vs fetch_periodic_sec_filings: This is for A-share CNINFO filings; periodic is for US SEC
-        - vs fetch_event_sec_filings: This covers CN announcements; event is for US SEC 8-K/3/4/5
-
-        next_recommended_tools: fetch_periodic_sec_filings, process_document
-
-        Args:
-            symbol: A-share ticker in format EXCHANGE:CODE
-                Examples:
-                - SSE:600519 (Kweichow Moutai, Shanghai Stock Exchange)
-                - SZSE:000001 (Ping An Bank, Shenzhen Stock Exchange)
-                - SZSE:300750 (CATL, ChiNext)
-                Note: Plain codes like "600519" are also accepted
-            filing_types: Report types in ENGLISH ONLY. Supported values:
-                - "annual": Annual reports (年报)
-                - "semi-annual": Semi-annual reports (半年报/中报)
-                - "quarterly": Quarterly reports (季报)
-                Example: ["annual", "quarterly"]
-                IMPORTANT: Chinese terms like "年报/半年报/季报" are NOT supported
-            start_date: Start date in YYYY-MM-DD format (optional)
-            end_date: End date in YYYY-MM-DD format (optional)
-            limit: Maximum number of results (default: 10)
-            ctx: FastMCP Context for logging
-
-        Returns:
-            List of filing dictionaries with metadata and PDF URLs
-
-        Examples:
-            - Get 2024 annual report:
-              symbol="SSE:600519", filing_types=["annual"],
-              start_date="2024-01-01", end_date="2024-12-31"
-            - Get latest quarterly reports:
-              symbol="SZSE:300750", filing_types=["quarterly"], limit=5
-            - Get all types:
-              symbol="SSE:600519", filing_types=None
+        WHEN TO USE: 用户要查看A股公司的公告/年报/半年报/季报/董事会决议等披露时调用.
+        典型触发: "茅台最新年报" "宁德时代最近公告" "A股公司季报列表".
+        CONCEPT: 按股票代码/披露类型/日期区间检索巨潮资讯公告列表, 返回公告元数据与PDF链接,
+        适合A股公司治理、事件跟踪和财报披露研究.
+        DIFFERENTIATION: 本工具面向A股CNINFO披露; 与fetch_periodic_sec_filings和fetch_event_sec_filings不同(后两者面向SEC),
+        与process_document不同(本工具先找文件列表, process_document再下载处理正文).
+        next_recommended_tools: process_document, get_filing_markdown
         """
         if ctx:
             await ctx.info(
@@ -580,38 +462,15 @@ def register_filings_tools(mcp: FastMCP):
         ticker: str = None,
         ctx: Context = None
     ) -> Dict[str, Any]:
-        """Process a single document by URL (Download & Extract Text).
+        """处理单个披露文档(下载并提取正文文本).
 
-        WHEN TO USE:
-        - Have a filing URL and need to extract its full text content
-        - Convert SEC filing HTML/PDF into clean markdown for analysis
-        - Pre-processing step before extracting metrics or facts from a filing
-
-        CONCEPT:
-        Downloads a document from URL, extracts text content, and returns it as
-        clean markdown. Handles SEC filing HTML, PDF, and plain text formats.
-
-        DIFFERENTIATION:
-        - vs get_filing_markdown: This downloads from any URL; get_filing_markdown uses ticker+accession
-        - vs extract_filing_key_metrics: This returns raw text; extract returns structured metrics
-
-        next_recommended_tools: extract_filing_key_metrics, extract_filing_section_facts
-
-        This tool downloads the document content from the given URL.
-        - For HTML documents (e.g., SEC filings), it extracts the text content.
-        - For PDF documents (e.g., CNINFO announcements), it returns metadata indicating PDF type.
-        
-        For SEC filings (10-K, 10-Q, 8-K), `ticker` is REQUIRED to use edgartools for correct parsing.
-
-        Args:
-            doc_id: Unique document identifier (e.g., Accession Number)
-            url: Direct URL to the document
-            doc_type: Document type (e.g., "10-K", "annual")
-            ticker: Stock ticker (Required for SEC filings)
-            ctx: FastMCP Context for logging
-
-        Returns:
-            Dictionary containing 'content' (extracted text), 'status', and metadata.
+        WHEN TO USE: 用户已经拿到文档URL, 需要把SEC/公告文件下载并转成可分析文本时调用.
+        典型触发: "把这个10-K下载成正文" "读取这份公告PDF" "先处理文档再抽指标".
+        CONCEPT: 根据doc_id和url下载文档, 尝试提取HTML/PDF/文本内容并返回结构化结果,
+        是从“文件列表”走向“正文分析”的桥接步骤.
+        DIFFERENTIATION: 本工具处理任意给定URL的单个文档; 与get_filing_markdown不同(后者是SEC专用的ticker+doc_id读取),
+        与fetch_*_filings不同(后者只返回文件列表), 与extract_*工具不同(后者基于已提取正文做结构化抽取).
+        next_recommended_tools: extract_filing_key_metrics, extract_filing_section_facts, build_filing_citations
         """
         if ctx:
             await ctx.info(
@@ -661,21 +520,14 @@ def register_filings_tools(mcp: FastMCP):
         doc_id: str,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Get SEC filing markdown content by ticker + accession number.
+        """获取SEC文档Markdown正文(ticker + doc_id 读取完整文本).
 
-        WHEN TO USE:
-        - Read the full text of a specific SEC filing (identified by accession number)
-        - Extract detailed information from 10-K/10-Q sections
-        - Quick access to filing content when you have ticker and accession from fetch results
-
-        CONCEPT:
-        Retrieves and converts SEC filing content to markdown by ticker and accession number.
-        Returns the full filing text for analysis. This is the primary reading tool for filings.
-
-        DIFFERENTIATION:
-        - vs process_document: This uses ticker+accession (SEC-specific); process_document uses any URL
-        - vs extract_filing_key_metrics: This returns full text; extract returns structured metrics
-
+        WHEN TO USE: 用户已从SEC报告列表拿到doc_id, 需要读取该文件完整正文时调用.
+        典型触发: "读取这个10-K正文" "把AAPL这个accession转成markdown".
+        CONCEPT: 基于ticker和doc_id抓取并转换SEC披露正文为markdown, 返回可直接用于搜索/抽取/引用的全文内容,
+        是披露研究中的核心阅读工具.
+        DIFFERENTIATION: 本工具是SEC专用全文读取入口; 与process_document不同(后者基于任意URL处理),
+        与extract_filing_key_metrics不同(后者只抽关键数字行), 与extract_filing_section_facts不同(后者按章节整理事实片段).
         next_recommended_tools: extract_filing_key_metrics, extract_filing_section_facts, build_filing_citations
         """
         if ctx:
@@ -764,23 +616,16 @@ def register_filings_tools(mcp: FastMCP):
         max_items: int = 30,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Extract metric-like lines from filing markdown for quick evidence pickup.
+        """提取披露文件关键指标行(快速抓取数字证据).
 
-        WHEN TO USE:
-        - Need key financial metrics from a filing without reading the full document
-        - Quick extraction of dollar amounts, percentages, and key figures
-        - Building evidence tables from SEC filing content
-
-        CONCEPT:
-        Scans filing markdown for lines containing metric-like patterns (numbers with
-        units, percentages, financial terms). Returns structured list of key data points
-        for quick analysis without reading the entire filing.
-
-        DIFFERENTIATION:
-        - vs get_filing_markdown: This extracts key metrics only; get_filing returns full text
-        - vs extract_filing_section_facts: This returns metric lines; section_facts returns by section
-
-        next_recommended_tools: extract_filing_section_facts, build_filing_citations"""
+        WHEN TO USE: 用户不想通读整篇披露, 只想快速抓取收入/利润/EPS/毛利率等数字证据时调用.
+        典型触发: "从10-K里抓关键数字" "提取财报指标" "快速找revenue和net income".
+        CONCEPT: 在披露markdown中扫描包含数字和指标提示词的文本行, 返回带行号/数字片段/提示词命中的结构化结果,
+        适合快速证据抽取和报告素材准备.
+        DIFFERENTIATION: 本工具返回指标型数字行; 与get_filing_markdown不同(全文读取),
+        与extract_filing_section_facts不同(后者按章节组织事实片段), 与build_filing_citations不同(后者构造可引用对象).
+        next_recommended_tools: extract_filing_section_facts, build_filing_citations, get_filing_markdown
+        """
         default_hints = [
             "revenue",
             "net income",
@@ -857,22 +702,16 @@ def register_filings_tools(mcp: FastMCP):
         max_quotes_per_section: int = 5,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Extract section-level fact snippets from filing markdown.
+        """提取披露文件章节事实片段(按Risk Factors/MD&A等章节组织).
 
-        WHEN TO USE:
-        - Need structured facts organized by filing section (Risk Factors, MD&A, etc.)
-        - Building evidence-based analysis from specific filing sections
-        - Extracting key statements and claims from 10-K/10-Q sections
-
-        CONCEPT:
-        Parses filing markdown into sections (Item 1A, Item 7, Item 8, Risk Factors, MD&A)
-        and extracts fact-like statements from each. Returns section-organized fact snippets.
-
-        DIFFERENTIATION:
-        - vs extract_filing_key_metrics: This returns section-organized facts; metrics returns numeric lines
-        - vs get_filing_markdown: This returns structured facts; markdown returns full raw text
-
-        next_recommended_tools: build_filing_citations, extract_filing_key_metrics, get_filing_markdown"""
+        WHEN TO USE: 用户要基于披露文件的特定章节做证据化分析时调用.
+        典型触发: "提取风险因素" "看MD&A怎么说" "按章节整理关键表述".
+        CONCEPT: 将披露markdown按标题章节切分, 根据section hints抽取各章节中的事实片段,
+        返回“章节 -> 引文片段”的结构化结果, 适合构建基于披露的论证材料.
+        DIFFERENTIATION: 本工具按章节组织文字证据; 与extract_filing_key_metrics不同(后者偏数字行),
+        与get_filing_markdown不同(后者返回全文原文), 与build_filing_citations不同(后者偏轻量引用对象).
+        next_recommended_tools: build_filing_citations, extract_filing_key_metrics, get_filing_markdown
+        """
         default_sections = ["item 1a", "item 7", "item 8", "risk factors", "md&a"]
         hints = section_hints or default_sections
         max_quotes = max(1, min(int(max_quotes_per_section), 20))
@@ -947,22 +786,16 @@ def register_filings_tools(mcp: FastMCP):
         max_items: int = 15,
         ctx: Context = None,
     ) -> Dict[str, Any]:
-        """Build lightweight citation candidates from filing metric lines.
+        """构建披露文件引用锚点(将指标行转为可引用对象).
 
-        WHEN TO USE:
-        - Generate citations for a research report based on filing data
-        - Need verified sources (ticker + doc_id) for claims about a company
-        - Building a bibliography or evidence chain from SEC filings
-
-        CONCEPT:
-        Takes extracted metric lines from a filing and converts them into lightweight
-        citation objects with source attribution (ticker, doc_id, metric, value).
-
-        DIFFERENTIATION:
-        - vs extract_filing_key_metrics: This builds citations; extract builds raw metric lines
-        - vs extract_filing_section_facts: This returns citation objects; section_facts returns fact snippets
-
-        next_recommended_tools: extract_filing_key_metrics, extract_filing_section_facts"""
+        WHEN TO USE: 用户需要在研究报告或分析中引用披露文件中的具体数据点时调用.
+        典型触发: "给这些数字加上出处引用" "构造引用锚点" "citations".
+        CONCEPT: 从披露markdown中提取指标行, 并转为包含ref_id/ticker/doc_id/行号/原文的引用对象,
+        方便在报告中建立“数据 -> 来源”的证据链.
+        DIFFERENTIATION: 本工具输出的是引用对象(引用格式); 与extract_filing_key_metrics不同(后者输出原始指标行),
+        与extract_filing_section_facts不同(后者按章节组织片段), 与get_filing_markdown不同(后者输出全文).
+        next_recommended_tools: extract_filing_key_metrics, extract_filing_section_facts
+        """
         max_items = max(5, min(int(max_items), 50))
         try:
             markdown_result = await filings_use_cases.get_filing_markdown(
