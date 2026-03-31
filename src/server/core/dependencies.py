@@ -267,7 +267,7 @@ class Container(containers.DeclarativeContainer):
     research_report_service = providers.Factory(ResearchReportService)
     scheduler_service = providers.Factory(
         SchedulerService,
-        repository=scheduler_repository,
+        repo=scheduler_repository,
     )
     scheduler_runner = providers.Factory(
         SchedulerRunner,

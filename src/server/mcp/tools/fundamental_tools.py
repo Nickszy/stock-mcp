@@ -1372,12 +1372,15 @@ def register_fundamental_tools(mcp: FastMCP):
                 periods=periods,
             )
 
-            data = await fundamental_use_cases.get_financial_statements(
-                symbol, report_type=report_type, periods=periods
+            resp = await fundamental_use_cases.get_stock_financial_statements(
+                symbol, period=report_type, periods=periods
             )
 
-            ts_code = data.get("ts_code") or data.get("ticker") or symbol
-            source = data.get("source", "unknown")
+            # Unwrap create_data_response envelope
+            data = resp.get("data", resp)
+            ts_code = resp.get("symbol") or data.get("ts_code") or data.get("ticker") or symbol
+            source_info = resp.get("source", {})
+            source = source_info.get("provider", "unknown") if isinstance(source_info, dict) else source_info
 
             # Build summary
             income_q = data.get("income_statement", {}).get("quarterly", [])

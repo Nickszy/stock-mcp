@@ -166,6 +166,7 @@ _MARKET_METHODS: Set[str] = {
     "get_xueqiu_tweet_hotness",
     "get_xueqiu_follow_hotness",
     "get_xueqiu_deal_hotness",
+    "get_dragon_tiger_statistics",
     "get_stock_institutional_research",
     # Corporate action data (COL-147)
     "get_shareholder_holding_detail",
