@@ -162,24 +162,48 @@ class BaostockAdapter(BaseDataAdapter):
             data_list = []
             while (rs.error_code == '0') and rs.next():
                 data_list.append(rs.get_row_data())
-            
+
             if not data_list:
                 return None
-            
-            df = pd.DataFrame(data_list, columns=rs.fields)
+
+            # rs.fields may be a single comma-separated string; split if needed
+            raw_fields = rs.fields
+            if isinstance(raw_fields, str):
+                fields = [f.strip() for f in raw_fields.split(",")]
+            elif isinstance(raw_fields, (list, tuple)):
+                fields = list(raw_fields)
+            else:
+                fields = None
+
+            # Only use fields if column count matches data
+            if fields and data_list and len(fields) == len(data_list[0]):
+                df = pd.DataFrame(data_list, columns=fields)
+            else:
+                df = pd.DataFrame(data_list)
             
             if df.empty:
                 return None
             
             row = df.iloc[0]
-            
+
             # Parse exchange
             exchange = ticker.split(":")[0]
+
+            # Safely get name — column index or name may vary
+            name = ticker
+            for col_candidate in ["code_name", 1]:
+                try:
+                    val = row[col_candidate] if col_candidate in row.index else row.iloc[col_candidate] if isinstance(col_candidate, int) and col_candidate < len(row) else None
+                    if val and str(val).strip():
+                        name = str(val)
+                        break
+                except (KeyError, IndexError):
+                    continue
             
             asset = Asset(
                 ticker=ticker,
                 asset_type=AssetType.STOCK,
-                name=str(row.get("code_name", ticker)),
+                name=name,
                 market_info=MarketInfo(
                     exchange=exchange,
                     country="CN",
@@ -189,10 +213,10 @@ class BaostockAdapter(BaseDataAdapter):
                 ),
                 source_mappings={DataSource.BAOSTOCK: bs_code},
                 properties={
-                    "ipoDate": str(row.get("ipoDate", "")),
-                    "outDate": str(row.get("outDate", "")),
-                    "type": str(row.get("type", "")),
-                    "status": str(row.get("status", "")),
+                    "ipoDate": str(row.get("ipoDate", "")) if "ipoDate" in row else "",
+                    "outDate": str(row.get("outDate", "")) if "outDate" in row else "",
+                    "type": str(row.get("type", "")) if "type" in row else "",
+                    "status": str(row.get("status", "")) if "status" in row else "",
                 },
             )
 

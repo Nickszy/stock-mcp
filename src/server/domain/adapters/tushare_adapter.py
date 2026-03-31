@@ -126,21 +126,23 @@ class TushareAdapter(BaseDataAdapter):
 
             row = df.iloc[0]
 
+            exchange_str = (
+                "SSE"
+                if ts_code.endswith(".SH")
+                else "SZSE" if ts_code.endswith(".SZ") else "BSE"
+            )
             asset = Asset(
                 ticker=ticker,
-                name=row.get("name", ""),
-                description=row.get("fullname", ""),
+                name=str(row.get("name", "")) or ticker,
                 asset_type=AssetType.STOCK,
-                exchange=(
-                    Exchange.SSE
-                    if ts_code.endswith(".SH")
-                    else Exchange.SZSE if ts_code.endswith(".SZ") else Exchange.BSE
-                ),
-                currency=row.get("curr_type", "CNY"),
                 market_info=MarketInfo(
-                    market_status=MarketStatus.OPEN,  # Simplified
-                    exchange_timezone="Asia/Shanghai",
+                    exchange=exchange_str,
+                    country="CN",
+                    currency=str(row.get("curr_type", "")) or "CNY",
+                    timezone="Asia/Shanghai",
+                    market_status=MarketStatus.OPEN,
                 ),
+                properties={"fullname": str(row.get("fullname", "")), "list_date": str(row.get("list_date", ""))},
             )
 
             await self.cache.set(cache_key, asset.model_dump(mode="json"), ttl=86400)
