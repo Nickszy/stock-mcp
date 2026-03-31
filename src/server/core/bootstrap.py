@@ -278,8 +278,8 @@ async def _init_structured_data(postgres_conn) -> None:
             logger.debug("Financial statements normalizer not loaded")
 
         try:
-            from src.server.domain.structured_data.validate.financial_statements import register_financial_statement_rules
-            register_financial_statement_rules(orchestrator._validator)
+            from src.server.domain.structured_data.validate.financial_statements_wrapper import FinancialStatementsValidator
+            registry.register_validator("financial_statements", FinancialStatementsValidator())
         except Exception:
             logger.debug("Financial statements validator not loaded")
 

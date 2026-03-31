@@ -88,22 +88,28 @@ class TestResearchReportService:
         assert svc is not None
 
     def test_search_raises_without_base_url(self):
-        """Service should raise ValueError when NEWS_MCP_BASE_URL is empty."""
+        """Service should have empty db_url when NEWS_DB_URL is empty."""
         from src.server.domain.services.research_report_service import ResearchReportService
         import os
 
-        # Ensure base_url is empty
-        original = os.environ.get("NEWS_MCP_BASE_URL", "")
+        # Ensure both URLs are empty
+        original_mcp = os.environ.get("NEWS_MCP_BASE_URL", "")
+        original_db = os.environ.get("NEWS_DB_URL", "")
         os.environ["NEWS_MCP_BASE_URL"] = ""
+        os.environ["NEWS_DB_URL"] = ""
 
         svc = ResearchReportService()
-        assert svc.base_url == ""
+        assert svc.db_url == ""
 
         # Restore
-        if original:
-            os.environ["NEWS_MCP_BASE_URL"] = original
+        if original_mcp:
+            os.environ["NEWS_MCP_BASE_URL"] = original_mcp
         else:
             os.environ.pop("NEWS_MCP_BASE_URL", None)
+        if original_db:
+            os.environ["NEWS_DB_URL"] = original_db
+        else:
+            os.environ.pop("NEWS_DB_URL", None)
 
     def test_config_has_news_mcp_base_url(self):
         from src.server.config.settings import Settings

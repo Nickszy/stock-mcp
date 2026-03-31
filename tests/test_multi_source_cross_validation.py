@@ -12,6 +12,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from collections import defaultdict
 
+from src.server.domain.structured_data.enums import PipelineState
+
 
 # ---------------------------------------------------------------------------
 # ComparisonEngine tests

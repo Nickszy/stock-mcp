@@ -164,8 +164,12 @@ class TestDynamicConfidence:
         )
 
         # completeness = 1/2 = 0.5, confidence = min(0.95, 0.6+0.5*0.25) = 0.725 < 0.85
-        assert result.get("pending_review") == 1, (
-            "Expected pending_review=1 for sparse data (confidence < 0.85)"
+        # Verify the candidate was transitioned to PENDING_REVIEW
+        from src.server.domain.structured_data.enums import PipelineState
+        transitions = candidate_repo.transition_state.call_args_list
+        transition_states = [str(t) for t in transitions]
+        assert any(PipelineState.PENDING_REVIEW.value in t for t in transition_states), (
+            "Expected PENDING_REVIEW state for sparse data (confidence < 0.85)"
         )
 
     @pytest.mark.asyncio
@@ -234,7 +238,13 @@ class TestDynamicConfidence:
             validator=mock_validator,
         )
 
-        assert result.get("pending_review") == 1
+        # Verify ERROR-level validation routed to PENDING_REVIEW via transition_state
+        from src.server.domain.structured_data.enums import PipelineState
+        transitions = candidate_repo.transition_state.call_args_list
+        transition_states = [str(t) for t in transitions]
+        assert any(PipelineState.PENDING_REVIEW.value in t for t in transition_states), (
+            "Expected PENDING_REVIEW for validation errors"
+        )
         # Verify confidence was degraded (not hardcoded 0.3)
         transition_calls = candidate_repo.transition_state.call_args_list
         for call in transition_calls:
