@@ -164,11 +164,12 @@ async def disable_job(
 @router.get("/jobs/{job_id}/runs", summary="获取任务执行历史")
 async def list_runs(
     job_id: str,
+    user_id: str = Query(..., description="用户ID"),
     limit: int = Query(20, ge=1, le=100),
 ) -> Dict[str, Any]:
     service = _require_service()
     try:
-        runs = await service.list_runs(job_id, limit=limit)
+        runs = await service.list_runs(user_id, job_id, limit=limit)
         return rest_response(
             data=[r.model_dump(mode="json") for r in runs],
         )
@@ -180,10 +181,11 @@ async def list_runs(
 async def get_run(
     run_id: str,
     job_id: str = Query(..., description="所属任务ID"),
+    user_id: str = Query(..., description="用户ID"),
 ) -> Dict[str, Any]:
     service = _require_service()
     try:
-        run = await service.get_run(job_id, run_id)
+        run = await service.get_run(user_id, job_id, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         return rest_response(data=run.model_dump(mode="json"))

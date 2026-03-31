@@ -40,11 +40,15 @@ def _get_runner() -> SchedulerRunner:
     watchlist_repo = RedisWatchlistRepository(redis_conn)
     gateway = Container.market_gateway()
     news_service = Container.news_service()
+    filings_service = Container.filings_service()
+    research_report_service = Container.research_report_service()
     return SchedulerRunner(
         scheduler_repo=scheduler_repo,
         watchlist_repo=watchlist_repo,
         gateway=gateway,
         news_service=news_service,
+        filings_service=filings_service,
+        research_report_service=research_report_service,
     )
 
 
@@ -98,12 +102,13 @@ def register_scheduler_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_analysis_run_result(
+        user_id: str,
         job_id: str,
         run_id: str,
     ) -> dict:
         """获取某次分析执行的详细结果。"""
         service = _get_service()
-        run = await service.get_run(job_id, run_id)
+        run = await service.get_run(user_id, job_id, run_id)
         if run is None:
             return {"error": f"Run {run_id} not found for job {job_id}"}
         return run.model_dump(mode="json")

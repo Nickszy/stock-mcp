@@ -106,7 +106,10 @@ docker-compose.*.local.yml
 *.sqlite3
 *.db
 
-# Tests
-tests/
+# Git worktrees (isolated workspaces)
+.worktrees/
+
+# Tests — do NOT ignore (tests/ should be committed)
+# tests/
 
 # Keep .env.example committed (do not ignore)

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from src.server.domain.scheduler.models import ScheduledAnalysisJob
+from apscheduler.triggers.cron import CronTrigger
+
+from src.server.domain.scheduler.models import ScheduledAnalysisJob, ScheduleType
 from src.server.domain.scheduler.repository import RedisSchedulerRepository
 from src.server.domain.scheduler.runner import SchedulerRunner
 from src.server.utils.logger import logger
@@ -86,11 +88,13 @@ class SchedulerEngine:
         except Exception:
             pass
         if job.enabled:
-            from apscheduler.triggers.cron import CronTrigger
-            hour, minute = job.schedule_value.split(":")
+            trigger = self._build_trigger(job)
+            if trigger is None:
+                logger.warning("Could not build trigger for job", job_id=job_id)
+                return
             self._scheduler.add_job(
                 self._execute_job,
-                CronTrigger(hour=int(hour), minute=int(minute)),
+                trigger,
                 id=job_id,
                 args=[job.job_id, job.user_id],
                 replace_existing=True,
@@ -100,6 +104,36 @@ class SchedulerEngine:
                 job_id=job.job_id,
                 schedule=job.schedule_value,
             )
+
+    @staticmethod
+    def _build_trigger(job: ScheduledAnalysisJob):
+        """Build an APScheduler trigger from the job's schedule config."""
+        try:
+            if job.schedule_type == ScheduleType.daily:
+                parts = job.schedule_value.strip().split(":")
+                return CronTrigger(hour=int(parts[0]), minute=int(parts[1]))
+            elif job.schedule_type == ScheduleType.weekly:
+                # Format: "DOW HH:MM" e.g. "MON 09:30"
+                dow, time_str = job.schedule_value.strip().split()
+                hour, minute = time_str.split(":")
+                return CronTrigger(
+                    day_of_week=dow[:3].lower(),
+                    hour=int(hour),
+                    minute=int(minute),
+                )
+            elif job.schedule_type == ScheduleType.cron:
+                # 5-field cron: "min hour dom month dow"
+                fields = job.schedule_value.strip().split()
+                return CronTrigger(
+                    minute=fields[0],
+                    hour=fields[1],
+                    day=fields[2],
+                    month=fields[3],
+                    day_of_week=fields[4],
+                )
+        except Exception as e:
+            logger.warning("Failed to build trigger", job_id=job.job_id, error=str(e))
+            return None
 
     async def remove_job(self, job_id: str) -> None:
         """Remove a job from the scheduler."""

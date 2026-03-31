@@ -70,8 +70,18 @@ class SchedulerService:
         saved = await self._repo.save_job(job)
         return saved
 
-    async def get_run(self, job_id: str, run_id: str) -> Optional[AnalysisRun]:
+    async def get_run(
+        self, user_id: str, job_id: str, run_id: str,
+    ) -> Optional[AnalysisRun]:
+        job = await self._repo.get_job(user_id, job_id)
+        if job is None:
+            return None
         return await self._repo.get_run(job_id, run_id)
 
-    async def list_runs(self, job_id: str, limit: int = 20) -> list[AnalysisRun]:
+    async def list_runs(
+        self, user_id: str, job_id: str, limit: int = 20,
+    ) -> list[AnalysisRun]:
+        job = await self._repo.get_job(user_id, job_id)
+        if job is None:
+            return []
         return await self._repo.list_runs(job_id, limit=limit)

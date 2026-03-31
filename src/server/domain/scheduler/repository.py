@@ -78,8 +78,8 @@ class RedisSchedulerRepository:
             return False
         await client.delete(self._job_key(user_id, job_id))
         await client.srem(self._jobs_key(user_id), job_id)
-        # Also delete associated runs
-        run_ids = await client.smembers(self._runs_key(job_id))
+        # Also delete associated runs (sorted set)
+        run_ids = await client.zrange(self._runs_key(job_id), 0, -1)
         for run_id in run_ids:
             await client.delete(self._run_key(job_id, run_id))
         await client.delete(self._runs_key(job_id))
@@ -111,7 +111,9 @@ class RedisSchedulerRepository:
             self._run_key(run.job_id, run.run_id),
             json.dumps(payload),
         )
-        await client.sadd(self._runs_key(run.job_id), run.run_id)
+        # Use sorted set with timestamp score for chronological ordering
+        score = run.started_at.timestamp() if run.started_at else 0
+        await client.zadd(self._runs_key(run.job_id), {run.run_id: score})
         return run
 
     async def get_run(self, job_id: str, run_id: str) -> Optional[AnalysisRun]:
@@ -123,10 +125,10 @@ class RedisSchedulerRepository:
 
     async def list_runs(self, job_id: str, limit: int = 20) -> list[AnalysisRun]:
         client = await self._get_client()
-        run_ids = sorted(await client.smembers(self._runs_key(job_id)))
-        recent = run_ids[-limit:] if len(run_ids) > limit else run_ids
+        # Get most recent run_ids by timestamp (descending)
+        run_ids = await client.zrevrange(self._runs_key(job_id), 0, limit - 1)
         items: list[AnalysisRun] = []
-        for run_id in recent:
+        for run_id in run_ids:
             run = await self.get_run(job_id, run_id)
             if run is not None:
                 items.append(run)
