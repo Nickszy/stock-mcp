@@ -20,6 +20,49 @@ from src.server.mcp.tools.artifact_utils import (
 )
 
 
+def _build_stock_pledge_response(
+    *,
+    data: list[dict[str, Any]],
+    total: int,
+    resolved_date: str,
+    elapsed: float,
+    summary_label: str,
+    markdown_title: str,
+    name: str,
+    symbol: str = "",
+) -> Dict[str, Any]:
+    summary = f"{summary_label}({resolved_date or '最新'}): 共{total}家 (耗时 {elapsed:.1f}s)"
+
+    md = f"## {markdown_title} - {resolved_date or '最新'}\n\n"
+    md += f"**公司数**: {total} | **耗时**: {elapsed:.1f}s\n\n"
+
+    if data:
+        md += "| 代码 | 名称 | 质押比例(%) | 质押数量(万股) | 质押市值(万元) | 行业 |\n"
+        md += "|------|------|------------|--------------|--------------|------|\n"
+        for r in data[:50]:
+            code = r.get("stock_code", r.get("股票代码", r.get("代码", r.get("证券代码", ""))))
+            name_val = r.get("stock_name", r.get("股票简称", r.get("名称", "")))
+            ratio = r.get("pledge_ratio", r.get("质押比例", "-"))
+            shares = r.get("pledged_shares", r.get("质押股数", r.get("质押数量", "-")))
+            mval = r.get("pledged_market_value", r.get("质押市值", "-"))
+            industry = r.get("industry", r.get("所属行业", "-"))
+            md += f"| {code} | {name_val} | {ratio} | {shares} | {mval} | {industry} |\n"
+        if total > 50:
+            md += f"\n*... 还有 {total - 50} 家*\n"
+
+    return create_standard_artifact_response(
+        summary=summary,
+        component_type=ComponentType.TABLE,
+        name=name,
+        data=data[:100],
+        source="akshare",
+        description=summary,
+        markdown=md,
+        symbol=symbol,
+        date=resolved_date,
+    )
+
+
 def register_shareholder_behavior_tools(mcp: FastMCP):
     """Register shareholder behavior MCP tools."""
 
@@ -128,36 +171,14 @@ def register_shareholder_behavior_tools(mcp: FastMCP):
             total = result.get("total", 0)
             resolved_date = result.get("date", date)
 
-            summary = f"股票质押({resolved_date}): 共{total}家 (耗时 {elapsed:.1f}s)"
-
-            md = f"## 股票质押比例 - {resolved_date}\n\n"
-            md += f"**公司数**: {total} | **耗时**: {elapsed:.1f}s\n\n"
-
-            if data:
-                md += "| 代码 | 名称 | 质押比例(%) | 质押数量(万股) | 质押市值(万元) | 行业 |\n"
-                md += "|------|------|------------|--------------|--------------|------|\n"
-                for r in data[:50]:
-                    code = r.get("stock_code", "")
-                    name = r.get("stock_name", "")
-                    ratio = r.get("pledge_ratio", "-")
-                    shares = r.get("pledged_shares", "-")
-                    mval = r.get("pledged_market_value", "-")
-                    industry = r.get("industry", "-")
-                    md += (
-                        f"| {code} | {name} | {ratio} "
-                        f"| {shares} | {mval} | {industry} |\n"
-                    )
-                if total > 50:
-                    md += f"\n*... 还有 {total - 50} 家*\n"
-
-            return create_standard_artifact_response(
-                summary=summary,
-                component_type=ComponentType.TABLE,
-                name=f"股票质押: {resolved_date}",
-                data=data[:100],
-                source="akshare",
-                description=summary,
-                markdown=md,
+            return _build_stock_pledge_response(
+                data=data,
+                total=total,
+                resolved_date=resolved_date,
+                elapsed=elapsed,
+                summary_label="股票质押",
+                markdown_title="股票质押比例",
+                name=f"股票质押: {resolved_date or '最新'}",
             )
 
         except Exception as e:
@@ -194,29 +215,16 @@ def register_shareholder_behavior_tools(mcp: FastMCP):
             data = result.get("data", [])
             total = result.get("total", 0)
             resolved_date = result.get("date", date)
-            summary = f"股票质押比例查询({symbol or '全市场'}/{resolved_date or '最新'}): 共{total}条 (耗时 {elapsed:.1f}s)"
 
-            md = f"## 股票质押比例查询 - {symbol or '全市场'}\n\n"
-            md += f"**日期**: {resolved_date or '最新'} | **条数**: {total} | **耗时**: {elapsed:.1f}s\n\n"
-            if data:
-                md += "| 代码 | 名称 | 质押比例 | 所属行业 |\n|------|------|----------|----------|\n"
-                for r in data[:50]:
-                    code = r.get("股票代码", r.get("代码", r.get("证券代码", "")))
-                    name = r.get("股票简称", r.get("名称", ""))
-                    ratio = r.get("质押比例", r.get("pledge_ratio", "-"))
-                    industry = r.get("所属行业", r.get("industry", "-"))
-                    md += f"| {code} | {name} | {ratio} | {industry} |\n"
-
-            return create_standard_artifact_response(
-                summary=summary,
-                component_type=ComponentType.TABLE,
+            return _build_stock_pledge_response(
+                data=data,
+                total=total,
+                resolved_date=resolved_date,
+                elapsed=elapsed,
+                summary_label=f"股票质押比例查询{': ' + symbol if symbol else ''}",
+                markdown_title=f"股票质押比例查询{' - ' + symbol if symbol else ''}",
                 name=f"股票质押比例查询: {symbol or '全市场'}",
-                data=data[:100],
-                source="akshare",
-                description=summary,
-                markdown=md,
                 symbol=symbol,
-                date=resolved_date,
             )
         except Exception as e:
             logger.error(f"get_stock_pledge_ratio failed: {e}")
