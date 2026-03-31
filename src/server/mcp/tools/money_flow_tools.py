@@ -3001,6 +3001,51 @@ def register_money_flow_tools(mcp: FastMCP):
             return {"error": str(e), "component_type": "dragon_tiger"}
 
     @mcp.tool(tags={"money-flow"})
+    async def get_dragon_tiger_statistics(
+        symbol: str = "近一月",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取龙虎榜上榜统计。
+
+        WHEN TO USE:
+        - 用户问"最近哪些股票反复上龙虎榜""龙虎榜上榜次数排行""哪些票是游资反复交易对象"
+        - 需要观察短线高关注标的、游资活跃度和事件驱动强度
+
+        CONCEPT:
+        龙虎榜上榜统计聚合一段时间内个股上榜次数、净买入、成交额和后续区间表现，
+        适合做热点强度、席位偏好和事件延续性分析。
+
+        DIFFERENTIATION:
+        - 这是"龙虎榜统计汇总"；看逐日明细请用 get_dragon_tiger_list
+        - 看大宗交易请用 get_block_trade
+
+        next_recommended_tools:
+        - get_dragon_tiger_list
+        - get_hot_stock_rank
+        - get_limit_up_pool
+        """
+        if ctx:
+            await ctx.info("🔧 获取龙虎榜上榜统计", extra={"symbol": symbol})
+        try:
+            logger.info("MCP tool called: get_dragon_tiger_statistics", symbol=symbol)
+            gateway = Container.market_gateway()
+            result = await gateway.get_dragon_tiger_statistics(symbol=symbol)
+            data = result.get("data", [])
+            summary_text = f"龙虎榜上榜统计 - {symbol}({len(data)}只)"
+
+            artifact = create_artifact_envelope(
+                component_type="dragon_tiger_statistics",
+                name=f"龙虎榜统计: {symbol}",
+                content=result,
+                description=summary_text,
+                metadata={"type": "dragon_tiger_statistics", "symbol": symbol},
+            )
+            return create_artifact_response(summary=summary_text, artifact=artifact)
+        except Exception as e:
+            logger.error(f"Get dragon tiger statistics failed: {e}", exc_info=True)
+            return {"error": str(e), "component_type": "dragon_tiger_statistics"}
+
+    @mcp.tool(tags={"money-flow"})
     async def get_block_trade(
         start_date: str = "",
         end_date: str = "",

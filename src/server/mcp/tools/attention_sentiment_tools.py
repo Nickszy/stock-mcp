@@ -204,3 +204,56 @@ def register_attention_sentiment_tools(mcp: FastMCP):
                 source="akshare",
                 description=f"获取雪球交易热度榜失败: {e}",
             )
+
+    @mcp.tool(tags={"attention-sentiment", "dragon-tiger"})
+    async def get_dragon_tiger_statistics(
+        symbol: str = "近一月",
+        ctx: Context = None,
+    ) -> Dict[str, Any]:
+        """获取龙虎榜上榜统计，量化短线动量与席位驱动活跃度。"""
+        if ctx:
+            await ctx.info(f"获取龙虎榜上榜统计: {symbol}")
+        try:
+            t0 = time.perf_counter()
+            logger.info("MCP tool: get_dragon_tiger_statistics", symbol=symbol)
+            gateway = Container.market_gateway()
+            result = await gateway.get_dragon_tiger_statistics(symbol=symbol)
+            elapsed = time.perf_counter() - t0
+            data = result.get("data", [])
+            total = result.get("total", 0)
+            resolved_symbol = result.get("symbol", symbol)
+            summary = f"龙虎榜上榜统计({resolved_symbol}): 共{total}只 (耗时 {elapsed:.1f}s)"
+
+            md = f"## 龙虎榜上榜统计 - {resolved_symbol}\n\n"
+            md += f"**股票数**: {total} | **耗时**: {elapsed:.1f}s\n\n"
+            if data:
+                md += "| 排名 | 代码 | 名称 | 上榜次数 | 净买额 | 买入额 | 卖出额 | 近1月涨幅 |\n"
+                md += "|------|------|------|----------|--------|--------|--------|-----------|\n"
+                for r in data[:50]:
+                    md += (
+                        f"| {r.get('rank', '-')} | {r.get('stock_code', '')} | {r.get('stock_name', '')} "
+                        f"| {r.get('list_count', '-')} | {r.get('net_buy', '-')} | {r.get('buy_amount', '-')} "
+                        f"| {r.get('sell_amount', '-')} | {r.get('rise_1m', '-')} |\n"
+                    )
+
+            return create_standard_artifact_response(
+                summary=summary,
+                component_type=ComponentType.TABLE,
+                name="龙虎榜上榜统计",
+                data=data[:200],
+                source="akshare",
+                description=summary,
+                markdown=md,
+                symbol=resolved_symbol,
+            )
+        except Exception as e:
+            logger.error(f"get_dragon_tiger_statistics failed: {e}")
+            return create_standard_artifact_response(
+                summary=f"获取龙虎榜上榜统计失败: {e}",
+                component_type=ComponentType.TABLE,
+                name="龙虎榜上榜统计错误",
+                data={"error": str(e)},
+                source="akshare",
+                description=f"获取龙虎榜上榜统计失败: {e}",
+                symbol=symbol,
+            )

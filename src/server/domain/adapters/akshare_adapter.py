@@ -5375,6 +5375,46 @@ class AkshareAdapter(BaseDataAdapter):
             self.logger.error(f"Failed to get xueqiu deal hotness: {e}")
             return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
 
+    async def get_dragon_tiger_statistics(self, symbol: str = "近一月") -> Dict[str, Any]:
+        """Get dragon tiger list stock statistics."""
+        cache_key = f"dragon_tiger_statistics:{symbol}"
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            df = await self._run(ak.stock_lhb_stock_statistic_em, symbol=symbol)
+            if df is None or df.empty:
+                return {"data": [], "symbol": symbol, "source": "akshare"}
+
+            records = []
+            for _, row in df.iterrows():
+                values = list(row.values)
+                records.append({
+                    "rank": values[0].item() if len(values) > 0 and hasattr(values[0], "item") else (values[0] if len(values) > 0 else None),
+                    "stock_code": str(values[1]) if len(values) > 1 else "",
+                    "stock_name": str(values[2]) if len(values) > 2 else "",
+                    "latest_list_date": str(values[3]) if len(values) > 3 else "",
+                    "close_price": values[4].item() if len(values) > 4 and hasattr(values[4], "item") else (values[4] if len(values) > 4 else None),
+                    "pct_change": values[5].item() if len(values) > 5 and hasattr(values[5], "item") else (values[5] if len(values) > 5 else None),
+                    "list_count": values[6].item() if len(values) > 6 and hasattr(values[6], "item") else (values[6] if len(values) > 6 else None),
+                    "net_buy": values[7].item() if len(values) > 7 and hasattr(values[7], "item") else (values[7] if len(values) > 7 else None),
+                    "buy_amount": values[8].item() if len(values) > 8 and hasattr(values[8], "item") else (values[8] if len(values) > 8 else None),
+                    "sell_amount": values[9].item() if len(values) > 9 and hasattr(values[9], "item") else (values[9] if len(values) > 9 else None),
+                    "total_turnover": values[10].item() if len(values) > 10 and hasattr(values[10], "item") else (values[10] if len(values) > 10 else None),
+                    "rise_1m": values[16].item() if len(values) > 16 and hasattr(values[16], "item") else (values[16] if len(values) > 16 else None),
+                    "rise_3m": values[17].item() if len(values) > 17 and hasattr(values[17], "item") else (values[17] if len(values) > 17 else None),
+                    "rise_6m": values[18].item() if len(values) > 18 and hasattr(values[18], "item") else (values[18] if len(values) > 18 else None),
+                    "rise_1y": values[19].item() if len(values) > 19 and hasattr(values[19], "item") else (values[19] if len(values) > 19 else None),
+                })
+
+            result = {"source": "akshare", "symbol": symbol, "total": len(records), "data": records[:200]}
+            await self.cache.set(cache_key, result, ttl=300)
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to get dragon tiger statistics: {e}")
+            return {"data": [], "symbol": symbol, "source": "akshare", "error": str(e)}
+
     # ------------------------------------------------------------------
     # A-share corporate action data (COL-147)
     # ------------------------------------------------------------------
@@ -5567,12 +5607,14 @@ class AkshareAdapter(BaseDataAdapter):
         source_trace: Dict[str, Any] = {}
         coverage: Dict[str, str] = {}
         missing_fields: List[str] = []
+        primary_symbol = symbol if ":" in symbol else f"SSE:{symbol}"
+        fallback_symbol = None if ":" in symbol else f"SZSE:{symbol}"
 
         # --- 1. Security Master (证券主档) ---
         try:
-            info = await self.get_asset_info(f"SSE:{symbol}")
-            if info is None:
-                info = await self.get_asset_info(f"SZSE:{symbol}")
+            info = await self.get_asset_info(primary_symbol)
+            if info is None and fallback_symbol:
+                info = await self.get_asset_info(fallback_symbol)
             if info and hasattr(info, "to_dict"):
                 d = info.to_dict()
                 facts["security_master"] = {
@@ -5591,9 +5633,9 @@ class AkshareAdapter(BaseDataAdapter):
 
         # --- 2. Financial Facts (财务事实) ---
         try:
-            fin = await self.get_financials(f"SSE:{symbol}")
-            if not fin or "error" in fin:
-                fin = await self.get_financials(f"SZSE:{symbol}")
+            fin = await self.get_financials(primary_symbol)
+            if (not fin or "error" in fin) and fallback_symbol:
+                fin = await self.get_financials(fallback_symbol)
             if fin and "error" not in fin:
                 facts["financial"] = fin
                 coverage["financial"] = "complete"
@@ -5613,9 +5655,9 @@ class AkshareAdapter(BaseDataAdapter):
         except Exception:
             pass
         try:
-            flow = await self.get_money_flow(f"SSE:{symbol}")
-            if not flow or "error" in flow:
-                flow = await self.get_money_flow(f"SZSE:{symbol}")
+            flow = await self.get_money_flow(primary_symbol)
+            if (not flow or "error" in flow) and fallback_symbol:
+                flow = await self.get_money_flow(fallback_symbol)
             if flow and "error" not in flow:
                 market_data["money_flow"] = flow
         except Exception:
@@ -5654,9 +5696,9 @@ class AkshareAdapter(BaseDataAdapter):
         # --- 5. Event Facts (事件事实) ---
         event_data: Dict[str, Any] = {}
         try:
-            div = await self.get_dividend_info(f"SSE:{symbol}")
-            if not div or "error" in div:
-                div = await self.get_dividend_info(f"SZSE:{symbol}")
+            div = await self.get_dividend_info(primary_symbol)
+            if (not div or "error" in div) and fallback_symbol:
+                div = await self.get_dividend_info(fallback_symbol)
             if div and "error" not in div:
                 event_data["dividends"] = div
         except Exception:
@@ -5682,9 +5724,9 @@ class AkshareAdapter(BaseDataAdapter):
 
         # --- 6. Earnings Estimates (盈利预测) ---
         try:
-            forecast = await self.get_profit_forecast(f"SSE:{symbol}")
-            if not forecast or "error" in forecast:
-                forecast = await self.get_profit_forecast(f"SZSE:{symbol}")
+            forecast = await self.get_profit_forecast(primary_symbol)
+            if (not forecast or "error" in forecast) and fallback_symbol:
+                forecast = await self.get_profit_forecast(fallback_symbol)
             if forecast and "error" not in forecast and forecast.get("rows"):
                 facts["earnings_estimates"] = {
                     "forecasts": forecast.get("rows", [])[:10],
@@ -5699,9 +5741,9 @@ class AkshareAdapter(BaseDataAdapter):
 
         # --- 7. Business Structure (业务结构) ---
         try:
-            biz = await self.get_mainbz_info(f"SSE:{symbol}")
-            if not biz or "error" in biz:
-                biz = await self.get_mainbz_info(f"SZSE:{symbol}")
+            biz = await self.get_mainbz_info(primary_symbol)
+            if (not biz or "error" in biz) and fallback_symbol:
+                biz = await self.get_mainbz_info(fallback_symbol)
             if biz and "error" not in biz:
                 facts["business_structure"] = biz
                 coverage["business_structure"] = "complete"
