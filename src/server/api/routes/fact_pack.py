@@ -43,20 +43,40 @@ def _safe_num(value: Any) -> Optional[float]:
 def _fuzzy_get(d: Dict[str, Any], *keys: str) -> Any:
     """Get value from dict trying multiple key names (exact match first).
 
-    Fallback: contains-based matching for the first key, but only when
-    target is >= 3 chars to avoid false positives (e.g. "pe" matching "dv_ratio").
+    Fallback strategies (in order):
+    1. Exact match on each key.
+    2. For each key >= 3 chars, bidirectional contains match:
+       - target contained in dict key (e.g. "净资产收益率" matches "加权净资产收益率(%)")
+       - dict key contained in target (e.g. dict key "净利率" matches target "净利率(%)")
+    3. Strip trailing "(%)" from keys and dict keys, then retry contains match.
     """
+    # Step 1: Exact match
     for k in keys:
         v = d.get(k)
         if v is not None:
             return v
-    # Fallback: contains-based matching for the first key (min 3 chars)
-    target = keys[0] if keys else ""
-    if len(target) < 3:
-        return None
-    for dk, dv in d.items():
-        if target in str(dk) and dv is not None:
-            return dv
+
+    # Helper: strip trailing (%) or similar parenthetical for core-name comparison
+    def _core(name: str) -> str:
+        import re
+        return re.sub(r"\([^)]*\)$", "", name).strip()
+
+    # Step 2 & 3: Fuzzy matching for each key (>= 3 chars)
+    for target in keys:
+        if len(target) < 3:
+            continue
+        target_core = _core(target)
+        for dk, dv in d.items():
+            if dv is None:
+                continue
+            dk_str = str(dk)
+            # Bidirectional contains: target in dk OR dk in target
+            if target in dk_str or dk_str in target:
+                return dv
+            # Core-name contains: stripped target in stripped dk or vice versa
+            dk_core = _core(dk_str)
+            if (len(target_core) >= 2 and target_core in dk_core) or (len(dk_core) >= 2 and dk_core in target_core):
+                return dv
     return None
 
 
@@ -101,15 +121,15 @@ def _extract_profitability(facts: Dict[str, Any]) -> Dict[str, Any]:
     else:
         latest = {}
 
-    # ROE — akshare uses "净资产收益率(%)" or "加权净资产收益率(%)"
+    # ROE — akshare variants: "净资产收益率(%)", "加权净资产收益率(%)", "全面摊薄净资产收益率(%)"
     roe = _safe_num(
-        _fuzzy_get(latest, "净资产收益率(%)", "加权净资产收益率(%)", "roe", "净资产收益率")
+        _fuzzy_get(latest, "净资产收益率(%)", "加权净资产收益率(%)", "全面摊薄净资产收益率(%)", "roe", "净资产收益率")
     )
-    # Net margin — akshare uses "净利率(%)" not "销售净利率(%)"
+    # Net margin — akshare variants: "净利率(%)", "销售净利率(%)", "归母净利润率(%)"
     net_margin = _safe_num(
-        _fuzzy_get(latest, "净利率(%)", "销售净利率(%)", "net_margin", "净利率")
+        _fuzzy_get(latest, "净利率(%)", "销售净利率(%)", "归母净利润率(%)", "net_margin", "净利率")
     )
-    # Gross margin — akshare uses "毛利率(%)" not "销售毛利率(%)"
+    # Gross margin — akshare variants: "毛利率(%)", "销售毛利率(%)"
     gross_margin = _safe_num(
         _fuzzy_get(latest, "毛利率(%)", "销售毛利率(%)", "gross_margin", "毛利率")
     )
@@ -337,9 +357,10 @@ async def _normalize_stock_fact_pack(
     }
     try:
         gw = Container.market_gateway()
+        resolved_symbol = symbol if ":" in symbol else f"SSE:{symbol}"
         # get_asset_price is resolved via __getattr__ → adapter dispatch
-        price_obj = await gw.get_asset_price(f"SSE:{symbol}")
-        if price_obj is None:
+        price_obj = await gw.get_asset_price(resolved_symbol)
+        if price_obj is None and ":" not in symbol:
             price_obj = await gw.get_asset_price(f"SZSE:{symbol}")
         if price_obj and hasattr(price_obj, "to_dict"):
             pd = price_obj.to_dict()
@@ -364,8 +385,9 @@ async def _normalize_stock_fact_pack(
     }
     try:
         gw = Container.market_gateway()
+        resolved_symbol = symbol if ":" in symbol else f"SSE:{symbol}"
         tech = await gw.calculate_technical_indicators(
-            symbol=f"SSE:{symbol}",
+            symbol=resolved_symbol,
             indicators=["MA", "RSI", "MACD"],
             days=60,
         )

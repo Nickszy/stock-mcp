@@ -32,9 +32,45 @@
     },
     {
       "asset_type": "stock",
+      "data_type": "historical",
+      "exchange": "SSE",
+      "providers": ["akshare", "baostock", "tushare"]
+    },
+    {
+      "asset_type": "stock",
+      "data_type": "historical",
+      "exchange": "SZSE",
+      "providers": ["akshare", "baostock", "tushare"]
+    },
+    {
+      "asset_type": "stock",
+      "data_type": "historical",
+      "exchange": "BSE",
+      "providers": ["akshare", "baostock"]
+    },
+    {
+      "asset_type": "stock",
       "data_type": "realtime",
       "exchange": "NASDAQ",
       "providers": ["yahoo", "twelve_data", "finnhub"]
+    },
+    {
+      "asset_type": "stock",
+      "data_type": "realtime",
+      "exchange": "SSE",
+      "providers": ["akshare", "baostock"]
+    },
+    {
+      "asset_type": "stock",
+      "data_type": "realtime",
+      "exchange": "SZSE",
+      "providers": ["akshare", "baostock"]
+    },
+    {
+      "asset_type": "stock",
+      "data_type": "realtime",
+      "exchange": "BSE",
+      "providers": ["akshare", "baostock"]
     },
     {
       "asset_type": "stock",
